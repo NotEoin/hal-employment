@@ -4,8 +4,9 @@
 
    A panel lists its section's sources with their kind, state and when they were last read, and the person's
    choices: "Showcase" (coursework; the app's word for a star, as "STAR" names a way to tell examples),
-   "Make this my current CV" (the newest-dated CV is current until the person picks another; the others show
-   "Older CV, fills gaps"), "Read again", "Remove" (after a yes, as nothing brings it back), and a hint to move one
+   "Use this for applications" on a CV (the same toggle as My CVs' list: it makes the file one of My CVs,
+   reading it first when it is new there, and the server keeps one CV in use; the first CV in use leads the
+   record, "Your record follows this CV", and the others show "Fills gaps in your record"), "Read again", "Remove" (after a yes, as nothing brings it back), and a hint to move one
    that looks like it belongs elsewhere, or (in Documents) looks like another kind of document (Hal never
    moves or changes it on its own). Documents may name the card they are about: a course, a job or a
    certificate. Coursework and lecture material say which of the course's modules they are for: Hal suggests
@@ -16,13 +17,14 @@
    is still to come can still be uploaded: Hal keeps the file and reads it once it can. A link, folder or
    account whose reader is still to come is shown, but switched off as "coming soon". */
 import { html, useState } from "../core/html.js";
-import { api, post, put, del } from "../core/api.js";
+import { api, post, put, del, run } from "../core/api.js";
 import { useApi, toast, invalidate } from "../core/store.js";
 import { plural, agoWords } from "../core/format.js";
 import { isRemote } from "../core/remote.js";
 import { Chip, Note } from "../ui/controls.js";
 import { ask } from "../ui/dialog.js";
 import { Icon } from "../ui/icons.js";
+import { UseToggle } from "../cv/cv-list.js";
 
 const SOURCES = "/record/sources";
 const SECTIONS = "/record/sections";
@@ -39,6 +41,10 @@ const PROJECT_WAYS = [["github_account", "Your GitHub account", "Your GitHub use
   ["web_page", "Web page or online document", "https://example.org/your-article"],
   ["manual", "Add one by hand", "The project's name"]];
 const reloadOn = [ev => (ev.type === "action" && ev.kind === KIND) || ev.type === "profile"];
+// The changes on My CVs that change what the CVs list shows (cvstudio/store.py publishes them as "cv").
+const MY_CVS_CHANGES = new Set(["star", "archive", "order", "create", "rename", "file"]);
+const cvReloadOn = [...reloadOn, ev => ev.type === "cv" && MY_CVS_CHANGES.has(ev.what)];
+const READING = "Reading your CV";
 
 function refresh() { invalidate(SOURCES + "*"); invalidate("/profile*"); }
 
@@ -101,6 +107,25 @@ async function remove(s, path) {
   if (yes) await act(() => del(path), "Removed, with what Hal took from it.");
 }
 
+/** "Use this for applications" on a CV: on, a CV new to My CVs is read first, and the button says how far
+    Hal has got; off may be refused for the last CV in use, and the toast says why. */
+function UseCv({ s }) {
+  const [busy, setBusy] = useState("");
+  const flip = async () => {
+    const on = !s.in_use;
+    if (on && !s.my_cv) setBusy(READING);
+    try {
+      const done = await run(SOURCES + "/" + encodeURIComponent(s.id) + "/use", { on }, ev => setBusy(ev.text || READING));
+      if (done && done.state && done.state !== "done") throw new Error(done.error || "Hal could not read your CV.");
+      toast(on ? "Hal uses " + s.title + " for applications. It is in My CVs." : "Hal no longer uses " + s.title + " for applications.");
+    } catch (err) { toast(err.message); }
+    setBusy("");
+    invalidate("/cv*");
+    refresh();
+  };
+  return html`<${UseToggle} on=${s.in_use} name=${s.title} words=${true} busy=${busy} onToggle=${flip} />`;
+}
+
 /** One source: its title, kind, state and last read, with the person's choices. */
 function SourceRow({ s }) {
   const id = encodeURIComponent(s.id);
@@ -108,8 +133,8 @@ function SourceRow({ s }) {
   return html`<li class=${"rec-source" + (s.parent_id != null ? " rec-child" : "")} data-source=${s.id}>
     <div class="grow"><div><b>${s.title}</b> <span class="small sub">${s.doc_kind_label}</span></div>
       <div class="chips"><${Chip} tone=${STATE_TONE[s.state] || "line"}>${s.state_words}<//>
-        ${s.current && html`<${Chip} tone="info">Current CV<//>`}
-        ${s.can_be_current && !s.current && s.state === "read" && html`<${Chip} tone="line">Older CV, fills gaps<//>`}</div>
+        ${s.current && html`<${Chip} tone="info">Your record follows this CV<//>`}
+        ${s.section === "cv" && !s.current && s.state === "read" && html`<${Chip} tone="line">Fills gaps in your record<//>`}</div>
       <div class="small sub">${s.last_checked ? "Last read " + agoWords(s.last_checked) : "Not read yet"}${s.dated ? ", dated " + s.dated : ""}${s.mark ? ". Mark: " + s.mark : ""}</div>
       ${s.summary && html`<p class="small rec-line">${s.summary}</p>`}
       ${s.error && html`<p class="small sub rec-line">${s.error}</p>`}
@@ -128,6 +153,7 @@ function SourceRow({ s }) {
           "Hal is reading it again as yours.")}>This is mine</button><//>`}
       ${s.pieces && s.pieces.length > 0 && html`<${PiecePicker} s=${s} path=${path} />`}</div>
     <div class="row wrap rec-acts">
+      ${s.can_use && html`<${UseCv} s=${s} />`}
       ${s.can_star && html`<button type="button" class="btn small" aria-pressed=${s.starred ? "true" : "false"}
         aria-label=${(s.starred ? "Take out of your showcase: " : "Showcase: ") + s.title}
         onClick=${() => act(() => put(path, { starred: !s.starred }), s.starred ? "Taken out of your showcase." : "In your showcase. Hal tells employers about it.")}>
@@ -136,8 +162,6 @@ function SourceRow({ s }) {
         aria-label=${(s.dissertation ? "This is my dissertation, press to undo: " : "This is my dissertation: ") + s.title}
         onClick=${() => act(() => put(path, { dissertation: !s.dissertation }), s.dissertation ? "No longer marked as your dissertation." : "Marked as your dissertation.")}>
         ${s.dissertation ? "My dissertation" : "This is my dissertation"}</button>`}
-      ${s.can_be_current && !s.current && html`<button type="button" class="btn small"
-        onClick=${() => act(() => put(path, { current: true }), "This is your current CV now.")}>Make this my current CV</button>`}
       ${s.state === "kept_out" && !s.not_yours && html`<button type="button" class="btn small" aria-label=${"Add " + s.title + " anyway"}
         onClick=${() => act(() => post(path + "/reread", { allow: true }), "Hal is reading it.")}>Add it anyway</button>`}
       ${s.can_split && html`<button type="button" class="btn quiet small" aria-label=${"Split into projects by folder: " + s.title}
@@ -168,7 +192,7 @@ function PiecePicker({ s, path }) {
 /** The sources of one section (for one card when `target` is given). */
 export function SourceList({ section, target, empty }) {
   const path = SOURCES + "?section=" + section + (target != null ? "&target=" + encodeURIComponent(target) : "");
-  const { data, error } = useApi(path, { on: reloadOn });
+  const { data, error } = useApi(path, { on: section === "cv" ? cvReloadOn : reloadOn });
   if (error) return html`<p class="small sub">${error.message}</p>`;
   if (!data) return html`<p class="small sub">Loading</p>`;
   if (!data.length) return empty ? html`<p class="small sub rec-line">${empty}</p>` : null;

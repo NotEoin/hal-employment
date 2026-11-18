@@ -45,6 +45,12 @@ What changed in each version, in plain words.
   outside Hal can be added to its CV as a new version from **Versions**. If you had uploaded several CVs
   before, each upload is now a CV of its own: the one you were using is starred and the others are archived.
 
+- **One main CV.** Each CV under **Your CVs** on Your record has **Use this for applications**, the same
+  button as on My CVs. Turning it on makes that CV one of My CVs, reading it first if it is new there.
+  Your record now follows the first CV you use for applications, so its facts come first on your cards;
+  **Make this my current CV** is gone. The chips say **Your record follows this CV** and **Fills gaps in your
+  record**.
+
 ### Fixed
 
 - **A CV you add starts at version 1.** Adding a new CV used to show it as, say, "version 9" of your old one,

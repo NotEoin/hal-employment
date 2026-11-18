@@ -14,12 +14,15 @@ from unittest import mock
 
 from support import repos
 from support.api import HalServer
+from support.fake_ai import fake_ai
 from support.fake_github import FakeGitHub
 from support.fake_site import FakeSite
 from support.ui import AppPage, chromium, skip_unless_browser
 
 from jobhunt import db, record
+from jobhunt.ai.base import LLMUnavailable
 from jobhunt.core import paths, settings
+from jobhunt.cvstudio import store as cv_store
 from jobhunt.evidence import routes
 from jobhunt.profile import store
 from jobhunt.sections import pipeline
@@ -111,13 +114,41 @@ class RecordSections(unittest.TestCase):
         row = cvs.locator("li.rec-source", has_text="Marnie CV")
         p.shows(row.get_by_text("Read", exact=True), "the read chip")
         self.assertEqual([s["section"] for s in self.listed("cv")], ["cv"])
-        p.shows(row.get_by_text("Current CV"), "the current chip: the only CV is the newest")
+        p.shows(row.get_by_text("Your record follows this CV"), "the lead chip: the only CV is the newest")
         cvs.locator("input[type=file]").first.set_input_files(self.file("Marnie CV 2019.md", OLDER_CV))
         older = cvs.locator("li.rec-source", has_text="Marnie CV 2019")
-        p.shows(older.get_by_text("Older CV, fills gaps"), "the older CV's chip")
-        older.get_by_role("button", name="Make this my current CV").click()
-        p.shows(older.get_by_text("Current CV"), "the current chip on the CV the person chose")
-        p.shows(row.get_by_text("Older CV, fills gaps"), "the other CV is older now")
+        p.shows(older.get_by_text("Fills gaps in your record"), "the older CV's chip")
+        self.assertEqual(p.page.get_by_role("button", name="Make this my current CV").count(), 0, "one main CV now")
+
+    def test_use_this_for_applications_makes_a_record_cv_one_of_my_cvs_and_leads_the_record(self) -> None:
+        self.enterContext(fake_ai({"cv_parse": LLMUnavailable("The made-up AI is switched off.")}))
+        p = self.page("record")
+        cvs = self.panel(p, "Your CVs")
+        cvs.locator("input[type=file]").first.set_input_files(self.file("Marnie CV.md", CV))
+        p.shows(cvs.locator("li.rec-source", has_text="Marnie CV").get_by_text("Read", exact=True), "read")
+        cvs.locator("input[type=file]").first.set_input_files(self.file("Marnie CV 2019.md", OLDER_CV))
+        older = cvs.locator("li.rec-source", has_text="Marnie CV 2019")
+        p.shows(older.get_by_text("Fills gaps in your record"), "the older CV only fills gaps")
+        toggle = older.get_by_role("button", name="Use this for applications: Marnie CV 2019")
+        self.assertEqual(toggle.get_attribute("aria-pressed"), "false")
+        self.assertNotRegex(p.page.inner_text("#main"), r"(?i)\bstar\b", "no star word on screen")
+        toggle.click()
+        p.shows(older.locator("button[aria-pressed=true]", has_text="Use this for applications"), "on, once read")
+        p.shows(older.get_by_text("Your record follows this CV"), "the CV in use leads the record")
+        self.assertEqual([d["name"] for d in cv_store.starred()], ["Marnie CV 2019"])
+        toggle = older.get_by_role("button", name="Use this for applications: Marnie CV 2019")
+        toggle.click()
+        p.shows(p.page.get_by_text("so this one stays in use"), "the last CV in use stays, in plain words")
+        self.assertEqual(toggle.get_attribute("aria-pressed"), "true")
+        self.clean_but(p, "/use")
+        p.open("cv")
+        p.shows(p.page.locator(".cv-pick.on", has_text="Marnie CV 2019"), "the CV is in My CVs")
+
+    def clean_but(self, p: AppPage, refused: str) -> None:
+        """As `clean`, but the one 400 that says why the last CV in use stays is expected."""
+        p.missing = [u for u in p.missing if not u.endswith(refused)]
+        p.errors = [e for e in p.errors if not e.startswith(FAILED_LOAD)]
+        self.clean(p)
 
     def test_a_document_is_read_listed_and_removed_on_the_documents_tab(self) -> None:
         p = self.page("record-documents")
@@ -222,7 +253,7 @@ class RecordSections(unittest.TestCase):
                          "a privacy override does not fit someone else's CV")
         self.clean(p)
         row.get_by_role("button", name="This is mine: Comp sci CV").click()
-        p.shows(row.get_by_text("Current CV"), "read as the person's own")
+        p.shows(row.get_by_text("Your record follows this CV"), "read as the person's own")
 
     def test_a_code_project_with_none_of_your_changes_is_marked_yours_with_this_is_mine(self) -> None:
         settings.set("you.name", repos.AVERY[0])

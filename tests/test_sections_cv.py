@@ -21,6 +21,8 @@ from test_ingest import home
 
 from jobhunt import ai
 from jobhunt.core import settings
+from jobhunt.cvstudio import parse as cv_parse
+from jobhunt.cvstudio import store as cv_store
 from jobhunt.profile import conflicts, cvs
 from jobhunt.profile import routes as profile_routes
 from jobhunt.profile import store as profile_store
@@ -205,6 +207,20 @@ def add_cv(con, name: str, text: str) -> int:
     return source_id
 
 
+def my_cv(con, name: str, text: str) -> str:
+    """A CV of My CVs read from the same file as the record's CV `name` (an upload there): its id. Made in use,
+    first in the person's order."""
+    data = text.encode()
+    file_id = cv_store.add_file(data, name, role="baseline", con=con)
+    doc = cv_parse.read_rules(cv_parse.lines_of(data, "md")).doc
+    return cv_store.create(name, doc, origin="uploaded", what="Your file", by="baseline", file_id=file_id, con=con)
+
+
+def marked(con) -> list[int]:
+    """The CVs `record_sources.current` names as the lead."""
+    return [r[0] for r in con.execute("SELECT id FROM record_sources WHERE current = 1 ORDER BY id")]
+
+
 def card(con, kind: str, **match) -> dict:
     """The one shown card of `kind` whose fields hold `match`."""
     (found,) = [i for i in profile_store.items(con, kind, hidden=False)
@@ -248,19 +264,57 @@ class CurrentAndOlderCvs(unittest.TestCase):
                                                        {"name": "Algorithms", "mark": "65"}])
         self.assertEqual((lab["fields"]["location"], lab["fields"]["end"]), ("Fenmouth", "2024-06"))
 
-    def test_choosing_another_cv_as_current_folds_the_cards_again_and_clearing_it_gives_back_the_newest(self):
+    def test_the_cv_in_use_for_applications_leads_the_facts_and_taking_it_out_of_use_gives_back_the_newest(self):
         with home() as (con, _, _):
             current = add_cv(con, "Avery CV.md", AVERY.cv)
             older = add_cv(con, "Avery CV 2023.md", AVERY.older_cv)
-            store.change(con, older, {"current": True})
-            chosen = (cvs.current_source(con), card(con, "education", institution="University of Nowhere Fen"))
-            store.change(con, older, {"current": False})
-            back = (cvs.current_source(con), card(con, "education", institution="University of Nowhere Fen"))
-        self.assertEqual(chosen[0], older)
-        self.assertEqual(chosen[1]["fields"]["grade"], "2:1")
-        self.assertEqual(chosen[1]["fields"]["modules"], [{"name": "Databases", "mark": "60"}])
-        self.assertEqual(back[0], current)
-        self.assertEqual(back[1]["fields"]["grade"], "First")
+            first = (cvs.current_source(con), marked(con))
+            mine = my_cv(con, "Avery CV 2023.md", AVERY.older_cv)
+            cvs.settle(con)
+            chosen = (cvs.current_source(con), marked(con),
+                      card(con, "education", institution="University of Nowhere Fen"))
+            my_cv(con, "Someone else's starter.md", "# Avery Quillon\n\n## Skills\n\nKnitting\n")
+            cv_store.star(mine, False, con=con)
+            cvs.settle(con)
+            back = (cvs.current_source(con), marked(con),
+                    card(con, "education", institution="University of Nowhere Fen"))
+        self.assertEqual(first, (current, [current]))
+        self.assertEqual(chosen[:2], (older, [older]), "the record follows the CV in use, and marks it")
+        self.assertEqual(chosen[2]["fields"]["grade"], "2:1")
+        self.assertEqual(chosen[2]["fields"]["modules"], [{"name": "Databases", "mark": "60"}])
+        self.assertEqual(back[:2], (current, [current]), "no record CV in use: the newest leads again")
+        self.assertEqual(back[2]["fields"]["grade"], "First")
+
+    def test_the_first_cv_in_use_leads_in_the_order_of_my_cvs_and_one_not_read_yet_waits(self):
+        with home() as (con, _, _):
+            newer = add_cv(con, "Avery CV.md", AVERY.cv)
+            older = add_cv(con, "Avery CV 2023.md", AVERY.older_cv)
+            a, b = my_cv(con, "Avery CV.md", AVERY.cv), my_cv(con, "Avery CV 2023.md", AVERY.older_cv)
+            cv_store.reorder([b, a], con=con)
+            first = cvs.current_source(con)
+            cv_store.reorder([a, b], con=con)
+            second = cvs.current_source(con)
+            waiting = pipeline.add_uploads(con, "cv", [Incoming("Avery CV 2019.md", b"# Avery Quillon\n\n2019\n")])
+            cv_store.reorder([my_cv(con, "Avery CV 2019.md", "# Avery Quillon\n\n2019\n"), a, b], con=con)
+            third = cvs.current_source(con)
+        self.assertEqual((first, second), (older, newer))
+        self.assertTrue(waiting["added"])
+        self.assertEqual(third, newer, "a CV in use that is not read yet does not lead")
+
+    def test_an_old_current_choice_is_replaced_by_the_rule_and_the_record_no_longer_takes_one(self):
+        with home() as (con, _, _):
+            current = add_cv(con, "Marnie CV.md", MARNIE.cv)
+            older = add_cv(con, "Marnie CV old.md", MARNIE.older_cv)
+            with con:
+                con.execute("UPDATE record_sources SET current = (id = ?)", (older,))   # as 2.2.0 kept a choice
+            refolded = cvs.settle(con)
+            with self.assertRaisesRegex(ValueError, "Use this for applications"):
+                store.change(con, older, {"current": True})
+            again = cvs.settle(con)
+            lead = (marked(con), store.get(con, current)["current"], store.get(con, older)["current"])
+        self.assertTrue(refolded, "the cards are worked out again for the rule's lead")
+        self.assertEqual(again, [], "nothing to do while the lead stays")
+        self.assertEqual(lead, ([current], True, False))
 
     def test_removing_the_current_cv_makes_the_next_newest_lead(self):
         with home() as (con, _, _):

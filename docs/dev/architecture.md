@@ -404,7 +404,17 @@ runs: tests use `tests/support/fake_claude/`.
   - `store.create(name, first, ...)` makes a CV and its version 1 in one write; a starred new CV goes first in
     the order, and a CV that is empty or holds only the untouched starter from the settings is archived.
     `store.cv_for_file(file_id)` finds the CV a kept file already made, so an upload of the same bytes picks
-    that CV instead of making a copy.
+    that CV instead of making a copy. `store.file_cvs()` maps every kept file's SHA-256 to its CV (the one
+    most in use when two share it), with its place among the starred ones (`rank`).
+  - Your record's CVs and My CVs meet at the file (`cvstudio/record_cvs.py`): a record source of one uploaded
+    file has the SHA-256 of a `cv_files` row when a CV of My CVs was read from it, so no column links them.
+    `POST /api/v2/record/sources/{id}/use` {on} (`record_routes.py`) uses that CV (restored from the archive,
+    then starred last in the order) or, for a file new to My CVs, checks it (`parse.check`) and starts
+    `cv.parse` with `last` (subject `cv.parse:<file id>`, so it never cancels an upload's reading); off
+    un-stars it, and the store's `LAST_STAR` refusal is the 400. The source's shape carries `can_use`,
+    `in_use` and `my_cv`. On screen the toggle is `cv/cv-list.js` `UseToggle`, shared by both pages, with
+    the words "Use this for applications" and no "star" (the words test bans it for the STAR method). Both
+    lists reload on the `cv` events `star`, `archive`, `order`, `create` and `rename`.
 - Versions never change after they are written. `store.new_version` adds one under `BEGIN IMMEDIATE`, so two
   saves at once get two numbers, and publishes the event `cv` (with the CV's id as `cv`). The CV is `doc_id=`,
   else the one `base` or `parent` belongs to, else the lead CV. Numbers count one CV's own versions from 1.
@@ -1433,13 +1443,22 @@ people). Readers only take facts out of a source, within that frame.
   looks for another person's name heading a CV that never names the person (`you.name`, `you.other_names`):
   such a CV raises `readers.NotTheirs`, and `pipeline.finish` takes back its facts and keeps it out with
   `details` {"not_yours", "someone_else"}, until "This is mine" sets `meta.theirs`.
-- `profile/cvs.py` says which CV leads: the one the person marked (`record_sources.current`, kept only for
-  their choice), else the newest-dated CV read (`current_source`); every other CV of the section is older
-  (`older_sources`). `profile.store.refold` ranks an older CV's evidence at `merge.OLDER_CV_RANK` (1.5:
+- `profile/cvs.py` says which CV leads (`current_source`): the first read CV, in the order on My CVs, that
+  is in use for applications (matched by the file's SHA-256, `cvstudio.store.file_cvs`), else the
+  newest-dated CV read; every other CV of the section is older (`older_sources`). The person has one "main
+  CV", not two (2026-11-18): before, the record's "Make this my current CV" flag and My CVs' "Use this for
+  applications" could name different CVs. `record_sources.current` is kept (a migration may not drop a
+  column) and kept true: `cvs.settle` writes the lead there and, when it changed, refolds every CV card,
+  raises the record's revision and publishes `profile`. Comparing the column with the rule is how a change
+  is seen, so `settle` runs after every change that may move the lead: the My CVs routes for star, archive
+  and order (`cvstudio/routes._change`, `put_order`), a new CV from `cv.parse`, the record's toggle, a CV
+  read or removed (`cv.refold_cv_cards`), a CV moved out of the section, and once at start
+  (`cvstudio/record_routes.settle_at_start`), which also replaces a choice an older version kept.
+  `PUT /record/sources/{id}` refuses `current`. `profile.store.refold` ranks an older CV's evidence at `merge.OLDER_CV_RANK` (1.5:
   below the current CV's 3 and documents' 2, above notes), and `merge.fold` joins its lists only when no
   source above gives one, so it only fills gaps. `conflicts` leaves out an older CV's value of a field another
-  source gives, and `writing.CvAuthority` takes the same current CV, so folding and writing agree. Reading,
-  removing or choosing a CV calls `cv.refold_cv_cards`, which refolds every card the CVs give
+  source gives, and `writing.CvAuthority` takes the same current CV, so folding and writing agree. Reading or
+  removing a CV calls `cv.refold_cv_cards`, which refolds every card the CVs give
   (`profile.store.refold_sources`). The profile's `GET /api/v2/profile/{kind}` marks each source
   `from_older_cv` and a project card that only CVs give `cv_only` ("from your CV only" on the page).
   `refold` leaves a card the person checked or made alone, except a course (`store._refill`): its empty

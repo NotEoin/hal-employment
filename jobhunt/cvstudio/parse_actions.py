@@ -11,6 +11,7 @@ file (`baseline_file_id`), so "your original file" means it.
   baseline, `file_id` set), never a version 1 hidden under a version 2 (2026-11-18: an upload used to make
   both, and a new CV showed as "version 9" of the old one). The rules' reading is not kept: with no AI it is
   the reading, and the AI's reading is what the person checks.
+- A new CV is in use for applications, so the record's lead CV may change with it (`record_cvs.settle_lead`).
 - The report ("Check what Hal read") belongs to that version, and corrections to it are new versions.
   Values the CV gives for `you.*` settings fill only settings that are still empty, so nothing the person
   typed is overwritten.
@@ -23,7 +24,7 @@ import logging
 from jobhunt import db
 from jobhunt.core import runner, settings
 from jobhunt.core.settings.registry import SettingError
-from jobhunt.cvstudio import parse, store
+from jobhunt.cvstudio import parse, record_cvs, store
 
 log = logging.getLogger(__name__)
 
@@ -90,9 +91,10 @@ def fill_empty_settings(values: dict[str, str]) -> dict[str, str]:
 
 @runner.action("cv.parse", area="cv", label="Reading your CV", why="You added {file}", priority=0,
                example=_example)
-def parse_cv(ctx, file_id: str, file: str, doc_id: str | None = None) -> dict:
+def parse_cv(ctx, file_id: str, file: str, doc_id: str | None = None, last: bool = False) -> dict:
     """Reads the file into sections with the rules, then the AI, and keeps the reading as one version: the first
-    of a new CV, or the next of `doc_id`."""
+    of a new CV, or the next of `doc_id`. A new CV goes first among the CVs in use, as an upload is meant to be
+    used; with `last` (turned on from Your record) it goes last, as My CVs' own toggle puts a CV."""
     ctx.step(f"Opening {file}")
     data = store.file_bytes(file_id)
     kind, pages = parse.check(data, file)
@@ -110,7 +112,10 @@ def parse_cv(ctx, file_id: str, file: str, doc_id: str | None = None) -> dict:
     what = UPLOADED_WHAT.format(name=file)
     if doc_id is None:
         doc_id = store.create(store.name_for(file, reading.doc), reading.doc, origin="uploaded", what=what,
-                              by="baseline", file_id=file_id)
+                              by="baseline", file_id=file_id, star=not last)
+        if last:
+            store.star(doc_id, True)
+        record_cvs.settle_lead()
         version_id = store.doc(doc_id=doc_id)["current_version_id"]
     else:
         version_id = store.new_version(reading.doc, origin="uploaded", what=what, by="baseline", file_id=file_id,

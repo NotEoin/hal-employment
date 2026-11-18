@@ -21,6 +21,9 @@ import { chosenCv, chooseCv, cvUrl } from "../cv/chosen.js";
 import { UncheckedNote } from "../ui/unchecked-note.js";
 
 const TABS = ["cv", "edit", "sugg", "style", "checks", "versions"];
+// Changes made elsewhere (Your record's "Use this for applications", another window) that change the list.
+const LIST_CHANGES = new Set(["star", "archive", "order", "create", "rename"]);
+const listChanged = [ev => ev.type === "cv" && LIST_CHANGES.has(ev.what)];
 
 function writeTab(t) {
   try { history.replaceState(null, "", "#" + (t === "cv" ? "cv" : "cv-" + t)); } catch (err) { /* a sandboxed frame may refuse */ }
@@ -43,7 +46,7 @@ export function CvStudio({ arg }) {
   const [t, setTab] = useState(TABS.includes(arg) ? arg : "cv");
   const move = next => { setTab(next); writeTab(next); };
   const setT = next => { if (next !== t && !mustStay(() => move(next))) move(next); };
-  const list = useApi("/cv/cvs");
+  const list = useApi("/cv/cvs", { on: listChanged });
   const [picked, setPicked] = useState(chosenCv);
   const ready = !!list.data;
   const all = ready ? [...list.data.cvs, ...list.data.archived] : [];

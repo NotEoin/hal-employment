@@ -59,8 +59,9 @@ ROUTES = {"as_is": "original", "improve": "hal_copy", "fresh": "hal_copy"}   # r
 SENDS = ("original", "hal_copy")
 BYS = ("you", "hal", "baseline")
 NO_FILE = "Hal has no file of yours to send as it is. Add your CV file first."
-LAST_STAR = ("Hal needs one CV to use for applications, so this one stays starred. Star another CV first, "
-             "then you can take the star off this one.")
+# No "star" on screen: the app keeps that word for nothing, as "STAR" names a way to tell examples (2026-11-18).
+LAST_STAR = ("Hal needs one CV to use for applications, so this one stays in use. Choose \"Use this for "
+             "applications\" on another CV first, then you can turn it off here.")
 LAST_ACTIVE = "This is your only CV in use, so it cannot go to the archive. Add another CV first."
 STARTER_WHAT = "A starting CV made from your settings"
 PASTED_NAME = "Pasted CV.txt"      # the file name pasted text is kept under
@@ -365,6 +366,32 @@ def cv_for_file(file_id: str, con: sqlite3.Connection | None = None) -> str | No
                                  AND v.file_id = ? AND v.job_id IS NULL)
                            ORDER BY d.archived IS NOT NULL, d.updated DESC LIMIT 1""", (file_id, file_id)).fetchone()
     return row["id"] if row else None
+
+
+def file_cvs(con: sqlite3.Connection | None = None) -> dict[str, dict]:
+    """Each kept file's SHA-256 with the CV it belongs to (its own file, or a version read from it).
+
+    A file two CVs share answers the one most in use: a starred CV first, in the person's order, then one in
+    use, most recently changed first, then an archived one. Each value is {id, name, starred, archived, rank,
+    version_id}: `rank` is the CV's place among the starred ones (0 for the lead), None when it is not starred,
+    and `version_id` its version in use.
+    """
+    with _conn(con) as c:
+        order = [r["id"] for r in c.execute("""SELECT id FROM cv_documents WHERE starred = 1 AND archived IS NULL
+                                                ORDER BY position, updated DESC, id""")]
+        rows = c.execute("""SELECT f.sha256, d.id, d.name, d.starred, d.archived, d.current_version_id
+                            FROM cv_files f JOIN cv_documents d ON d.baseline_file_id = f.id OR EXISTS
+                                 (SELECT 1 FROM cv_versions v WHERE v.doc_id = d.id AND v.file_id = f.id
+                                  AND v.job_id IS NULL)
+                            ORDER BY d.archived IS NOT NULL, d.starred DESC,
+                                     CASE WHEN d.starred THEN d.position END, d.updated DESC, d.id""").fetchall()
+    out: dict[str, dict] = {}
+    for r in rows:
+        starred_ = bool(r["starred"]) and r["id"] in order
+        out.setdefault(r["sha256"], {"id": r["id"], "name": r["name"] or DEFAULT_NAME, "starred": starred_,
+                                     "archived": r["archived"], "rank": order.index(r["id"]) if starred_ else None,
+                                     "version_id": r["current_version_id"]})
+    return out
 
 
 # --------------------------------------------------------------------------------------------- versions

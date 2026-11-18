@@ -165,7 +165,7 @@ class SourceRoutes(unittest.TestCase):
         self.assertEqual(ok.json()["added"][0]["locator"], str(repo.resolve()))
         ended(ok.json()["action_id"])
 
-    def test_a_source_is_changed_starred_marked_current_moved_read_again_and_removed(self):
+    def test_a_source_is_changed_starred_moved_read_again_and_removed(self):
         degree = card("education", {"qualification": "BA", "subject": "History",
                                     "institution": "University of Nowhere Fen"})
         _, essay = form(self.hal, self.c, "/coursework", [("essay.md", ESSAY, "")],
@@ -184,7 +184,9 @@ class SourceRoutes(unittest.TestCase):
         moved = self.put(f"/api/v2/record/sources/{cv_id}", {"section": "cv"}).json()
         self.assertEqual((moved["section"], moved["doc_kind"], moved["suggestion"]), ("cv", "cv", ""))
         ended(moved["action_id"])
-        self.assertTrue(self.put(f"/api/v2/record/sources/{cv_id}", {"current": True}).json()["current"])
+        moved_cv = self.c.get("/api/v2/record/sources?section=cv").json()[0]
+        self.assertTrue(moved_cv["current"], "the only CV leads")
+        self.assertEqual(self.put(f"/api/v2/record/sources/{cv_id}", {"current": True}).status, 400)
         again = self.c.post(f"{path}/reread", {}).json()
         self.assertEqual(ended(again["action_id"])["state"], "done")
         self.assertEqual(self.c.request("DELETE", path).status, 200)

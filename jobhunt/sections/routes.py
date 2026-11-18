@@ -25,16 +25,19 @@ A source (`SOURCE`), from `sections.store.shape`:
     {"id": 4, "section": "document", "section_label": "Documents", "target_id": null, "held": "upload",
      "doc_kind": "other", "doc_kind_label": "Something else", "title": "Volunteer of the year",
      "name": "award.pdf", "files": 1, "locator": "", "starred": false, "can_star": false, "current": false,
-     "can_be_current": false, "dated": "2025-03", "note_rel": "Sources/Documents/Volunteer of the year.md",
+     "can_use": false, "in_use": false, "my_cv": null, "dated": "2025-03",
+     "note_rel": "Sources/Documents/Volunteer of the year.md",
      "added": "2026-11-09T09:00:00Z", "last_checked": "...", "last_changed": "...", "revision": 1,
      "state": "read", "state_words": "Read", "error": "", "suggestion": "cv", "suggestion_label": "CVs",
-     "suggestion_kind": "", "suggestion_kind_label": "", "current_chosen": false, "mark": "", "summary": "",
+     "suggestion_kind": "", "suggestion_kind_label": "", "mark": "", "summary": "",
      "can_have_module": false, "module": null, "module_suggested": "", "module_choices": [],
      "dissertation": false, "can_be_dissertation": false}
 
 `suggestion` is a section the source looks like it belongs in, and `suggestion_kind` another kind of document of
 its own section that it looks like (a transcript added to Documents as "Something else"). `current` marks the
-CV that leads (`profile.cvs`), and `current_chosen` says the person chose it.
+CV that leads (`profile.cvs`). A CV of one uploaded file has `can_use` (it can be used for applications and
+previewed), `in_use` (it is, on My CVs) and `my_cv` ({"id", "name", "archived", "version_id"}: the CV of My CVs
+read from the same file, or null); "Use this for applications" is `cvstudio/record_routes.py`.
 
 `mark` and `summary` are what the reader found (coursework). For coursework and lecture material
 `can_have_module` is true, `module` is the person's choice (null until they choose, "" for none),
@@ -56,9 +59,10 @@ Routes:
   what, when, part, tools, links; `sections.manual.clean_form`), whose name is then its locator.
 - `POST /api/v2/record/sources/{id}/files`: files `file0`, `file1`, ... attached to a project added by hand;
   {"added": [names], "problems": [words], "action_id"}.
-- `PUT /api/v2/record/sources/{id}` {"title", "doc_kind", "target_id", "starred", "current", "section",
-  "module", "dissertation"}: any of them; a new section, kind of document, card, module, star or dissertation
-  mark reads the source again (a starred piece of coursework is read into a showcase project). Returns SOURCE
+- `PUT /api/v2/record/sources/{id}` {"title", "doc_kind", "target_id", "starred", "section", "module",
+  "dissertation"}: any of them (`"current"` is refused: the lead CV follows "Use this for applications"); a
+  new section, kind of document, card, module, star or dissertation mark reads the source again (a starred
+  piece of coursework is read into a showcase project). Returns SOURCE
   with "action_id". A project also takes `"theirs"` (true: one with none of the person's commits is theirs), a portfolio
   `"picked"` (the web addresses of the pieces to add) and a project added by hand `"form"`; each reads it
   again. A project's SOURCE adds "parent_id", "what_changed", "not_yours", "theirs", "pieces" [{"url",
@@ -202,7 +206,7 @@ def attach(req: Request) -> dict:
 
 @route("PUT", PREFIX + "/{source_id}")
 def change(req: Request) -> dict:
-    """Changes a source's title, kind of document, card, star, current mark or section."""
+    """Changes a source's title, kind of document, card, star or section."""
     body = json_body(req)
     try:
         got = store.change(req.con, req.params["source_id"], body)

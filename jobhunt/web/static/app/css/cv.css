@@ -21,3 +21,5 @@
 .cv-star.on svg.i { fill: currentColor; }
 .cv-rename { margin-top: 10px; }
 .cv-rename .input { min-width: 0; flex: 1 1 180px; }
+.btn.cv-star.on { color: var(--ink); border-color: var(--primary); background: var(--primary-soft); }
+.btn.cv-star.on svg.i { color: var(--warn); fill: currentColor; }

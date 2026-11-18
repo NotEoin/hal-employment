@@ -400,7 +400,7 @@ class SeveralCVs(unittest.TestCase):
         store.new_version(edited(self.doc, "Kept."), origin="manual", what="Edit", by="you")
         museum = self.other()
         store.star(self.main, False)
-        with self.assertRaisesRegex(CVError, "stays starred"):
+        with self.assertRaisesRegex(CVError, "stays in use"):
             store.star(museum, False)
         store.archive(museum)
         self.assertEqual([(d["id"], d["starred"]) for d in store.documents()], [(self.main, True)])
@@ -457,7 +457,7 @@ class SeveralCVRoutes(unittest.TestCase):
         self.c.request("PUT", "/api/v2/cv/star" + q, {"on": False})
         refused = self.c.request("PUT", f"/api/v2/cv/star?cv={self.main}", {"on": False})
         self.assertEqual(refused.status, 400)
-        self.assertIn("stays starred", refused.json()["error"]["message"])
+        self.assertIn("stays in use", refused.json()["error"]["message"])
         gone = self.c.request("DELETE", "/api/v2/cv" + q).json()
         self.assertEqual([d["id"] for d in gone["archived"]], [self.museum])
         back = self.c.request("PUT", "/api/v2/cv/archive" + q, {"on": False}).json()

@@ -11,10 +11,10 @@ Design decisions, each with its reason:
   sections, is one source, and the person is told where it is already (`by_hash`).
 - `title` stays "" until the reader finds one or the person types one, so a name the person gave is never
   replaced by a later read; the page shows the file's name until then (`shape`).
-- Only coursework takes a star on the source itself (a showcase piece of the degree), and only CVs are marked
-  current; a project's star is on its card (`profile.store.set_star`). The `current` column keeps only the
-  person's choice; the current CV shown is `profile.cvs.current_source` (their choice, else the newest-dated),
-  and choosing another works out again every card the CVs give.
+- Only coursework takes a star on the source itself (a showcase piece of the degree); a project's star is on
+  its card (`profile.store.set_star`). A CV is not marked here: "Use this for applications" belongs to the CV
+  of My CVs read from the same file (`cvstudio.store.file_cvs`, by SHA-256), and the CV that leads is
+  `profile.cvs.current_source`, which also writes the `current` column (`profile.cvs.settle`).
 - Coursework and lecture material can be for one module of their education card (`MODULE_SECTIONS`,
   migration 0029). `module` is only the person's choice, NULL until they make one and '' for "not for one
   module"; Hal's suggestion is the reader's (`details["module"]`), so a read again never changes the choice.
@@ -30,6 +30,7 @@ from pathlib import Path
 
 from jobhunt import db
 from jobhunt.core import paths
+from jobhunt.cvstudio import store as cv_store
 from jobhunt.profile import cvs
 from jobhunt.profile import store as profile_store
 from jobhunt.sections import registry, wrong_place
@@ -40,7 +41,9 @@ STATE_WORDS = {"new": "Waiting to be read", "reading": "Reading", "read": "Read"
 SOMEONE_ELSES = "Kept out: someone else's"   # a CV headed by another person's name (`sections.cv`)
 THEIRS_SECTIONS = ("project", "cv")          # where the person may say a source Hal took for another's is theirs
 STAR_SECTIONS = ("coursework",)
-CURRENT_SECTIONS = ("cv",)
+CV_SECTION = "cv"
+NO_CURRENT = ("Hal no longer marks a current CV here. Choose \"Use this for applications\" on a CV instead: "
+              "the first one in use leads your record.")
 MODULE_SECTIONS = ("coursework", "lecture")
 DISSERTATION_SECTION, DISSERTATION = "coursework", "dissertation"
 NOT_DISSERTATION = "other"     # the kind a piece takes when the person says it is not the dissertation after all
@@ -170,8 +173,8 @@ def shape(con: sqlite3.Connection, r: sqlite3.Row) -> dict:
             "held": r["kind"], "doc_kind": r["doc_kind"], "doc_kind_label": kind.label if kind else r["doc_kind"],
             "title": r["title"] or name, "name": name, "files": len(rels), "locator": r["locator"],
             "starred": bool(r["starred"]), "can_star": r["section"] in STAR_SECTIONS,
-            "current": r["section"] in CURRENT_SECTIONS and r["id"] == cvs.current_source(con),
-            "can_be_current": r["section"] in CURRENT_SECTIONS, "current_chosen": bool(r["current"]),
+            "current": r["section"] == CV_SECTION and r["id"] == cvs.current_source(con),
+            **_cv_shape(con, r, rels),
             "dated": r["dated"], "note_rel": r["note_rel"],
             "added": r["added"], "last_checked": r["last_checked"], "last_changed": r["last_changed"],
             "revision": r["revision"], "state": r["state"],
@@ -187,6 +190,16 @@ def shape(con: sqlite3.Connection, r: sqlite3.Row) -> dict:
             # an earlier read is kept beside this one (`sections.revisions`), so "Go back to the last read" works
             "can_go_back": con.execute("SELECT count(*) FROM record_source_revisions WHERE source_id = ?",
                                        (r["id"],)).fetchone()[0] > 1}
+
+
+def _cv_shape(con: sqlite3.Connection, r: sqlite3.Row, rels: list[str]) -> dict:
+    """What a CV adds to its shape: whether it is one file Hal can use for applications and preview (`can_use`),
+    whether it is in use (`in_use`), and the CV of My CVs read from that file (`my_cv`) with its version in use."""
+    can = r["section"] == CV_SECTION and r["kind"] == registry.UPLOAD and len(rels) == 1
+    mine = cv_store.file_cvs(con).get(r["sha256"]) if can else None
+    return {"can_use": can, "in_use": bool(mine and mine["starred"]),
+            "my_cv": {"id": mine["id"], "name": mine["name"], "archived": mine["archived"],
+                      "version_id": mine["version_id"]} if mine else None}
 
 
 def _project_shape(r: sqlite3.Row, found: dict) -> dict:
@@ -248,15 +261,17 @@ def target_card(con: sqlite3.Connection, section: registry.Section, target_id) -
 
 
 def change(con: sqlite3.Connection, source_id, changes: dict) -> dict:
-    """Changes a source's title, kind of document, card, star, current mark, section or module; returns the
-    source.
+    """Changes a source's title, kind of document, card, star, section or module; returns the source.
 
     Moving it to another section takes that section's default kind of document unless one is given, and drops
     the suggestion. ValueError for a change that does not fit, LookupError for a source or card that is not
-    there. The caller reads a moved source again, so its note and facts follow it.
+    there. The caller reads a moved source again, so its note and facts follow it. Which CV leads is no longer
+    set here (`NO_CURRENT`): it follows "Use this for applications".
     """
     r = row(con, source_id)
-    unknown = sorted(set(changes) - {"title", "doc_kind", "target_id", "starred", "current", "section", "module",
+    if "current" in changes:
+        raise ValueError(NO_CURRENT)
+    unknown = sorted(set(changes) - {"title", "doc_kind", "target_id", "starred", "section", "module",
                                      "dissertation", "theirs", "picked", "form"})
     if unknown:
         raise ValueError(f"A source has no {', '.join(unknown)} to change.")
@@ -298,13 +313,12 @@ def change(con: sqlite3.Connection, source_id, changes: dict) -> dict:
             sets["doc_kind"] = NOT_DISSERTATION
     if moved or "target_id" in changes:
         sets["target_id"] = target_card(con, section, changes.get("target_id", r["target_id"] if not moved else None))
-    for flag, allowed in (("starred", STAR_SECTIONS), ("current", CURRENT_SECTIONS)):
-        if flag in changes:
-            if not isinstance(changes[flag], bool):
-                raise ValueError(f"Say whether it is {flag}: true or false.")
-            if section.id not in allowed:
-                raise ValueError(f"{section.label} cannot be {'starred' if flag == 'starred' else 'marked current'}.")
-            sets[flag] = int(changes[flag])
+    if "starred" in changes:
+        if not isinstance(changes["starred"], bool):
+            raise ValueError("Say whether it is starred: true or false.")
+        if section.id not in STAR_SECTIONS:
+            raise ValueError(f"{section.label} cannot be starred.")
+        sets["starred"] = int(changes["starred"])
     if "module" in changes:
         sets["module"] = _module(con, section, sets.get("target_id", r["target_id"]), changes["module"])
     elif sets.get("target_id", r["target_id"]) != r["target_id"]:    # another card, other modules: choose again
@@ -314,13 +328,12 @@ def change(con: sqlite3.Connection, source_id, changes: dict) -> dict:
     check_dissertation(con, section.id, sets.get("doc_kind", r["doc_kind"]), sets.get("target_id", r["target_id"]),
                        but=r["id"])
     with con:
-        if sets.get("current"):
-            con.execute("UPDATE record_sources SET current = 0 WHERE section = ?", (section.id,))
         if sets:
             con.execute(f"UPDATE record_sources SET {', '.join(f'{k} = ?' for k in sets)} WHERE id = ?",
                         (*sets.values(), r["id"]))
-    if "current" in sets or (moved and r["section"] in CURRENT_SECTIONS):
-        profile_store.refold_sources(con, [*cvs.cv_sources(con), r["id"]])
+    if moved and r["section"] == CV_SECTION:
+        cvs.settle(con)                       # the CV that left may have led: the others' cards follow the new lead
+        profile_store.refold_sources(con, [r["id"]])
     return get(con, r["id"])
 
 

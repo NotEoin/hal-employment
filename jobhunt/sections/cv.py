@@ -12,15 +12,16 @@ Design decisions, each with its reason:
   (a project's result as a degree, a skills line as a university) when Hal's model was stopped (2026-11-11).
 - Dates, grades and marks are copied as written; the profile turns dates into `YYYY-MM` (`profile.store.clean`).
 - A CV's date (`Reading.date`, kept as `record_sources.dated`) is the one in its heading ("CV, March 2025"),
-  else the latest date of its entries, else the date of its file: the newest CV leads the others
-  (`profile.cvs`), and a CV is newest by what it covers, not by when it was copied to Hal.
+  else the latest date of its entries, else the date of its file: unless a CV is in use for applications, the
+  newest CV leads the others (`profile.cvs`), and a CV is newest by what it covers, not by when it was copied
+  to Hal.
 - A CV headed by another person's name, that never names the person (`you.name`, `you.other_names`, in its
   words or its email address), is theirs: a classmate's CV sorted under CVs gave the person three of the
   classmate's projects (2026-11-12). It is kept out with whose it is, before the AI is asked, until the person
   says it is theirs (`meta.theirs`, "This is mine"). A heading that only names a role ("Software Engineer") is
   no name, and with no name set every CV is the person's.
-- Which CV is current is `profile.cvs`'s answer, so the card, the letters and the list of CVs agree; reading,
-  removing or choosing a CV works out again every card the CVs give (`refold_cv_cards`).
+- Which CV leads is `profile.cvs`'s answer, so the card, the letters and the list of CVs agree; reading or
+  removing a CV works out again every card the CVs give (`refold_cv_cards`).
 """
 from __future__ import annotations
 
@@ -33,7 +34,6 @@ from pathlib import Path
 
 from jobhunt.ingest import convert, rank, understand
 from jobhunt.profile import cvs, merge
-from jobhunt.profile import store as profile_store
 from jobhunt.sections import readers
 
 log = logging.getLogger(__name__)
@@ -180,8 +180,9 @@ def cv_date(text: str, facts: list[readers.Fact], files: tuple[readers.SourceFil
 
 
 def refold_cv_cards(con: sqlite3.Connection) -> list[int]:
-    """Works out again every card the CVs give, after the current CV may have changed; returns their ids."""
-    return profile_store.refold_sources(con, cvs.cv_sources(con))
+    """Works out again every card the CVs give, after the lead CV may have changed, and marks the lead
+    (`profile.cvs.settle`); returns their ids."""
+    return cvs.settle(con, refold=True)
 
 
 class CvReader:

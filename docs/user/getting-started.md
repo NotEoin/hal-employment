@@ -285,9 +285,12 @@ numbered from 1.
   already has, Hal shows the CV it made from it instead of making a copy.
 - **Upload a new version of this CV**, in Versions, is for a file you changed outside Hal: it becomes the
   next version of the CV you are looking at.
-- The star (**Use this for applications**) marks the CVs Hal may use for applications. A new CV is starred
-  and tried first. **Try this CV first** puts another starred CV at the front. Hal always keeps one CV
-  starred, so the last star stays on until you star another CV.
+- **Use this for applications** (the button with a star icon) marks the CVs Hal may use for applications.
+  A new CV is in use and tried first. **Try this CV first** puts another CV in use at the front. Hal always
+  keeps one CV in use, so the last one stays on until you turn on another. The same button is on each CV
+  under **Your CVs** on Your record, and turning it on there adds that CV here.
+- The first CV in use is also the CV your record follows: its jobs, dates and grades come first on your
+  cards, and your other CVs only fill gaps.
 - **Rename** changes a CV's name. Hal names a new CV after its file.
 - **Move to the archive** puts a CV away. Hal keeps all of its versions, so an application you sent with it
   still has it. Open **Archived CVs** and press **Restore** to bring it back. Hal never deletes a CV.
@@ -380,11 +383,11 @@ Each job, qualification or skill is a card:
 - **Found by Hal**, **Checked by you**, **Edited by you** or **Hidden** says where it stands.
 - **From:** names each file it came from, with the words Hal took from it. Click the name to open the
   file. **Quote not found in the file** means those words are not in the file, so check the fact.
-- **only in an older CV** beside a tool, duty or other detail of a project or job means only an older
-  version of your CV gives it. Your newest CV (the one covering the latest dates, else the newest file)
-  speaks for your CVs, so Hal leaves that detail out of your letters, messages and answers unless your
-  newest CV, a repository or another document of your own gives it too. **Edit** the card and remove it,
-  or add it to your newest CV if it is still true.
+- **only in an older CV** beside a tool, duty or other detail of a project or job means only a CV your
+  record does not follow gives it. The CV your record follows (the first one you use for applications, else
+  your newest) speaks for your CVs, so Hal leaves that detail out of your letters, messages and answers
+  unless that CV, a repository or another document of your own gives it too. **Edit** the card and remove
+  it, or add it to the CV your record follows if it is still true.
 - **planned in** and a document's name beside a tool or a skill means only a plan gives it: a design
   document, a specification or a proposal, or words such as "we will use". Hal leaves it out of your
   letters, messages and answers, which never say you used it, as a plan is not what was built. If you did

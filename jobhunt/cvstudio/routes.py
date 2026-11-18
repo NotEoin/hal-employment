@@ -7,7 +7,8 @@ versions, the bin and the sections.
   act on the CV that version belongs to.
 - `GET /cv/cvs` lists the CVs, in use and archived; star, archive (and restore), rename and the starred
   order have routes of their own, and `DELETE /cv` archives: an application may point at a CV, so a CV is
-  never deleted.
+  never deleted. Each of these may change which CV leads Your record's facts, so each ends by letting the
+  record follow (`record_cvs.settle_lead`).
 - Every edit is a new version in the store; nothing here changes a version in place.
 - A document or layout that does not fit schema 2 answers 400 with the field path (`CVError`). Only a save of
   the editor's changes (`PATCH /cv/document`) answers 409, when the version it was made on is no longer in
@@ -21,7 +22,7 @@ import importlib
 import logging
 
 from jobhunt.core import activity, settings
-from jobhunt.cvstudio import checks, edit, model, store
+from jobhunt.cvstudio import checks, edit, model, record_cvs, store
 from jobhunt.cvstudio.model import CVError
 from jobhunt.web.router import BadRequest, Conflict, NotFound, route
 
@@ -153,6 +154,7 @@ def _change(req, fn, said: str) -> dict:
     except CVError as e:
         raise _bad(e) from e
     _note(said.format(name=d["name"] or store.DEFAULT_NAME), kind="cv.cvs")
+    record_cvs.settle_lead(req.con)
     return _cvs(req.con)
 
 
@@ -195,6 +197,7 @@ def put_order(req) -> dict:
         store.reorder(ids, con=req.con)
     except CVError as e:
         raise _bad(e) from e
+    record_cvs.settle_lead(req.con)
     return _cvs(req.con)
 
 

@@ -10,11 +10,19 @@ import { Icon } from "../ui/icons.js";
 import { cvUrl } from "./chosen.js";
 import { Upload, duplicateWords } from "./upload.js";
 
-const STAR = "Use this for applications";
+export const USE_WORDS = "Use this for applications";
+
+/** The "Use this for applications" toggle, its icon filled while on. `words` shows the words beside the icon
+    (Your record's CVs, where `busy` replaces them while Hal reads the file); without them it is the icon
+    alone, named by its label (this list). */
+export function UseToggle({ on, name, onToggle, words = false, busy = "" }) {
+  return html`<button type="button" class=${cx(words ? "btn small" : "iconbtn", "cv-star", on && "on")}
+    aria-pressed=${on ? "true" : "false"} aria-label=${USE_WORDS + ": " + name} title=${words ? undefined : USE_WORDS}
+    disabled=${!!busy} onClick=${onToggle}><${Icon} n="star" c="s" />${words && (busy || USE_WORDS)}</button>`;
+}
 
 function Star({ c, onStar }) {
-  return html`<button type="button" class=${cx("iconbtn cv-star", c.starred && "on")} aria-pressed=${c.starred ? "true" : "false"}
-    aria-label=${STAR + ": " + c.name} title=${STAR} onClick=${() => onStar(c)}><${Icon} n="star" c="s" /></button>`;
+  return html`<${UseToggle} on=${c.starred} name=${c.name} onToggle=${() => onStar(c)} />`;
 }
 
 function Rename({ c, onDone }) {

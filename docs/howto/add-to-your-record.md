@@ -10,8 +10,10 @@ the same for any subject: history essays, design portfolios, lab reports, busine
    statements only to learn how you write, never as facts about you.
    Hal reads each CV into your jobs, education, skills and projects, and dates it by the date at its top
    (such as "CV, March 2025"), else by its latest entry.
-   The newest is your **Current CV**; the others show **Older CV, fills gaps**. To lead with another, press
-   **Make this my current CV** on it.
+   Press **Use this for applications** on each CV Hal may write your applications from. It becomes one of
+   your CVs on **My CVs** (Hal reads it first if it is new there, and the button shows how far it has got).
+   The first CV in use, in the order on My CVs, shows **Your record follows this CV**: its facts come first.
+   With none in use, your newest CV leads. The others show **Fills gaps in your record**.
 2. Open **Work history**. On a job's card, open **Add a document for this job** and add a reference, a
    contract or the job description. Hal takes the job's title, dates and duties from it, after your current
    CV.
@@ -123,8 +125,9 @@ How it works inside is in [Architecture](../dev/architecture.md#sections-of-the-
 | "Choose which education Coursework belongs to." | Add coursework from the course's own card on **Education**, not from another tab. |
 | "Add a folder on the computer Hal runs on, or upload it from this one." | A folder's path only works on the computer Hal runs on. From another computer, upload the folder instead. |
 | "This CV is ...'s, not yours" | The CV is headed by another name and never names you, so Hal took nothing from it. Remove it. If it is yours, add that name under **Your name** or **Other names you go by** in **Settings**, then press **Read again**. |
-| The wrong CV is marked **Current CV** | Press **Make this my current CV** on the one you use now. Hal works out your cards again from it. |
-| A fact says "from an older CV" | Only an older CV gives it. Add it to your current CV if it is still true, or hide it. |
+| The wrong CV shows **Your record follows this CV** | Press **Use this for applications** on the one you use now, and on My CVs press **Try this CV first** on it. Hal works out your cards again from it. |
+| "Hal needs one CV to use for applications, so this one stays in use." | Turn on **Use this for applications** for another CV first. |
+| A fact says "from an older CV" | Only a CV that does not lead your record gives it. Add it to the CV your record follows if it is still true, or hide it. |
 | A module or mark is missing after you added a transcript | Hal reads table rows with a module's name and mark, and lines with a module code and a mark at the end ("HIS2040 Archival Methods 75"). Edit the course's card to add what it missed. |
 | "... is already this course's dissertation." | Press **My dissertation** on the piece marked now to undo it, then mark the right one. |
 | A card disappeared after you pressed **Remove** | It came only from that file, so Hal hid it. Add the file again and the card comes back as you left it. |
