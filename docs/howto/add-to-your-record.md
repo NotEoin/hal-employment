@@ -14,7 +14,9 @@ the same for any subject: history essays, design portfolios, lab reports, busine
    your CVs on **My CVs** (Hal reads it first if it is new there, and the button shows how far it has got).
    The first CV in use, in the order on My CVs, shows **Your record follows this CV**: its facts come first.
    With none in use, your newest CV leads. The others show **Fills gaps in your record**. The list shows
-   the CVs in use first, in the order on My CVs, then the rest, newest first.
+   the CVs in use first, in the order on My CVs, then the rest, newest first. Press **Preview** on a CV to
+   see it as a page: a CV in My CVs shows as it is there; any other shows Hal's quick reading of the file,
+   without adding it to My CVs.
 2. Open **Work history**. On a job's card, open **Add a document for this job** and add a reference, a
    contract or the job description. Hal takes the job's title, dates and duties from it, after your current
    CV.
@@ -127,6 +129,7 @@ How it works inside is in [Architecture](../dev/architecture.md#sections-of-the-
 | "Add a folder on the computer Hal runs on, or upload it from this one." | A folder's path only works on the computer Hal runs on. From another computer, upload the folder instead. |
 | "This CV is ...'s, not yours" | The CV is headed by another name and never names you, so Hal took nothing from it. Remove it. If it is yours, add that name under **Your name** or **Other names you go by** in **Settings**, then press **Read again**. |
 | The wrong CV shows **Your record follows this CV** | Press **Use this for applications** on the one you use now, and on My CVs press **Try this CV first** on it. Hal works out your cards again from it. |
+| **Preview** says "This PDF is a picture of a CV, so Hal cannot read it." | Press **Open your file** to see the file itself, or add the Word file or a PDF with text in it. |
 | "Hal needs one CV to use for applications, so this one stays in use." | Turn on **Use this for applications** for another CV first. |
 | A fact says "from an older CV" | Only a CV that does not lead your record gives it. Add it to the CV your record follows if it is still true, or hide it. |
 | A module or mark is missing after you added a transcript | Hal reads table rows with a module's name and mark, and lines with a module code and a mark at the end ("HIS2040 Archival Methods 75"). Edit the course's card to add what it missed. |

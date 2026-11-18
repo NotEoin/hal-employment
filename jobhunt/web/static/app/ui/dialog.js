@@ -1,7 +1,7 @@
 /* The dialog host: one dialog (or drawer) at a time, opened with openDialog(kind, props).
 
    Each kind lives in dialogs/<kind>.js and default-exports its component, which gets the props as `d`.
-   A component may set `.wide` (a wider box), `.drawer` (slides in from the right, like the Why drawer)
+   A component may set `.wide` (a wider box), `.page` (wide enough for an A4 page), `.drawer` (slides in from the right, like the Why drawer)
    or `.label` (its name when it has no DlgHead). The host moves focus in, keeps Tab inside, closes on
    Esc or a click on the dimmed page, and gives focus back to the element that opened it. */
 import { html, cx, useEffect, useRef, useState } from "../core/html.js";
@@ -20,6 +20,7 @@ export const DIALOGS = {
   why: () => import("../dialogs/why.js"), keys: () => import("../dialogs/keys.js"),
   palette: () => import("../dialogs/palette.js"), critique: () => import("../dialogs/critique.js"),
   rewrite: () => import("../dialogs/rewrite.js"),
+  cvpreview: () => import("../dialogs/cvpreview.js"),
 };
 const TITLE_ID = "dlg-title";
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), '
@@ -102,7 +103,7 @@ export function DialogHost() {
       ...${named} tabindex="-1" ref=${ref} onKeyDown=${onKey}><${C} d=${d} /></aside>`;
   }
   return html`<div class="scrim" onClick=${e => { if (e.target === e.currentTarget) closeDialog(); }}><div
-    class=${cx("dialog", C.wide && "wide", kind === "palette" && "palette")} role="dialog" aria-modal="true" ...${named}
+    class=${cx("dialog", C.wide && "wide", C.page && "page", kind === "palette" && "palette")} role="dialog" aria-modal="true" ...${named}
     tabindex="-1" ref=${ref} onKeyDown=${onKey}><${C} d=${d} /></div></div>`;
 }
 

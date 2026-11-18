@@ -54,6 +54,10 @@ What changed in each version, in plain words.
 - **Your CVs in a useful order.** On Your record, the CVs you use for applications come first, in the order
   on My CVs, then your other CVs, newest first.
 
+- **Preview any CV in your record.** Each CV under **Your CVs** has **Preview**, which shows it as a page. A
+  CV in My CVs shows as it is there; any other shows Hal's quick reading of the file, without adding it to My
+  CVs. If Hal cannot read the file, the preview says why and offers the file itself.
+
 ### Fixed
 
 - **A CV you add starts at version 1.** Adding a new CV used to show it as, say, "version 9" of your old one,

@@ -120,6 +120,42 @@ class RecordCvRoutes(unittest.TestCase):
         self.assertEqual(self.use(letter["id"], True).status, 400)
         self.assertEqual(self.use(scanned, "yes").status, 400)
 
+    def preview(self, source_id: int) -> dict:
+        reply = self.c.get(f"/api/v2/record/sources/{source_id}/preview")
+        self.assertEqual(reply.status, 200, reply.text)
+        return reply.json()
+
+    def test_a_readable_cv_is_previewed_from_a_quick_reading_and_is_not_added_to_my_cvs(self):
+        avery = self.to_record("Avery-Quillon-CV.pdf")
+        shown = self.preview(avery)
+        base = f"/record/sources/{avery}"
+        self.assertEqual(shown, {"version_id": None, "url": base + "/preview.html", "why": "",
+                                 "original_url": base + "/original"})
+        with mock.patch.object(parse, "read_rules", wraps=parse.read_rules) as reads:
+            page = self.c.get("/api/v2" + shown["url"])
+            self.c.get("/api/v2" + shown["url"])
+        self.assertEqual(page.status, 200)
+        self.assertIn("Experience", page.text)
+        self.assertEqual(reads.call_count, 0, "the reading is kept by the file's SHA-256")
+        self.assertEqual(self.c.get(f"/api/v2{base}/fonts/nothing.woff2").status, 404)
+        listed = self.c.get("/api/v2/cv/cvs").json()["cvs"]
+        self.assertEqual([c["file"] for c in listed], [None], "nothing added to My CVs")
+
+    def test_a_cv_in_my_cvs_previews_its_version_in_use(self):
+        cv = self.to_my_cvs("Marnie-Quillfeather-CV.txt")
+        source = self.listed()["Marnie-Quillfeather-CV.txt"]
+        version = self.c.get(f"/api/v2/cv?cv={cv}").json()["version"]["id"]
+        self.assertEqual(self.preview(source["id"])["version_id"], version)
+
+    def test_a_file_hal_cannot_read_says_why_and_offers_the_original(self):
+        scanned = self.to_record("Scanned-CV.pdf")
+        shown = self.preview(scanned)
+        self.assertEqual((shown["url"], shown["version_id"], shown["why"]), (None, None, parse.PICTURE_WORDS))
+        original = self.c.get("/api/v2" + shown["original_url"])
+        self.assertEqual((original.status, original.body), (200, fixture("Scanned-CV.pdf")))
+        page = self.c.get(f"/api/v2/record/sources/{scanned}/preview.html")
+        self.assertEqual(page.status, 400)
+
 
 if __name__ == "__main__":
     unittest.main()

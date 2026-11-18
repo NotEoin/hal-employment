@@ -12,21 +12,33 @@ SHA-256, so `store.file_cvs` says which CV of My CVs a record CV is, with no col
 - Turning it off takes it out of use; the store refuses for the last CV in use, in plain words.
 - After either, the lead CV of the record follows (`profile.cvs.settle`): the first CV in use leads the facts.
 - Only a CV of one uploaded file can be used: a folder or zip of files is no one CV file to read.
+- Preview: a CV that is one of My CVs shows that CV's version in use. Any other is read with the rules only
+  (`parse.read_rules`, no AI, so it is quick and private) and drawn by the same renderer in the default look;
+  it is not added to My CVs. The reading (or the reader's reason it cannot read the file) is kept in memory
+  by SHA-256, so the preview's two requests and a second opening read the file once. Kept in memory, not on
+  disk: it is cheap to make again and nothing else needs it.
 """
 from __future__ import annotations
 
 import logging
 import sqlite3
+import threading
+from collections import OrderedDict
 from pathlib import PurePath
 
 from jobhunt.core import runner
-from jobhunt.cvstudio import parse, store
+from jobhunt.cvstudio import parse, render, store
+from jobhunt.cvstudio.model import CVDoc
 from jobhunt.sections import registry
 from jobhunt.sections import store as sources
 
 log = logging.getLogger(__name__)
 
 SECTION = "cv"
+PREFIX = "/record/sources"   # the page's address of a source, under /api/v2
+READINGS_KEPT = 32           # previews kept in memory: more CVs than one person keeps, each a few kilobytes
+_readings: OrderedDict[str, CVDoc | str] = OrderedDict()   # SHA-256 -> the rules' reading, or why it failed
+_lock = threading.Lock()
 NOT_A_CV = "Only a CV in Your CVs can be used for applications."
 NOT_ONE_FILE = "This CV is a folder of files, so Hal cannot read it as one CV. Add the CV file on its own."
 GONE_FILE = "Hal no longer has its copy of this file. Add it again."
@@ -106,3 +118,58 @@ def use(con: sqlite3.Connection, source_id, on: bool, *, session_id: str | None 
         log.info("not reading %s again: %s", name, e)
         raise RuntimeError(BUSY) from e
     return {"cv": None, "action_id": action_id}
+
+
+# ------------------------------------------------------------------------------------------------ preview
+
+def _read(sha: str, data: bytes, name: str) -> CVDoc:
+    """The rules' reading of a file (no AI), kept by its SHA-256 so a preview opened again is instant.
+
+    `parse.CVReadError` says why Hal cannot read it; that answer is kept too.
+    """
+    with _lock:
+        if sha in _readings:
+            _readings.move_to_end(sha)
+            found = _readings[sha]
+            if isinstance(found, str):
+                raise parse.CVReadError(found)
+            return found
+    try:
+        kind, _ = parse.check(data, name)
+        doc: CVDoc | str = parse.read_rules(parse.lines_of(data, kind)).doc
+    except parse.CVReadError as e:
+        doc = str(e)
+    with _lock:
+        _readings[sha] = doc
+        while len(_readings) > READINGS_KEPT:
+            _readings.popitem(last=False)
+    if isinstance(doc, str):
+        raise parse.CVReadError(doc)
+    return doc
+
+
+def preview(con: sqlite3.Connection, source_id) -> dict:
+    """How to preview a CV of the record: {"version_id", "url", "why", "original_url"}.
+
+    A CV that is one of My CVs shows that CV's version in use (`version_id`, for `DocPreview`); any other is read
+    by the rules only and shown at `url`, and adds nothing to My CVs. `why` is the reader's reason when it cannot
+    read the file, with the original at `original_url` to open instead.
+    """
+    r, data, name = source_file(con, source_id)
+    base = f"{PREFIX}/{r['id']}"
+    out = {"version_id": None, "url": None, "why": "", "original_url": f"{base}/original"}
+    mine = my_cv(con, r)
+    if mine and mine["version_id"]:
+        return {**out, "version_id": mine["version_id"]}
+    try:
+        _read(r["sha256"], data, name)
+    except parse.CVReadError as e:
+        return {**out, "why": str(e)}
+    return {**out, "url": f"{base}/preview.html"}
+
+
+def preview_html(con: sqlite3.Connection, source_id) -> str:
+    """The rules' reading of a CV of the record as the page Hal prints, in the default look."""
+    r, data, name = source_file(con, source_id)
+    doc = _read(r["sha256"], data, name)
+    return render.render_cv_html(doc, None, render.DEFAULT_LOOK, render.profile_from_settings())

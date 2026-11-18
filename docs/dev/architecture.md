@@ -419,6 +419,13 @@ runs: tests use `tests/support/fake_claude/`.
     starred order (`profile.cvs.in_use`), then the rest newest first by `dated`, else the month in `added`
     (so a CV still being read is near the top), then `added`. Children stay under their parent on the page
     (`nested()` in `record/sections.js`).
+  - Preview of a record CV (`dialogs/cvpreview.js`, a `.page` dialog sized for A4): `GET
+    /record/sources/{id}/preview` answers the CV of My CVs' version in use (drawn by `DocPreview` as on My
+    CVs) or, for a file new to My CVs, a quick reading: `parse.lines_of` + `parse.read_rules`, no AI, kept in
+    memory by SHA-256 (`record_cvs._read`, `READINGS_KEPT`), served at `.../preview.html` through
+    `render.render_cv_html` in `render.DEFAULT_LOOK` with no type. A file the reader refuses answers its
+    `CVReadError` words and `.../original` (a download). Letters (`letter` section) get neither the toggle
+    nor a preview: `can_use` is only for a CV of one uploaded file.
 - Versions never change after they are written. `store.new_version` adds one under `BEGIN IMMEDIATE`, so two
   saves at once get two numbers, and publishes the event `cv` (with the CV's id as `cv`). The CV is `doc_id=`,
   else the one `base` or `parent` belongs to, else the lead CV. Numbers count one CV's own versions from 1.

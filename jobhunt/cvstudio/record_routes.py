@@ -5,6 +5,12 @@
   and "action_id" (the `cv.parse` reading the file, or null). A POST, so the page can follow the reading with
   `run` as My CVs' upload does. A file Hal cannot read, a source that is no CV file, and the last CV in use
   are 400 with plain words; a reading of the same file already under way is 409.
+- `GET .../{id}/preview`: {"version_id", "url", "why", "original_url"}, what the Preview dialog shows: the CV
+  of My CVs read from this file (its version in use, for `DocPreview`), else Hal's quick reading at `url`, or
+  the reader's reason (`why`) and the original file. `.../preview.html` is that quick reading as the page Hal
+  prints (400 with the reason when the file cannot be read); its fonts are served beside it, as for the CV
+  previews (`look_routes`). `.../original` sends the file as a download, never shown inline, as a record CV
+  may be any file.
 
 At start the record's lead CV is settled once (`record_cvs.settle_lead`), so an install that kept the old
 "current CV" choice has its cards worked out again for the CV in use.
@@ -12,13 +18,24 @@ At start the record's lead CV is settled once (`record_cvs.settle_lead`), so an 
 from __future__ import annotations
 
 import logging
+import mimetypes
 
 from jobhunt import db
 from jobhunt.core import plugins
-from jobhunt.cvstudio import parse, record_cvs
+from jobhunt.cvstudio import parse, record_cvs, render
 from jobhunt.cvstudio.model import CVError
 from jobhunt.sections import store as sources
-from jobhunt.web.router import BadRequest, Conflict, Request, json_body, route
+from jobhunt.web.router import (
+    BadRequest,
+    BytesResponse,
+    Conflict,
+    FileResponse,
+    HtmlResponse,
+    NotFound,
+    Request,
+    json_body,
+    route,
+)
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +55,44 @@ def use(req: Request) -> dict:
     except RuntimeError as e:
         raise Conflict(str(e)) from e
     return {**sources.get(req.con, req.params["source_id"]), **out}
+
+
+@route("GET", PREFIX + "/{source_id}/preview")
+def preview(req: Request) -> dict:
+    """How to preview a CV of the record: {"version_id", "url", "why", "original_url"} (`record_cvs.preview`)."""
+    try:
+        return record_cvs.preview(req.con, req.params["source_id"])
+    except record_cvs.NotUsable as e:
+        raise BadRequest(str(e)) from e
+
+
+@route("GET", PREFIX + "/{source_id}/preview.html")
+def preview_page(req: Request) -> HtmlResponse:
+    """Hal's quick reading of a CV of the record, as the page Hal prints, in the default look."""
+    try:
+        page = record_cvs.preview_html(req.con, req.params["source_id"])
+    except (record_cvs.NotUsable, parse.CVReadError) as e:
+        raise BadRequest(str(e)) from e
+    return HtmlResponse(page, policy=render.POLICY)
+
+
+@route("GET", PREFIX + "/{source_id}/fonts/{name}")
+def preview_font(req: Request) -> FileResponse:
+    """One of the CV fonts, for the preview page's relative `fonts/<file>` links."""
+    for f in render.font_files():
+        if f.name == req.params["name"]:
+            return FileResponse(f, f.name, "font/woff2")
+    raise NotFound("There is no such font.")
+
+
+@route("GET", PREFIX + "/{source_id}/original")
+def original(req: Request) -> BytesResponse:
+    """A CV of the record's own file, byte for byte, to open when Hal cannot preview it."""
+    try:
+        _, data, name = record_cvs.source_file(req.con, req.params["source_id"])
+    except record_cvs.NotUsable as e:
+        raise NotFound(str(e)) from e
+    return BytesResponse(data, name, mimetypes.guess_type(name)[0] or "application/octet-stream", download=True)
 
 
 @plugins.on_start

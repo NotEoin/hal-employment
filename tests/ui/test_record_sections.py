@@ -148,6 +148,30 @@ class RecordSections(unittest.TestCase):
         p.open("cv")
         p.shows(p.page.locator(".cv-pick.on", has_text="Marnie CV 2019"), "the CV is in My CVs")
 
+    def test_preview_shows_a_cv_on_an_a4_page_and_a_letter_has_none(self) -> None:
+        p = self.page("record")
+        cvs = self.panel(p, "Your CVs")
+        cvs.locator("input[type=file]").first.set_input_files(self.file("Marnie CV.md", CV))
+        row = cvs.locator("li.rec-source", has_text="Marnie CV")
+        p.shows(row.get_by_text("Read", exact=True), "read")
+        cvs.get_by_label("What is it?").select_option(label="Cover letter")
+        cvs.locator("input[type=file]").first.set_input_files(self.file("Letter to the museum.md", REFERENCE))
+        letter = cvs.locator("ul.rec-source-list").nth(1).locator("li.rec-source")
+        p.shows(letter, "the letter")
+        self.assertEqual(letter.get_by_role("button", name="Preview", exact=False).count(), 0)
+        row.get_by_role("button", name="Preview: Marnie CV").click()
+        dialog = p.page.get_by_role("dialog")
+        p.shows(dialog.get_by_text("A quick reading of your file"), "not in My CVs yet")
+        frame = dialog.locator("iframe")
+        p.shows(frame, "the A4 page")
+        self.assertIn("/preview.html", frame.get_attribute("src"))
+        p.page.frame_locator("dialog iframe, [role=dialog] iframe").locator("body").get_by_text(
+            "Work experience", exact=False).first.wait_for()
+        self.assertGreaterEqual(dialog.bounding_box()["width"], 800, "sized for an A4 page")
+        self.assertEqual(p.serious_axe(), [])
+        dialog.get_by_role("button", name="Close").click()
+        self.assertEqual(cv_store.lead_id(), None, "a preview adds nothing to My CVs")
+
     def clean_but(self, p: AppPage, refused: str) -> None:
         """As `clean`, but the one 400 that says why the last CV in use stays is expected."""
         p.missing = [u for u in p.missing if not u.endswith(refused)]

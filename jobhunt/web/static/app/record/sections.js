@@ -6,7 +6,8 @@
    choices: "Showcase" (coursework; the app's word for a star, as "STAR" names a way to tell examples),
    "Use this for applications" on a CV (the same toggle as My CVs' list: it makes the file one of My CVs,
    reading it first when it is new there, and the server keeps one CV in use; the first CV in use leads the
-   record, "Your record follows this CV", and the others show "Fills gaps in your record"), "Read again", "Remove" (after a yes, as nothing brings it back), and a hint to move one
+   record, "Your record follows this CV", and the others show "Fills gaps in your record"), "Preview" on a CV
+   (dialogs/cvpreview.js), "Read again", "Remove" (after a yes, as nothing brings it back), and a hint to move one
    that looks like it belongs elsewhere, or (in Documents) looks like another kind of document (Hal never
    moves or changes it on its own). Documents may name the card they are about: a course, a job or a
    certificate. Coursework and lecture material say which of the course's modules they are for: Hal suggests
@@ -18,7 +19,7 @@
    account whose reader is still to come is shown, but switched off as "coming soon". */
 import { html, useState } from "../core/html.js";
 import { api, post, put, del, run } from "../core/api.js";
-import { useApi, toast, invalidate } from "../core/store.js";
+import { useApi, toast, invalidate, openDialog } from "../core/store.js";
 import { plural, agoWords } from "../core/format.js";
 import { isRemote } from "../core/remote.js";
 import { Chip, Note } from "../ui/controls.js";
@@ -154,6 +155,8 @@ function SourceRow({ s }) {
       ${s.pieces && s.pieces.length > 0 && html`<${PiecePicker} s=${s} path=${path} />`}</div>
     <div class="row wrap rec-acts">
       ${s.can_use && html`<${UseCv} s=${s} />`}
+      ${s.can_use && html`<button type="button" class="btn quiet small" aria-label=${"Preview: " + s.title}
+        onClick=${() => openDialog("cvpreview", { id: s.id, title: s.title })}><${Icon} n="file" c="s" />Preview</button>`}
       ${s.can_star && html`<button type="button" class="btn small" aria-pressed=${s.starred ? "true" : "false"}
         aria-label=${(s.starred ? "Take out of your showcase: " : "Showcase: ") + s.title}
         onClick=${() => act(() => put(path, { starred: !s.starred }), s.starred ? "Taken out of your showcase." : "In your showcase. Hal tells employers about it.")}>
