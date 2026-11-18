@@ -6,11 +6,17 @@ to send on their behalf. The prompt (`ai/prompts/prep.txt`) names no one: `cvstu
 with the person and the CV type's `prep_topics`, and the tests the advert names go in the request.
 """
 from jobhunt import ai, db, documents, pack, record
-from jobhunt.cvstudio import cv
+from jobhunt.cvstudio import choose, cv
 from jobhunt.writing import stage as person_stage
 
 PREP_TIMEOUT = 600   # seconds; the notes are long, and a local model on a busy graphics card is slow
 ADVERT_CHARS = 8000  # what fits a local model's context beside the instructions and the evidence
+
+
+def _cv_facts(job) -> str:
+    """The facts of the CV the job's documents are built from (`choose.base_doc`), else the lead CV's."""
+    with cv.based_on(choose.base_doc(job["id"])):
+        return cv.facts_text()
 
 
 def request(job, who: dict) -> str:
@@ -25,7 +31,7 @@ def request(job, who: dict) -> str:
     return (f"Application stage: {stage}\n{person_stage.today_lines()}\nJob: {job['title']} at {job['company']}\n"
             f"Tests the advert names: {who['test_kinds_line']}\n\n"
             f"Advert:\n{(job['description'] or '')[:ADVERT_CHARS]}\n\nFit map:\n{fit}\n"
-            f"Gaps: {s['gaps']}\n\nCV facts:\n{cv.facts_text()}"
+            f"Gaps: {s['gaps']}\n\nCV facts:\n{_cv_facts(job)}"
             + (f"\n\nEmployment record ({record.OWN_DOCUMENTS}; fuller than the CV):\n{kept}" if kept else ""))
 
 

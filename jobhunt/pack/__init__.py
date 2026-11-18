@@ -68,6 +68,9 @@ Design notes:
   and starts again when the record's revision moves before the job's CV or the pack is saved, as packs
   written behind a long record update read a record that changed under them (2026-11-18). The revision it
   was written from is kept (`documents.mark_written_from`), so a later change shows it out of date.
+- A pack is written on one of the person's CVs, the one `cvstudio/choose.py` picks for the advert (or the one
+  the person picked for this application, which a rewrite keeps): the facts, the fit map, the letter and the
+  job's CV all read it (`cv.based_on`), and the choice is kept with the job's CV (`tailor.prepare`).
 - Each pack logs how many model calls it made (`build`, `ai.counted`): a pack made about 55 with sentence
   checks, and the stories aim for about 30 at most (2026-11-08), so the count is logged to be measured.
 """
@@ -77,7 +80,7 @@ from pathlib import Path
 from jobhunt import ai, db
 from jobhunt.company import reputation
 from jobhunt.core import events
-from jobhunt.cvstudio import cv, tailor
+from jobhunt.cvstudio import choose, cv, tailor
 from jobhunt.pack import freshness
 from jobhunt.pack.checks import (
     CUT_FLAG,
@@ -308,8 +311,16 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
 
 def _build(con, job_id: str, use_web: bool, ctx, fresh: freshness.Fresh) -> Path:
     job = con.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    base = choose.for_writing(con, dict(job), again=True)
+    with cv.based_on(base.doc_id):
+        return _build_on(con, job, base, use_web, ctx, fresh)
+
+
+def _build_on(con, job, base: choose.Choice, use_web: bool, ctx, fresh: freshness.Fresh) -> Path:
+    """`_build` on the CV chosen for the job (`base`), which every fact below is read from (`cv.based_on`)."""
     from jobhunt import documents
 
+    job_id = job["id"]
     if not has_facts(con):
         raise NothingChecked(NOTHING_CHECKED)
     job_text = _job_text(job)
@@ -340,7 +351,7 @@ def _build(con, job_id: str, use_web: bool, ctx, fresh: freshness.Fresh) -> Path
     letter, message, answers, refused = without_refusals(letter, message, answers)
 
     fresh.check()    # the job's CV is saved next, so a record that moved is caught before anything is kept
-    made = tailor.prepare(dict(job), priorities=tailor.picked(job_id, con), con=con)
+    made = tailor.prepare(dict(job), priorities=tailor.picked(job_id, con), base=base, con=con)
     track = next((c["after"] for c in made["changes"] if c["target"] == "headline"), None)
     pdf = cv.render(tailor.v1(job_id, con), out_dir)
     flagged = refused + written["flags"] + others["flags"]

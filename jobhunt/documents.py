@@ -170,18 +170,19 @@ def save(con, job, docs: dict) -> None:
         render(job, docs)
 
 
-def original_file() -> str | None:
-    """The kept file id of the person's own CV while My CV is set to send it unchanged, else None."""
-    from jobhunt.cvstudio import store
+def original_file(job=None) -> str | None:
+    """The kept file id of the person's own CV while that CV is set to send it unchanged, else None: the CV
+    `job`'s documents are built from (`choose.base_doc`), else the lead CV."""
+    from jobhunt.cvstudio import choose, store
 
-    d = store.doc()
+    d = store.doc(doc_id=choose.base_doc(job["id"]) if job is not None else None)
     return d["baseline_file_id"] if d["send"] == "original" and d["baseline_file_id"] else None
 
 
-def cv_file_name() -> str:
+def cv_file_name(job=None) -> str:
     """The CV's file name employers see: the template's, with the original file's extension while it is sent."""
     name = naming.file_name("cv")
-    fid = original_file()
+    fid = original_file(job)
     if fid is None:
         return name
     from jobhunt.cvstudio import store
@@ -196,7 +197,7 @@ def files(job, con=None) -> dict:
         d = pack_dir(job, c, create=False)
     if d is None:
         return {}
-    return {k: str(p) for k, p in (("cv", d / cv_file_name()),
+    return {k: str(p) for k, p in (("cv", d / cv_file_name(job)),
                                     ("letter", d / naming.file_name("letter"))) if p.exists()}
 
 
@@ -206,7 +207,7 @@ def tailored(job, docs: dict) -> dict:
     base CV as it is while adjusting for each job is No or the original file is sent."""
     if tailor.kept(job["id"]):
         return tailor.v1(job["id"])
-    if settings.get("cvdocs.tailor") == "no" or original_file() is not None:
+    if settings.get("cvdocs.tailor") == "no" or original_file(job) is not None:
         return cv.load()
     variant = cv.tailor(pack._job_text(job))[0]
     for key in ("title", "summary"):    # a CV may have neither
@@ -244,8 +245,8 @@ def render(job, docs: dict, out: Path | None = None) -> dict:
     d.mkdir(parents=True, exist_ok=True)
     made = {}
     sent = current_cv(job, docs)
-    want = d / cv_file_name()
-    fid = original_file()
+    want = d / cv_file_name(job)
+    fid = original_file(job)
     if fid is not None:
         from jobhunt.cvstudio import store
 
@@ -289,8 +290,11 @@ def draft_letter(con, job) -> str:
     """
     if gpu.busy():
         return ""
+    from jobhunt.cvstudio import choose
+
     try:
-        written = pack.write_letter(con, job)
+        with cv.based_on(choose.base_doc(job["id"], con)):
+            written = pack.write_letter(con, job)
     except ai.LLMUnavailable:
         return ""
     docs = {**load(con, job), "letter": written["text"], "letter_notes": written["notes"],

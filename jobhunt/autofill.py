@@ -38,7 +38,7 @@ from urllib.parse import urlparse
 from jobhunt import ai, db, record
 from jobhunt.ai import gpu, prompts
 from jobhunt.company import salary
-from jobhunt.cvstudio import cv
+from jobhunt.cvstudio import choose, cv
 from jobhunt.writing import spelling, stage
 
 if TYPE_CHECKING:
@@ -994,6 +994,12 @@ def _conventions(job) -> str:
     return fields.block(fields.for_job(job), "answer")
 
 
+def _cv_facts(job, con) -> str:
+    """The facts of the CV the job's documents are built from (`choose.base_doc`), else the lead CV's."""
+    with cv.based_on(choose.base_doc(job["id"], con)):
+        return cv.facts_text()
+
+
 def _facts(job, docs: dict, con, notes: NoteSet | None = None) -> str:
     """What the AI may know when it fills a form: the profile, the CV, saved answers this job may use, and the
     free-words notes about this job site."""
@@ -1004,7 +1010,7 @@ def _facts(job, docs: dict, con, notes: NoteSet | None = None) -> str:
              f"Applicant profile: {prof}",
              "The applicant has never worked for, interviewed with or been referred to this employer "
              "unless stated below.",
-             f"{CV_FACTS}{cv.facts_text()}"]
+             f"{CV_FACTS}{_cv_facts(job, con)}"]
     if con is not None:
         before = con.execute("""SELECT title, status FROM jobs WHERE lower(company) = lower(?) AND id != ?
                                 AND status IN ('applied','assessment','interview','offer','rejected','withdrawn')""",

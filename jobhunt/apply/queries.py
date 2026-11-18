@@ -381,6 +381,13 @@ def _cv_changes(job, docs: dict) -> list[dict]:
              "after": c.get("after", ""), "why": "", "on": c["id"] not in undone} for c in found]
 
 
+def _cv_base(con, job_id: str) -> dict | None:
+    """The CV this application is built from, with why (`choose.shown`); None for one without a job's CV."""
+    from jobhunt.cvstudio import choose
+
+    return choose.shown(con, job_id)
+
+
 def _cv_kept(con, job_id: str) -> dict:
     """`schema` 2 when the application's CV can be edited line by line (`tailor.kept`), else 1, and the number
     of the version it was approved as."""
@@ -486,7 +493,8 @@ def application(con, ref: str) -> dict:
                         **_cv_kept(con, job_id), "look": None,
                         "pick": _cv_pick(con, r) if step == 1 and not writing else [],
                         "sent_as": (row["cv_sent_as"] if row is not None else None)
-                        or ("original" if documents.original_file() else "hal_copy")},
+                        or ("original" if documents.original_file(r) else "hal_copy"),
+                        "base": _cv_base(con, job_id)},
                  "letter": {"text": letter, "words": len(letter.split()), "tone": notes.get("tone"),
                             "evidence": notes.get("evidence"), "checked": notes.get("checked"),
                             "preview_url": _file_url(files.get("letter"))},

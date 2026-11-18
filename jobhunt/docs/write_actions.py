@@ -27,7 +27,7 @@ from jobhunt import documents, pack
 from jobhunt.apply import actions as apply_actions
 from jobhunt.apply.queries import load_job
 from jobhunt.core import runner, work
-from jobhunt.cvstudio import cv
+from jobhunt.cvstudio import choose, cv
 from jobhunt.docs import contacts, prep
 from jobhunt.writing import critique as writing_critique
 from jobhunt.writing import fields
@@ -100,12 +100,13 @@ def change(ctx, job_id: str, words: str) -> dict:
     if not words:
         raise ValueError("Say what you want changed first.")
     job = load_job(ctx.con, job_id)
-    who, facts = pack.person(job), cv.facts_text()
-    ctx.step("Reading the advert and your evidence")
-    read, about = pack.read_job(job, who, facts), documents.summary(job).get("company", "")
-    written = rewrite_letter_now(ctx, job, words, who=who, about=about, **read)
-    docs = documents.load(ctx.con, job)
-    others = _changed_others(ctx, job, who, docs, words, read, about, facts, written)
+    with cv.based_on(choose.base_doc(job_id, ctx.con)):
+        who, facts = pack.person(job), cv.facts_text()
+        ctx.step("Reading the advert and your evidence")
+        read, about = pack.read_job(job, who, facts), documents.summary(job).get("company", "")
+        written = rewrite_letter_now(ctx, job, words, who=who, about=about, **read)
+        docs = documents.load(ctx.con, job)
+        others = _changed_others(ctx, job, who, docs, words, read, about, facts, written)
     flags = list(dict.fromkeys(written["flags"] + others["flags"]))
     out = apply_actions.save_documents(ctx.con, job_id, {"message": others["message"], "answers": others["answers"]})
     ctx.changed("Hal rewrote the letter, the message and the answers as you asked. Read them before you approve.")
@@ -117,7 +118,8 @@ def change(ctx, job_id: str, words: str) -> dict:
 def rewrite_letter(ctx, job_id: str, words: str = "") -> dict:
     """Rewrites the cover letter alone, in the way the person asked, and checks it like any other."""
     job = load_job(ctx.con, job_id)
-    written = rewrite_letter_now(ctx, job, (words or "").strip()[:WORDS_SHOWN])
+    with cv.based_on(choose.base_doc(job_id, ctx.con)):
+        written = rewrite_letter_now(ctx, job, (words or "").strip()[:WORDS_SHOWN])
     ctx.changed("Hal rewrote the cover letter. Read it before you approve.")
     return {"letter": written["text"], "flags": written["flags"], "notes": written["notes"]}
 

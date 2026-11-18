@@ -180,7 +180,7 @@ class OldDatabases(Folder):
                     "VALUES (1, 'project', '{\"name\": \"Tide gauge\"}', 'x', 'x')")
         con.execute("INSERT INTO profile_evidence (item_id, source_rel, found_at) VALUES (1, 'Sources/CV.md', 'x')")
         con.commit()
-        self.assertEqual(self.run_migrate(con), [28, 29, 30, 31, 32, 33])
+        self.assertEqual(self.run_migrate(con), list(range(28, migrate.LATEST + 1)))
         self.assertEqual(con.execute("SELECT star, star_by, orphaned_from FROM profile_items").fetchone(), (0, "", ""))
         self.assertEqual(con.execute("SELECT source_id, place, line FROM profile_evidence").fetchone(),
                          (None, "", None))
@@ -200,7 +200,7 @@ class OldDatabases(Folder):
         con.execute("INSERT INTO record_sources (section, kind, doc_kind, added) VALUES ('coursework', 'upload', "
                     "'essay', 'x')")
         con.commit()
-        self.assertEqual(self.run_migrate(con), [29, 30, 31, 32, 33])
+        self.assertEqual(self.run_migrate(con), list(range(29, migrate.LATEST + 1)))
         self.assertEqual(con.execute("SELECT module, details FROM record_sources").fetchone(), (None, "{}"))
 
     def test_project_sources_get_a_parent_and_revisions_at_version_30(self):
@@ -213,7 +213,7 @@ class OldDatabases(Folder):
         con.execute("INSERT INTO record_sources (id, section, kind, doc_kind, locator, added) "
                     "VALUES (1, 'project', 'account', 'github_account', 'averyq', 'x')")
         con.commit()
-        self.assertEqual(self.run_migrate(con), [30, 31, 32, 33])
+        self.assertEqual(self.run_migrate(con), list(range(30, migrate.LATEST + 1)))
         self.assertEqual(con.execute("SELECT parent_id, meta, what_changed FROM record_sources").fetchone(),
                          (None, "{}", ""))
         con.execute("PRAGMA foreign_keys = ON")
@@ -233,7 +233,7 @@ class OldDatabases(Folder):
         con.execute("INSERT INTO record_sources (id, section, kind, doc_kind, added) "
                     "VALUES (1, 'cv', 'upload', 'cv', 'x')")
         con.commit()
-        self.assertEqual(self.run_migrate(con), [31, 32, 33])
+        self.assertEqual(self.run_migrate(con), list(range(31, migrate.LATEST + 1)))
         con.execute("PRAGMA foreign_keys = ON")
         con.execute("INSERT INTO record_sorts (id, kind, created, updated) VALUES (1, 'folder', 'x', 'x')")
         con.execute("INSERT INTO record_sort_rows (sort_id, path, rel, held, source_id) "
@@ -254,7 +254,7 @@ class OldDatabases(Folder):
         con.execute("INSERT INTO record_sorts (id, kind, created, updated) VALUES (1, 'folder', 'x', 'x')")
         con.execute("INSERT INTO record_sort_rows (id, sort_id, path, rel, held) VALUES (1, 1, '/a', 'a', 'upload')")
         con.commit()
-        self.assertEqual(self.run_migrate(con), [32, 33])
+        self.assertEqual(self.run_migrate(con), list(range(32, migrate.LATEST + 1)))
         con.execute("PRAGMA foreign_keys = ON")
         self.assertEqual(con.execute("SELECT add_id FROM record_sort_rows").fetchone(), (None,))
         con.execute("INSERT INTO record_sort_adds (id, sort_id, files, created) VALUES (1, 1, 1, 'x')")
@@ -295,7 +295,7 @@ class OldDatabases(Folder):
                     "VALUES ('keep_wording', 't', 'x', 's1', 'x'), ('prefer', NULL, 'Keep lines shorter', NULL, 'x')")
         con.commit()
         con.execute("PRAGMA foreign_keys = ON")          # as `db.connect` migrates
-        self.assertEqual(self.run_migrate(con), [33])
+        self.assertEqual(self.run_migrate(con), list(range(33, migrate.LATEST + 1)))
         docs = {r[0]: r[1:] for r in con.execute(
             "SELECT id, name, starred, archived IS NOT NULL, baseline_file_id, current_version_id FROM cv_documents")}
         self.assertEqual(docs, {"main": ("Library CV", 1, 0, "f-3", "v13-c"),
@@ -322,8 +322,8 @@ class Runner(Folder):
 
     def test_migrations_are_numbered_one_to_latest_with_no_gaps(self):
         numbers = [m.number for m in migrate.discover()]
-        self.assertEqual(numbers, list(range(1, 34)))
-        self.assertEqual(migrate.LATEST, 33)
+        self.assertEqual(numbers, list(range(1, 35)))
+        self.assertEqual(migrate.LATEST, 34)
         self.assertTrue(all(m.title and m.title[0].isupper() for m in migrate.discover()))
 
     def test_no_migration_holds_destructive_sql_but_the_one_allowed(self):

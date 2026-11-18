@@ -58,6 +58,12 @@ What changed in each version, in plain words.
   CV in My CVs shows as it is there; any other shows Hal's quick reading of the file, without adding it to My
   CVs. If Hal cannot read the file, the preview says why and offers the file itself.
 
+- **Each application is built from the CV that fits it best.** When more than one CV is marked **Use this
+  for applications**, Hal compares them with the job advert before it writes: how many of the skills the
+  advert asks for each one names, and how close its wording reads to the advert. The CV, cover letter,
+  message and answers are written from the best fit. When two fit about as well, Hal uses the first one in
+  your list. With one CV in use, nothing changes.
+
 ### Fixed
 
 - **A CV you add starts at version 1.** Adding a new CV used to show it as, say, "version 9" of your old one,

@@ -29,10 +29,11 @@ import logging
 import sqlite3
 import threading
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from jobhunt import ai, db
 from jobhunt.cvstudio import model, score, store
+from jobhunt.cvstudio.model import CVError
 
 log = logging.getLogger(__name__)
 
@@ -67,10 +68,12 @@ class Choice:
     reason: str = ""
     pick: str = ""                      # the CV Hal would pick, marked in the switch dialog
     scores: list[dict] = field(default_factory=list)
+    hal_reason: str = ""                # why Hal picks `pick`, kept while the person's own choice stands
 
     def stored(self) -> str:
         """The JSON kept in `job_cvs.base_choice`."""
         return json.dumps({"by": self.by, "reason": self.reason, "pick": self.pick or self.doc_id,
+                           "hal_reason": self.hal_reason if self.by == YOU else self.reason,
                            "scores": self.scores})
 
 
@@ -225,17 +228,105 @@ def _compared(con: sqlite3.Connection, job: dict, cvs: list[dict]) -> Choice:
     texts = {versions[d["id"]]: model.plain_text(store.get(versions[d["id"]], con=con), {}) for d in cvs}
     terms, aliases = _terms(con, [d["id"] for d in cvs])
     vectors = _vectors(advert, texts) if advert else None
-    candidates = []
+    rows = []
     for d in cvs:
         vid = versions[d["id"]]
         found = score.keywords(advert, texts[vid], terms=terms, aliases=aliases)
         covered = found["covered"]
-        candidates.append({"doc_id": d["id"], "version_id": vid, "name": d["name"], "have": len(found["have"]),
+        rows.append({"doc_id": d["id"], "version_id": vid, "name": d["name"], "have": len(found["have"]),
                            "of": found["of"], "skills": None if covered is None else covered / 100,
                            "similarity": ai.cosine(vectors[0], vectors[1][vid]) if vectors else None})
-    best, why = rank(candidates)
+    best, why = rank(rows)
     scores = [{"doc_id": c["doc_id"], "name": c["name"], "have": c["have"], "of": c["of"],
                "fit": None if c["fit"] is None else round(100 * c["fit"]),
-               "similarity": None if c["similarity"] is None else round(c["similarity"], 3)} for c in candidates]
-    chosen = candidates[best]
+               "similarity": None if c["similarity"] is None else round(c["similarity"], 3)} for c in rows]
+    chosen = rows[best]
     return Choice(chosen["doc_id"], chosen["version_id"], reason=why, pick=chosen["doc_id"], scores=scores)
+
+
+# ------------------------------------------------------------------------------- kept with the application
+
+def kept(con: sqlite3.Connection, job_id: str) -> Choice | None:
+    """The choice kept with the job's CV (`job_cvs`); None before Hal made one. A row from before choices were
+    kept reads as Hal's, on the CV its base version belongs to."""
+    row = con.execute("""SELECT jc.base_version_id, jc.base_choice, v.doc_id FROM job_cvs jc
+                         LEFT JOIN cv_versions v ON v.id = jc.base_version_id WHERE jc.job_id = ?""",
+                      (job_id,)).fetchone()
+    if row is None:
+        return None
+    data = json.loads(row["base_choice"] or "{}")
+    doc_id = row["doc_id"] or store.lead_id(con) or store.DOC_ID
+    return Choice(doc_id, row["base_version_id"], by=data.get("by") or HAL, reason=data.get("reason") or "",
+                  pick=data.get("pick") or doc_id, scores=data.get("scores") or [],
+                  hal_reason=data.get("hal_reason") or "")
+
+
+def base_doc(job_id: str, con: sqlite3.Connection | None = None) -> str | None:
+    """The CV the job's documents are built from; None while it has no job's CV (an older application, or
+    none written yet)."""
+    with _conn(con) as c:
+        found = kept(c, job_id)
+    return found.doc_id if found else None
+
+
+def for_writing(con: sqlite3.Connection, job: dict, *, again: bool) -> Choice:
+    """The CV to build the job's documents on, on its version in use now.
+
+    A CV the person picked is kept, as is Hal's own pick unless `again` (the documents are written afresh,
+    `pack.build`), when Hal chooses again. A kept CV that went to the archive is chosen again.
+    """
+    old = kept(con, job["id"])
+    if old is not None:
+        try:
+            archived = store.doc(con, old.doc_id)["archived"]
+        except store.NoSuchCV:
+            archived = True
+        if not archived and (old.by == YOU or not again):
+            return replace(old, version_id=store.current(con, old.doc_id)[0])
+    return choose(con, job)
+
+
+def by_you(con: sqlite3.Connection, job: dict, doc_id: str) -> Choice:
+    """The person's pick of CV for the job, on its version in use. Picking Hal's own pick again makes it Hal's
+    choice once more, so a later rewrite may choose afresh. CVError for an archived CV, `store.NoSuchCV` for
+    none."""
+    if store.doc(con, doc_id)["archived"]:
+        raise CVError("doc_id: that CV is in the archive. Restore it on My CVs first.")
+    old = kept(con, job["id"])
+    vid = store.current(con, doc_id)[0]
+    if old is None:
+        return Choice(doc_id, vid, by=YOU, reason=YOU_CHOSE)
+    hal_reason = old.reason if old.by == HAL else old.hal_reason
+    if doc_id == old.pick:
+        return Choice(doc_id, vid, by=HAL, reason=hal_reason, pick=old.pick, scores=old.scores)
+    return Choice(doc_id, vid, by=YOU, reason=YOU_CHOSE, pick=old.pick, scores=old.scores, hal_reason=hal_reason)
+
+
+def shown(con: sqlite3.Connection, job_id: str) -> dict | None:
+    """The CV the application is built from, for the documents step: {doc_id, name, label, by, reason,
+    several}; `several` when more than one CV is in use, so the page offers to change it. None while the job
+    has no job's CV."""
+    found = kept(con, job_id)
+    if found is None:
+        return None
+    try:
+        name = store.doc(con, found.doc_id)["name"] or store.DEFAULT_NAME
+    except store.NoSuchCV:
+        name = store.DEFAULT_NAME
+    return {"doc_id": found.doc_id, "name": name, "label": your(name), "by": found.by, "reason": found.reason,
+            "several": len(store.starred(con)) > 1}
+
+
+def candidates(con: sqlite3.Connection, job_id: str) -> list[dict]:
+    """The CVs in use the job's CV can be built from, in the person's order, each {id, name, label, chosen,
+    pick, fit, have, of}; `fit`, `have` and `of` are None for a CV Hal has not compared for this job."""
+    found = kept(con, job_id)
+    scores = {s["doc_id"]: s for s in (found.scores if found else [])}
+    out = []
+    for d in store.starred(con):
+        s = scores.get(d["id"], {})
+        out.append({"id": d["id"], "name": d["name"], "label": your(d["name"]),
+                    "chosen": bool(found and found.doc_id == d["id"]),
+                    "pick": bool(found and found.pick == d["id"]),
+                    "fit": s.get("fit"), "have": s.get("have"), "of": s.get("of")})
+    return out

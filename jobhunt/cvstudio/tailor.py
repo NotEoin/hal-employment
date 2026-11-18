@@ -27,14 +27,16 @@ free and can never drift from what the list shows.
 Applications: `pack.build` calls `prepare` and prints `v1(job_id)` through the same looks as My CV
 (`cv.v1_of`). An application is on this path when it has a `job_cvs` row (`kept`); one whose documents were
 written before keeps the older `cv.tailor` until it is sent, as nothing is stored to rebuild it here. The
-job's CV stays on the version it was made from, so a later change on My CV does not reach it. A title line
+base is one of the person's CVs, the one `cvstudio/choose.py` chose for the job or the person picked, kept with
+the row (`base_choice`). The job's CV stays on the version it was made from, so a later change on My CV does
+not reach it. A title line
 chosen by the advert's words (`cv.TRACKS`, `cv.track_for`) is a change like the others.
 
 The application's CV step edits the job's CV with the same editor as My CV (`editor`, `save_edits`): each
 save of the person's edits is appended to the same list with `by` "you", after Hal's changes, so the CV is
 still base plus changes and Undo of one of Hal's changes keeps the person's edits. Where both changed one line,
-the person's words stand. `copy_to_main` copies one entry's lines into the main CV through `edit.save`, the
-same base-checked save as My CV's editor.
+the person's words stand. `copy_to_main` copies one entry's lines into the CV the job's CV was built from
+through `edit.save`, the same base-checked save as My CV's editor.
 """
 from __future__ import annotations
 
@@ -100,11 +102,12 @@ def words(text: str) -> set[str]:
     return {w for w in re.findall(r"[a-z][a-z0-9+#.-]*", (text or "").lower()) if len(w) >= MIN_WORD and w not in STOP}
 
 
-def level_for(level: str | None = None) -> tuple[str, str]:
-    """The level to use and, when it was forced to No, why in plain words."""
+def level_for(level: str | None = None, doc_id: str | None = None) -> tuple[str, str]:
+    """The level to use for a job's CV built on CV `doc_id` (the lead CV by default) and, when it was forced to
+    No, why in plain words."""
     from jobhunt.core import settings
 
-    if _store().doc()["send"] == "original":
+    if _store().doc(doc_id=doc_id)["send"] == "original":
         return "no", ORIGINAL_WHY
     level = level or str(settings.get("cvdocs.tailor"))
     if level not in LEVELS:
@@ -182,19 +185,26 @@ def _ai_change(con, doc, type_, sids: list[str], job: dict, ctx, *, bullets: boo
             "ev": "; ".join(e["label"] for e in ok.evidence)}
 
 
-def for_job(job: dict, *, level: str | None = None, priorities: list[str] | None = None) -> tuple[object, list[dict]]:
-    """(the CV for this job, its change list); level defaults to `cvdocs.tailor`, No while the original is sent."""
-    _, doc = _store().current()
-    level, _ = level_for(level)
+def for_job(job: dict, *, level: str | None = None, priorities: list[str] | None = None,
+            base=None) -> tuple[object, list[dict]]:
+    """(the CV for this job, its change list); level defaults to `cvdocs.tailor`, No while the original is sent.
+
+    Built on `base` (a `choose.Choice`: its CV and version), else on the lead CV's version in use.
+    """
+    if base is None:
+        doc_id, (_, doc) = None, _store().current()
+    else:
+        doc_id, doc = base.doc_id, _store().get(base.version_id)
+    level, _ = level_for(level, doc_id)
     if level == "no":
         return doc, []
-    type_ = suggest.cv_type()
+    type_ = suggest.cv_type(doc_id=doc_id)
     con = db.connect()
     try:
         wanted = words(" ".join(priorities or requirements(job, con)) + " " + str(job.get("title") or ""))
         changes = _track(doc, job) + _reorders(doc, type_, wanted)
         if suggest.ai_ready():
-            ctx = suggest.context(con, doc, type_)
+            ctx = suggest.context(con, doc, type_, doc_id=doc_id)
             summary = [s.id for s in doc.sections if s.kind == "summary" and s.visible]
             got = _ai_change(con, doc, type_, summary, job, ctx, bullets=False) if summary else None
             changes += [got] if got else []
@@ -234,17 +244,23 @@ def _rev(row: sqlite3.Row) -> str:
     return f"{row['base_version_id']}+{len(_split(json.loads(row['changes']))[1])}"
 
 
-def prepare(job: dict, *, level: str | None = None, priorities: list[str] | None = None,
+def prepare(job: dict, *, level: str | None = None, priorities: list[str] | None = None, base=None,
             con: sqlite3.Connection | None = None) -> dict:
     """Works out the job's CV and keeps it in `job_cvs`; returns the row as the documents step shows it.
 
-    The person's own edits from an earlier row are kept after Hal's new changes; an edit that no longer fits
-    the new CV is left out and logged.
+    It is built on `base` (a `choose.Choice`), kept as `base_version_id` and `base_choice`; without one, on the
+    CV the job's CV was built on before, else the CV Hal chooses for it (`choose.for_writing`). The person's
+    own edits from an earlier row are kept after Hal's new changes; an edit that no longer fits the new CV is
+    left out and logged.
     """
+    from jobhunt.cvstudio import choose
+
     model = _model()
-    base_vid, _ = _store().current(con)
-    used, why = level_for(level)
-    doc, changes = for_job(job, level=level, priorities=priorities)
+    if base is None:
+        with _conn(con) as c:
+            base = choose.for_writing(c, job, again=False)
+    used, why = level_for(level, base.doc_id)
+    doc, changes = for_job(job, level=level, priorities=priorities, base=base)
     with _conn(con) as c, _store().writing(c):
         old = c.execute("SELECT changes FROM job_cvs WHERE job_id = ?", (job["id"],)).fetchone()
         kept_n = 0
@@ -258,8 +274,9 @@ def prepare(job: dict, *, level: str | None = None, priorities: list[str] | None
             kept_n += 1
             changes.append(edit | {"id": f"y{kept_n}"})
         c.execute("INSERT OR REPLACE INTO job_cvs (job_id, base_version_id, version_id, level, priorities, changes, "
-                  "approved) VALUES (?, ?, NULL, ?, ?, ?, NULL)",
-                  (job["id"], base_vid, used, json.dumps(priorities) if priorities else None, json.dumps(changes)))
+                  "approved, base_choice) VALUES (?, ?, NULL, ?, ?, ?, NULL, ?)",
+                  (job["id"], base.version_id, used, json.dumps(priorities) if priorities else None,
+                   json.dumps(changes), base.stored()))
         c.commit()
     events.publish("application", id=job["id"])
     return shown(job["id"], con) | {"why_no": why}
@@ -466,8 +483,11 @@ def editor(job_id: str, con: sqlite3.Connection | None = None) -> dict:
 
     `marks` lists each part Hal changed (`by` "hal", with its change's id; only changes still on) and each part
     the person changed after them (`by` "you"). `version_id` is what a save sends back as `base`, and
-    `main_version_id` the main CV's version in use, for Copy to my main CV.
+    `main_version_id` the version in use of the CV this job's CV was built from (`main_doc_id`, called
+    `main_label` on the page), for Copy to my main CV, which copies into that CV.
     """
+    from jobhunt.cvstudio import choose
+
     model = _model()
     row, base, made = _made(job_id, con)
     hal, _ = _split(json.loads(row["changes"]))
@@ -479,17 +499,20 @@ def editor(job_id: str, con: sqlite3.Connection | None = None) -> dict:
                       for d in model.diff(base, one)]
     doc = document(job_id, con)
     marks += [{"target": d["target"], "kind": d["kind"], "by": YOU} for d in model.diff(made, doc)]
+    main = _store().version(row["base_version_id"], con=con)["doc_id"]
     return {**model.to_dict(doc), "version_id": _rev(row), "n": None, "job_id": job_id,
-            "main_version_id": _store().current(con)[0], "approved": row["approved"],
+            "main_version_id": _store().current(con, main)[0], "main_doc_id": main,
+            "main_label": choose.your(_store().doc(con, main)["name"]), "approved": row["approved"],
             "changes": shown(job_id, con)["changes"], "marks": marks}
 
 
 def copy_to_main(job_id: str, target: str, base: str, con: sqlite3.Connection, job: dict | None = None) -> str:
-    """Copies the lines of one entry of the job's CV into the main CV, made on version `base`, as one new main
-    version (`edit.save`); returns its id. An entry the main CV does not have is added to its section.
+    """Copies the lines of one entry of the job's CV into the CV it was built from, made on that CV's version
+    `base` (`editor`'s `main_version_id`), as one new version of it (`edit.save`); returns its id. An entry
+    that CV does not have is added to its section.
 
     `store.StaleVersion` when `base` is no longer the main version in use; CVError when `target` is not an
-    entry, its section is gone from the main CV, or the main CV already has these lines.
+    entry, its section is gone from that CV, or that CV already has these lines.
     """
     from jobhunt.cvstudio import edit as editing
 

@@ -8,10 +8,17 @@ schema 2 document in that shape, so an application's CV (`cvstudio/tailor.py`) p
 looks. `tailor` reorders projects and skill groups for one job in this shape; only applications whose
 documents Hal wrote before `tailor.py` made them still use it (`documents.tailored`). The PDF is drawn by
 `pdf.py`.
+
+With several CVs, `load` and `facts_text` read the CV a job's documents are built from inside `based_on(doc_id)`
+(`pack.build` enters it with the CV `cvstudio/choose.py` picked), so every draft, check and fit map of that job
+reads the same CV's facts without each caller passing it; outside it they read the lead CV, as before.
 """
+import contextlib
+import contextvars
 import copy
 import json
 import re
+from collections.abc import Iterator
 from pathlib import Path
 
 # Title lines per kind of role, chosen by the advert's words. None are built in, so the CV's own title
@@ -22,6 +29,17 @@ LINKS = (("linkedin", "you.links.linkedin"), ("site", "you.links.website"), ("gi
 # Entries are matched across versions by what names them, not by position, so the site can add or reorder them.
 NAMED_BY = {"education": "qualification", "projects": "name", "experience": "role"}
 PAIRS = ("skills", "additional")  # entries written as [name, value]; only the value is edited
+_BASED_ON: contextvars.ContextVar[str | None] = contextvars.ContextVar("hal_cv_based_on", default=None)
+
+
+@contextlib.contextmanager
+def based_on(doc_id: str | None) -> Iterator[None]:
+    """Makes `load` and `facts_text` read CV `doc_id` while the block runs; None leaves them on the lead CV."""
+    token = _BASED_ON.set(doc_id)
+    try:
+        yield
+    finally:
+        _BASED_ON.reset(token)
 
 
 def _you(key: str) -> str:
@@ -62,11 +80,12 @@ def printable(data: dict) -> dict:
     return import_v1.printable(data)
 
 
-def load() -> dict:
-    """Hal's base CV in cv.json shape: the version in use, entries left out dropped."""
+def load(doc_id: str | None = None) -> dict:
+    """A CV's version in use in cv.json shape, entries left out dropped: CV `doc_id`, else the one `based_on`
+    names, else the lead CV."""
     from jobhunt.cvstudio import store
 
-    return v1_of(store.current()[1])
+    return v1_of(store.current(doc_id=doc_id or _BASED_ON.get())[1])
 
 
 def v1_of(doc) -> dict:
@@ -247,9 +266,9 @@ def render(variant: dict, out_dir: Path) -> Path:
     return cvpdf.render(variant, out_dir)
 
 
-def facts_text() -> str:
-    """Returns the CV as plain text, the only facts a draft may use."""
-    return facts_text_of(load())
+def facts_text(doc_id: str | None = None) -> str:
+    """Returns the CV as plain text, the only facts a draft may use; which CV as `load` says."""
+    return facts_text_of(load(doc_id))
 
 
 # The right to work in plain words, for drafts and forms alike. A setting's own label, or how a form should word

@@ -124,12 +124,13 @@ def _requirements_example(world) -> dict:
                why="You opened this job", priority=0, example=_requirements_example)
 def check_requirements(ctx, job_id: str) -> dict:
     """Lists the advert's requirements and what the person has for each."""
-    from jobhunt.cvstudio import cv
+    from jobhunt.cvstudio import choose, cv
     from jobhunt.cvstudio import score as cvscore
 
     job = _job(ctx.con, job_id)
     ctx.step("Reading the advert and your CV")
-    found, why_not = cvscore.requirements(job, cv.facts_text())
+    with cv.based_on(choose.base_doc(job_id, ctx.con)):
+        found, why_not = cvscore.requirements(job, cv.facts_text())
     ctx.checkpoint()
     if not found:
         ctx.step(f"Hal could not check the requirements now: {why_not}")

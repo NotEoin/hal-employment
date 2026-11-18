@@ -196,6 +196,17 @@ they quote. Your name and contact details are taken out before the AI reads them
 comments on your age, gaps or background. It is Hal's opinion, and nothing is changed. Without Hal's AI,
 you still get the writing rules' comments, line by line.
 
+### Which CV an application is built from
+
+When more than one of your CVs is marked **Use this for applications** (see "Keeping several CVs" below),
+Hal compares them with each job advert before it writes the documents. It counts how many of the skills the
+advert asks for each CV names, and, when Hal's AI runs on your computer, how close each CV's wording reads to
+the advert. The CV, the cover letter, the message and the answers are all written from the CV that fits
+best. When two CVs fit about as well, Hal uses the one that comes first in your list. With one CV in use,
+Hal uses it and compares nothing.
+
+When Hal writes the documents again, it compares your CVs again, as they are now.
+
 ### Writing the documents again
 
 After you change your record or your CV, the documents Hal already wrote still say what it knew then. An

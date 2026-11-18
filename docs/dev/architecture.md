@@ -401,7 +401,7 @@ runs: tests use `tests/support/fake_claude/`.
   type, look and layout. The first CV of an install has the id `main`; later ones are `cv-<hex>`.
   - `store.lead_id()` is the lead CV: the first starred one in the person's order, else the most recently
     changed one not archived. Every store function takes `doc_id=` and acts on the lead CV without it, so
-    `store.current()` with no argument is what tailoring, the pack writer, exports and `cv.load()` read, as
+    `store.current()` with no argument is what callers with no application in hand and `cv.load()` read, as
     when there was one CV. `store.lead_version_id()` reads it without making a CV (Home, the profile).
   - `store.documents(archived=False|True|None)` lists the CVs, starred first in their order; `store.starred()`
     is the ordered list to pick an application's base CV from (its first item is the lead CV). `star`,
@@ -464,6 +464,15 @@ runs: tests use `tests/support/fake_claude/`.
   order wins unless another fits by more than `LEAD_MARGIN`. The reason names what each CV covers. With one
   CV in use there is no comparison and no AI call; when comparing fails the lead CV is used and the reason
   says so.
+- An application's choice is kept with its job's CV: the CV is the one `job_cvs.base_version_id` belongs to,
+  and `job_cvs.base_choice` (migration 0034) holds `{by, reason, pick, hal_reason, scores}` as JSON
+  (`Choice.stored`, `choose.kept`). `choose.for_writing(con, job, again=...)` is the CV to write on, on its
+  version in use: a CV the person picked (`by` "you", `choose.by_you`) is kept, and Hal's pick is kept too
+  except by `pack.build`, which chooses again. Picking Hal's own pick again makes the choice Hal's once more.
+  `choose.base_doc(job_id)` is the CV for anything read for one application (`documents.original_file`, the
+  form's facts, interview notes, a letter rewrite, the requirements check), None (the lead CV) for an
+  application written before job CVs were kept. `cv.based_on(doc_id)` makes `cv.load()` and
+  `cv.facts_text()` read that CV for a block; `pack.build` and the letter actions enter it.
 - The bin keeps a version for 30 days. It is emptied lazily (`purge_bin`, whenever versions are listed),
   and never removes a version an application or job still points at.
 - Files are kept read-only as `cv/files/<sha256>.<ext>`; `file_bytes` checks the SHA-256 on every read and
@@ -541,8 +550,10 @@ runs: tests use `tests/support/fake_claude/`.
   from the base version plus the changes still on. An AI change for a job only rewords: one that adds a
   result the CV does not have is dropped. The title line `cv.track_for` picks from the advert is a change
   in the same list.
-- Applications: `pack.build` calls `tailor.prepare`, which stores the version in use as the job's base and
-  the change list, and prints `tailor.v1` (`cv.v1_of`, the `to_v1` shape) through the same looks as My CV.
+- Applications: `pack.build` calls `tailor.prepare` with the CV chosen for the job (`choose.for_writing`; any
+  other caller gets the CV the job's CV was built on before), which stores that CV's version in use as the
+  job's base with the choice and the change list, and prints `tailor.v1` (`cv.v1_of`, the `to_v1` shape)
+  through the same looks as My CV.
   `documents.current_cv` and the Undo route read the kept CV, and `approve_documents` saves it as a
   `tailored` version for the job (`tailor.approve`) before the folder is written, so
   `applications.cv_version_id` and the manifest's `cv_version` name it. "Change the documents" takes that
@@ -553,7 +564,8 @@ runs: tests use `tests/support/fake_claude/`.
   edits to the same change list with `by` "you", after Hal's, and refuses a save made on an older copy with 409
   (`tailor._rev`: the base version and how many edits it had). `tailor.editor` marks what Hal's changes
   still on did and what the person's edits did, each by `model.diff`. `POST .../cv/copy` copies one entry's
-  lines into the main CV through `edit.save`, the same base-checked save as My CV's editor.
+  lines into the CV the job's CV was built from (`main_version_id`, `main_doc_id`) through `edit.save`, the
+  same base-checked save as My CV's editor.
 - An application whose documents were written before has no `job_cvs` row (`tailor.kept`), and keeps the
   cv.json path until it is sent: `documents.tailored` reorders the main CV with `cv.tailor`, and Undo is
   `docs["undone_changes"]`. Both paths send the main CV as it is while the setting is No, and the person's
