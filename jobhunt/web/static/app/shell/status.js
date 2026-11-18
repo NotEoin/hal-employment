@@ -4,17 +4,21 @@
    Actions run by the command line or a scheduled search live in another process, so their changes reach
    this page only as `step` and `activity` rows that the server's poller publishes, never as `status`
    events. Those events reload /status (at most once per RELOAD_GAP_MS), and while Hal is busy the line
-   reloads every BUSY_RELOAD_MS in case such an action ended without a new row. */
-import { html, cx } from "../core/html.js";
+   reloads every BUSY_RELOAD_MS in case such an action ended without a new row.
+
+   The time left (`eta_s`) counts down from when the reply arrived, every TICK_MS, so the browser's clock
+   never has to agree with the computer Hal runs on. */
+import { html, cx, useState, useEffect, useMemo } from "../core/html.js";
 import { useStore, openDialog, toast, store } from "../core/store.js";
 import { post, get } from "../core/api.js";
 import { go } from "../core/router.js";
 import { retryNow, on } from "../core/events.js";
-import { clock, plural } from "../core/format.js";
+import { clock, plural, etaWords } from "../core/format.js";
 import { Icon } from "../ui/icons.js";
 
 const RELOAD_GAP_MS = 1000;
 const BUSY_RELOAD_MS = 30000;
+const TICK_MS = 15000;
 let following = false;
 let lastLoad = 0;
 let queued = null;
@@ -62,6 +66,19 @@ function Steps({ n, total }) {
   return html` Step ${n} of ${total} <span class="stepsm" aria-hidden="true">${marks}</span>`;
 }
 
+/** "About 4 minutes left", counting down between replies; nothing when the reply has no estimate. */
+function TimeLeft({ st }) {
+  const ends = useMemo(() => (st.eta_s == null ? null : Date.now() + st.eta_s * 1000), [st]);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (ends == null) return undefined;
+    const timer = setInterval(() => tick(n => n + 1), TICK_MS);
+    return () => clearInterval(timer);
+  }, [ends]);
+  if (ends == null) return null;
+  return html` <span class="eta">${etaWords(Math.max(0, Math.round((ends - Date.now()) / 1000)))}.</span>`;
+}
+
 async function stop(id) {
   try { await post("/actions/" + encodeURIComponent(id) + "/stop"); toast("Hal stopped. The work so far is kept."); }
   catch (err) { toast(err.message); }
@@ -85,7 +102,7 @@ export function Status() {
     body = html`<div class="what"><span class="eye sm" aria-hidden="true"></span><span><b>Reconnecting to Hal...</b></span></div>`;
   } else if (st.busy) {
     body = html`<div class="what"><span class="eye sm busy" aria-hidden="true"></span><span><b>${st.text}</b><${Steps}
-      n=${st.step_n} total=${st.step_total} /></span></div>
+      n=${st.step_n} total=${st.step_total} /><${TimeLeft} st=${st} /></span></div>
       ${st.why_activity_id && html`<button type="button" class="why" onClick=${() => openDialog("why", { id: st.why_activity_id })}><${Icon}
         n="info" c="s" /> Why?</button>`}
       ${st.action_id && html`<button type="button" class="btn small stop" onClick=${() => stop(st.action_id)}><${Icon} n="stop" c="s" /> Stop</button>`}`;

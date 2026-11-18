@@ -187,7 +187,11 @@ processes, once a second. Payloads carry ids, never private data.
   replaced by "(left out: it held one of your private answers)" on a match. `@activity.undo_handler(type)`
   lives in `undo.py` or `*_undo.py` modules.
 - `GET /api/v2/status` shows the most urgent action: one waiting for the person, then the lowest priority
-  number, then the newest. `/activity`, `/actions` and their stop, undo and carry-on routes are in
+  number, then the newest. Its `eta_s` is the time left for a running action that counts items with
+  `progress`, from `runner.eta_s` or the kind's own estimate in `status.ETA_BY_KIND` (`record.ingest` uses
+  `ingest.items.eta_for`, so the line matches the Record page). It is None for the first `ETA_AFTER_S` (30)
+  and is worked out at most every `ETA_REFRESH_S` (10), since the line is published on every item. The
+  status line counts it down in the browser between replies. `/activity`, `/actions` and their stop, undo and carry-on routes are in
   `core/activity_routes.py`.
 - Data tasks (`core/db/tasks.py`): each is an action kind of the same name at priority 2, run once in
   migration order at server start; a failed task is tried again at the next start.

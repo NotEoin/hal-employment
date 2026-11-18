@@ -1,16 +1,17 @@
-"""The status line: the most urgent action wins, with its step, its Why? and Stop; idle,
+"""The status line: the most urgent action wins, with its step, its time left, its Why? and Stop; idle,
 it says when Hal works next and whether it is paused.
 """
 import sys
 import threading
 import types
 import unittest
+from datetime import timedelta
 from unittest import mock
 
 from support.api import HalServer
 from test_runner import WAIT_S, Kinds, fresh_home
 
-from jobhunt.core import events, runner, status
+from jobhunt.core import clock, events, runner, status
 
 
 def from_stand_ins(**stand_ins: types.ModuleType):
@@ -58,6 +59,52 @@ class StatusLine(unittest.TestCase):
         release.set()
         runner.wait(asked)
         self.assertEqual(status.status(self.con)["action_id"], background)
+
+    def counting(self, kind: str, done: int, total: int, *, ran_s: int) -> str:
+        """Starts an action that has done `done` of `total` items and waits; it started `ran_s` seconds ago."""
+        reached, release = threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+
+        def read_files(ctx):
+            ctx.step("reading", total=1)
+            ctx.progress(done, total)
+            reached.set()
+            release.wait(WAIT_S)
+        self.kinds.add(kind, read_files, label="Reading your files")
+        action_id = runner.start(kind, subject="_" + kind)
+        self.assertTrue(reached.wait(WAIT_S))
+        runner.flush()
+        self.con.execute("UPDATE actions SET started = ? WHERE id = ?",
+                         (clock.iso(clock.now_utc() - timedelta(seconds=ran_s)), action_id))
+        self.con.commit()
+        return action_id
+
+    def test_a_long_action_shows_its_time_left_from_the_pace_so_far(self):
+        self.counting("test.read", 2, 8, ran_s=60)
+        self.assertAlmostEqual(status.status(self.con)["eta_s"], 180, delta=2,
+                               msg="two items took a minute, so six more take three")
+
+    def test_no_time_left_is_shown_in_the_first_seconds_or_without_items(self):
+        self.counting("test.quick", 1, 8, ran_s=5)
+        self.assertIsNone(status.status(self.con)["eta_s"], "five seconds in, the pace is a guess")
+        self.hold("test.plain", label="Writing the cover letter", steps=2, total=4, priority=0, subject="_letter")
+        line = status.status(self.con)
+        self.assertEqual(line["text"], "Writing the cover letter")
+        self.assertIsNone(line["eta_s"], "steps are not items: one step can take a second or a minute")
+
+    def test_a_kind_with_its_own_estimate_uses_it_and_it_counts_down_between_refreshes(self):
+        # reading into the record paces AI and rule reads apart; one pace for both once said 21 hours, not two
+        items = types.ModuleType("jobhunt.ingest.items")
+        items.eta_for = mock.Mock(return_value=600)
+        self.counting("test.ingest", 2, 8, ran_s=60)
+        with mock.patch.dict(status.ETA_BY_KIND, {"test.ingest": ("jobhunt.ingest.items", "eta_for")}), \
+             mock.patch.object(status, "_optional", from_stand_ins(**{"jobhunt.ingest.items": items})):
+            first = status.status(self.con)["eta_s"]
+            items.eta_for.return_value = 60
+            again = status.status(self.con)["eta_s"]
+        self.assertAlmostEqual(first, 600, delta=2)
+        self.assertAlmostEqual(again, 600, delta=2, msg="worked out at most every ETA_REFRESH_S")
+        self.assertEqual(items.eta_for.call_count, 1)
 
     def test_an_action_waiting_for_you_comes_before_any_other(self):
         self.hold("test.urgent", label="Answering a question", priority=0, subject="_ask")
@@ -119,8 +166,9 @@ class Route(unittest.TestCase):
     def test_the_status_route_needs_a_session_and_answers_the_shape(self):
         with HalServer() as hal:
             line = hal.signed_in().get("/api/v2/status").json()
-            self.assertEqual(set(line) >= {"busy", "text", "step_n", "step_total", "action_id", "why_activity_id",
-                                           "next", "paused", "problems", "ai_limited_until", "reconnecting"}, True)
+            self.assertEqual(set(line) >= {"busy", "text", "step_n", "step_total", "eta_s", "action_id",
+                                           "why_activity_id", "next", "paused", "problems", "ai_limited_until",
+                                           "reconnecting"}, True)
             self.assertEqual(hal.client().get("/api/v2/status").status, 401)
 
 

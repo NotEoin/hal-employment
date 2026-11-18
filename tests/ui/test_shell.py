@@ -305,6 +305,20 @@ class ShellTest(unittest.TestCase):
                 self.assertLessEqual(p.page.locator(".stepsm i").count(), 1)
                 self.assertEqual(p.sideways(), 0)
 
+    def test_a_long_job_shows_its_time_left_and_a_short_one_none(self) -> None:
+        for eta_s, words in ((250, "About 4 minutes left."), (None, None)):
+            with self.subTest(eta_s=eta_s):
+                srv = self.serve(status=made_up_status(busy=True, text="Hal is reading your files", step_n=3,
+                                                       step_total=40, eta_s=eta_s, action_id="a1", problems=0))
+                p = self.tab(srv).open("home")
+                line = p.page.get_by_role("status").first
+                p.page.wait_for_function("() => document.querySelector('.stepsm')", timeout=LOAD_TIMEOUT_MS)
+                if words:
+                    self.assertIn(words, line.inner_text())
+                else:
+                    self.assertNotIn("left", line.inner_text())
+                self.assertEqual(p.errors, [])
+
     def test_the_status_line_shows_what_hal_is_doing_with_why_and_stop(self) -> None:
         srv = self.serve(status=made_up_status(busy=True, text="Hal is writing a cover letter", step_n=2,
                                                step_total=4, action_id="a1", why_activity_id=7, problems=0))

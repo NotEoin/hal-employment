@@ -157,6 +157,14 @@ def _eta(con: sqlite3.Connection, batch: str, action: sqlite3.Row, left: int) ->
     return max(0, round(rich_left * pace[True] + light_left * pace[False]))
 
 
+def eta_for(con: sqlite3.Connection, action: sqlite3.Row) -> int | None:
+    """Seconds left for the ingest `action`, as `summary` gives it, for the status line."""
+    batch = json.loads(action["params"] or "{}").get("batch") or ""
+    left = con.execute("SELECT count(*) FROM ingest_items WHERE batch = ? AND state = 'pending'",
+                       (batch,)).fetchone()[0]
+    return _eta(con, batch, action, left)
+
+
 def summary(con: sqlite3.Connection) -> dict:
     """The latest ingest for the page: state, done, total, eta_s, counts, current item, not downloaded, someone
     else's documents left out (`not_mine`), errors, the files kept out as private, and how many were skipped

@@ -54,7 +54,8 @@ def made_up_session(**over: Any) -> dict:
 
 def made_up_status(**over: Any) -> dict:
     """A /status reply: Hal idle, with its next two jobs."""
-    s = {"busy": False, "text": "", "step_n": 0, "step_total": None, "action_id": None, "why_activity_id": None,
+    s = {"busy": False, "text": "", "step_n": 0, "step_total": None, "eta_s": None, "action_id": None,
+         "why_activity_id": None,
          "next": [{"what": "job search", "at": "13:30"}, {"what": "email check", "at": "12:45"}], "paused": False,
          "problems": 1, "ai_limited_until": None, "reconnecting": False}
     s.update(over)

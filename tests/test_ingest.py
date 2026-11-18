@@ -1333,6 +1333,9 @@ class Progress(unittest.TestCase):
             con.commit()
             with mock.patch.object(items.clock, "now_utc", return_value=items.clock.parse("2026-11-05T08:01:20Z")):
                 self.assertEqual(items.summary(con)["eta_s"], 4 * 10 + 100 * 1)
+                action = con.execute("SELECT * FROM actions WHERE id = 'a1'").fetchone()
+                self.assertEqual(items.eta_for(con, action), 4 * 10 + 100 * 1,
+                                 "the status line says what the page says")
 
     def test_the_action_reports_done_total_and_the_page_summary(self):
         with home() as (con, _vault, files), fake_ai({}):

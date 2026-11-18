@@ -4,6 +4,11 @@ The most urgent action wins: one waiting for the person first, then the lowest p
 something the person just asked for), then the newest. The rest comes from other areas when they are
 there, each optional so the line works on its own: `core.scheduler.next_runs()` and `paused()`,
 `ai.budget.today()` and `core.health.problem_count()`.
+
+`eta_s` is the time left for a running action that counts items, shown only once it has run `ETA_AFTER_S`:
+before that the pace is a guess and the line would jump. The line is published on every item, so the
+estimate is worked out at most every `ETA_REFRESH_S` and counts down from its end time in between. A kind
+with its own estimate (`ETA_BY_KIND`) uses it, so the line and that kind's page never disagree.
 """
 from __future__ import annotations
 
@@ -11,7 +16,11 @@ import importlib
 import importlib.util
 import logging
 import sqlite3
+import time
+from datetime import datetime, timedelta
 from typing import Any, NotRequired, TypedDict
+
+from jobhunt.core import clock, runner
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +30,13 @@ PAUSED_META = "schedule:paused"
 NEXT_WORDS = {"find.discover": "job search", "mail.check": "email check", "notify.digest": "daily summary",
               "record.sync": "read of your record folder", "system.backup": "backup", "system.tidy": "tidy-up",
               "learn.patterns": "look for patterns", "updates.check": "check for updates"}
+
+ETA_AFTER_S = 30
+ETA_REFRESH_S = 10
+# reading files into the record mixes AI reads (seconds each) with rule reads (a few ms), so one pace for both
+# said 21 hours for an ingest that took two (2026-11-05); its own estimate paces each kind apart
+ETA_BY_KIND = {"record.ingest": ("jobhunt.ingest.items", "eta_for")}
+_eta_cache: dict[str, tuple[float, datetime | None]] = {}
 
 
 class NextRun(TypedDict):
@@ -37,6 +53,7 @@ class StatusReply(TypedDict):
     text: str
     step_n: int
     step_total: int | None
+    eta_s: int | None
     action_id: str | None
     why_activity_id: int | None
     next: list[NextRun]
@@ -91,13 +108,30 @@ def _next(con: sqlite3.Connection) -> list[NextRun]:
              "at": r.get("at")} for r in runs[:NEXT_SHOWN] if r.get("at")]
 
 
+def _eta(con: sqlite3.Connection, row: sqlite3.Row) -> int | None:
+    """Seconds left for `row`, or None when there is no fair estimate yet."""
+    now = clock.now_utc()
+    if row["state"] != "running" or not row["started"] or not row["done_total"]:
+        return None
+    if (now - clock.parse(row["started"])).total_seconds() < ETA_AFTER_S:
+        return None
+    kept = _eta_cache.get(row["id"])
+    if kept is None or time.monotonic() - kept[0] >= ETA_REFRESH_S:
+        own = ETA_BY_KIND.get(row["kind"])
+        left = _call(*own, con, row) if own else runner.eta_s(row, now=now)
+        kept = (time.monotonic(), None if left is None else now + timedelta(seconds=left))
+        _eta_cache.clear()           # only the action on the line is kept
+        _eta_cache[row["id"]] = kept
+    return None if kept[1] is None else max(0, round((kept[1] - now).total_seconds()))
+
+
 def status(con: sqlite3.Connection) -> StatusReply:
     """The `/status` reply."""
     row = busiest(con)
     budget = _call("jobhunt.ai.budget", "today", default={}) or {}
     out: StatusReply = {
-        "busy": False, "text": "", "step_n": 0, "step_total": None, "action_id": None, "why_activity_id": None,
-        "next": _next(con), "paused": _paused(con),
+        "busy": False, "text": "", "step_n": 0, "step_total": None, "eta_s": None, "action_id": None,
+        "why_activity_id": None, "next": _next(con), "paused": _paused(con),
         "problems": int(_call("jobhunt.core.health", "problem_count", con, default=0) or 0),
         "ai_limited_until": budget.get("limited_until"), "reconnecting": False}
     if row is not None:
@@ -105,5 +139,5 @@ def status(con: sqlite3.Connection) -> StatusReply:
         if row["state"] == "waiting_for_you" and row["message"]:
             text = f"{text}. {row['message']}" if row["message"] != text else text
         out.update(busy=True, text=text, step_n=row["step_n"], step_total=row["step_total"],
-                   action_id=row["id"], why_activity_id=row["activity_id"], state=row["state"])
+                   eta_s=_eta(con, row), action_id=row["id"], why_activity_id=row["activity_id"], state=row["state"])
     return out

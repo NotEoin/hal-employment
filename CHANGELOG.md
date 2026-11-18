@@ -2,6 +2,16 @@
 
 What changed in each version, in plain words.
 
+## Unreleased
+
+### What's new
+
+- **The line at the top says how long Hal has left.** While Hal works through many files or pages, such as
+  reading files into your record or sorting a folder, the line at the top of every page now ends with "About
+  4 minutes left". It appears after the first 30 seconds, once Hal knows its pace, and counts down. Reading
+  into your record gives the same time as the Record page. Work that is not counted in files or pages, such
+  as writing a cover letter, shows no time.
+
 ## 2.2.0 (2026-11-15)
 
 ### What's new
