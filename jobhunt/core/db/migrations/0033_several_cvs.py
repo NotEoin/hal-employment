@@ -8,8 +8,10 @@
   so no page ever sees half of it. An "uploaded" version starts a CV, and the versions after it, up to the next
   upload, belong to it; versions before the first upload (imported, generated) form one CV. Each CV's versions
   are numbered again from 1 in their old order. Version ids, files and every reference stay as they were.
-- The CV holding the version in use keeps the id "main", its file and its settings, and is starred: tailoring,
-  the pack writer and exports read the same CV as before. The others are archived, nothing is deleted.
+- The CV holding the version in use keeps the id "main" and its settings, and is starred: tailoring, the pack
+  writer and exports read the same CV as before. Its file is its own group's (none for the versions before the
+  first upload), as every other CV's is, so a file never shows on a CV it did not make. The others are
+  archived, nothing is deleted.
 - Per-job (tailored) versions go with the CV their base version went to (from `job_cvs`), else with the CV in
   use when they were made. They take no number of that CV: `n` below zero is their own count, only there for
   the table's UNIQUE (doc_id, n), and is never shown.
@@ -79,8 +81,11 @@ def _split(con) -> None:
     lead = next((i for i, g in enumerate(groups) if any(r[0] == doc[5] for r in g)), len(groups) - 1)
     ids = {i: MAIN if i == lead else f"cv-{g[0][0]}" for i, g in enumerate(groups)}
     where = {r[0]: i for i, g in enumerate(groups) for r in g}
-    con.execute("UPDATE cv_documents SET name = ?, starred = 1, position = 0 WHERE id = ?",
-                (_name(con, _file_of(groups[lead])), MAIN))
+    # main's file was the newest upload; with an older upload's version in use that file is another CV's
+    # (2026-11-18: "main" was named after A but showed "Your file: B"), so it takes its own group's file
+    own_file = _file_of(groups[lead])
+    con.execute("UPDATE cv_documents SET name = ?, starred = 1, position = 0, baseline_file_id = ? WHERE id = ?",
+                (_name(con, own_file), own_file, MAIN))
     for i, g in enumerate(groups):
         if i != lead:
             _add_cv(con, ids[i], g, tuple(doc[:5]))

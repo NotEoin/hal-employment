@@ -447,8 +447,9 @@ runs: tests use `tests/support/fake_claude/`.
   ids from before 0033 kept their old numbers, so an id's number need not match the version's.
 - Migration 0033 split the one history into one CV per upload in the same transaction as its columns: an
   `uploaded` version starts a CV, and what follows up to the next upload belongs to it, numbered again from 1;
-  versions before the first upload form one CV. The CV holding the version in use keeps `main`, its file and
-  settings, and is starred; the others are archived. Per-job versions follow their base version's CV (from
+  versions before the first upload form one CV. The CV holding the version in use keeps `main` and its
+  settings, and is starred; the others are archived. Each CV's file is its own group's upload (none for the
+  versions before the first one), `main` included, so a file never shows on a CV it did not make. Per-job versions follow their base version's CV (from
   `job_cvs`), else the CV in use when they were made. Suggestions follow the version they were based on, and
   line preferences (`cv_preferences.doc_id`, keep my wording and lock a line) the suggestion they came from.
 - Every `/api/v2/cv/...` route acts on the CV named by the query parameter `?cv=<id>` (`routes.cv_of`, 404 for

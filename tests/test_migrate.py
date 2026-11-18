@@ -311,6 +311,31 @@ class OldDatabases(Folder):
         self.assertEqual(con.execute("SELECT kind, doc_id FROM cv_preferences ORDER BY id").fetchall(),
                          [("keep_wording", "cv-v6-c"), ("prefer", None)])
 
+    def test_the_lead_cv_keeps_its_own_file_when_an_older_uploads_version_was_in_use_at_version_33(self):
+        """Uploads A then B, then a version from A put back in use: "main" was named after A but kept B as its
+        file, so B showed on two CVs (2026-11-18)."""
+        con = self.open()
+        up_to_32 = migrate.discover()[:32]
+        with mock.patch.object(migrate, "LATEST", 32), mock.patch.object(migrate, "discover", return_value=up_to_32):
+            self.run_migrate(con)
+        con.execute("INSERT INTO cv_documents (id, route, send, baseline_file_id, current_version_id, type_id, "
+                    "look_id, created, updated) VALUES ('main', 'improve', 'hal_copy', 'f-b', 'v2-c', "
+                    "'humanities_grad', 'classic', 'x', 'x')")
+        for fid, name in (("f-a", "Museum CV.pdf"), ("f-b", "Library CV.pdf")):
+            con.execute("INSERT INTO cv_files (id, sha256, name, mime, size, rel, role, added) "
+                        "VALUES (?, ?, ?, 'application/pdf', 1, 'cv/files/x', 'baseline', 'x')", (fid, fid, name))
+        for n, (origin, file_id) in enumerate((("uploaded", "f-a"), ("read", None), ("uploaded", "f-b")), 1):
+            con.execute("INSERT INTO cv_versions (id, doc_id, n, origin, file_id, data, what, by, created) "
+                        "VALUES (?, 'main', ?, ?, ?, '{}', 'made up', 'you', ?)",
+                        (f"v{n}-c", n, origin, file_id, f"2026-10-{n:02d}T09:00:00Z"))
+        con.commit()
+        con.execute("PRAGMA foreign_keys = ON")
+        self.run_migrate(con)
+        docs = {r[0]: r[1:] for r in con.execute(
+            "SELECT id, name, starred, baseline_file_id, current_version_id FROM cv_documents")}
+        self.assertEqual(docs, {"main": ("Museum CV", 1, "f-a", "v2-c"),
+                                "cv-v3-c": ("Library CV", 0, "f-b", "v3-c")})
+
     def test_settings_revision_starts_at_zero(self):
         con = self.open()
         self.run_migrate(con)
