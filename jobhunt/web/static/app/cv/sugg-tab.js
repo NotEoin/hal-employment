@@ -32,7 +32,7 @@ export function SuggTab({ preview }) {
     finally { setLooking(false); reload(); }
   };
   const acceptAll = async (k, words) => {
-    try { const out = await post(cvUrl(LIST + "/accept-kind"), { kind: k }); toast(out.accepted ? words : "Nothing to accept"); reload(); }
+    try { const out = await post(cvUrl(LIST + "/accept-kind"), { kind: k }); toast([out.accepted ? words : out.note ? "" : "Nothing to accept", out.note].filter(Boolean).join(" ")); reload(); }
     catch (err) { toast(err.message); }
   };
   const busy = looking || data.state === "looking";

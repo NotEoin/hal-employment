@@ -607,6 +607,9 @@ runs: tests use `tests/support/fake_claude/`.
   `held: "base"`. The person's edits are never undone; `set_change` drops `held` on Redo. `suggest.accept`
   holds Hal's own wording (`_held_to_limit`): a longer wording that prints over is swapped for a shorter
   alternative that fits (`note`), else ValueError (409) and nothing is applied; edited text is not held.
+  `suggest.accept_kind` (Accept all) holds its fixes the same way (`_fixes_held_to_limit`): when they lengthen
+  the text and print over, fixes are left out from the last (at most `pagelimit.HOLD_TRIES` prints), or none
+  is applied when fewer still do not fit; `note` says how many were left out.
   `fresh.make` holds its profile line (`fresh.within_limit`): drafts with the AI's profile, the plain
   `profile_line`, then none, the first that prints within the limit is saved; when the answers alone are
   over, the first draft is kept and `note` gives the pages.

@@ -342,7 +342,8 @@ Hal keeps its own changes inside the length you chose:
   longer before Hal changes anything, Hal uses it as it is for that job and says so on the CV tab.
 - **Suggestions.** When you accept Hal's wording on **Suggestions** and it would make the CV longer than you
   asked, Hal uses a shorter wording of the same suggestion that fits, or leaves the line as it is and tells
-  you why. Words you edit yourself are always used.
+  you why. Words you edit yourself are always used. **Accept all** does the same: it leaves out the fixes
+  that would make the CV too long, last first, and says how many.
 - **Build me a fresh CV.** Hal writes a shorter profile, or leaves the profile out, when its own words would
   make the new CV longer than you asked. Your answers are never cut: when they alone are longer, Hal keeps
   them all and says how many pages the CV is.

@@ -22,7 +22,7 @@ from support.world import World
 from test_cv_fresh import NO_MARKS
 from test_cv_printer import NoBrowsersHere
 from test_cv_render import made_up_cv, profile_of, type_for
-from test_cv_suggest import PROFILE, TABLE, CvCase
+from test_cv_suggest import PROFILE, STAR, TABLE, CvCase
 from test_cv_tailor import JOB, NEW_PROFILE, NEW_TABLE, JobCase, tailoring_ai
 
 from jobhunt.apply import queries
@@ -235,11 +235,11 @@ class HalKeepsAJobsCvToTheLimit(JobCase):
 class SuggestionsKeepToTheLimit(CvCase):
     """Accepting Hal's wording on My CV with the stand-in printer counting `FILLER` sentences."""
 
-    def suggestion(self, afters: list[str]) -> str:
+    def suggestion(self, afters: list[str], target: str = PROFILE, kind: str = "Wording") -> str:
         vid, doc = store.current()
-        draft = suggest.Draft(target=PROFILE, op="replace", kind="Wording", title="Say more", why="Made up.",
-                              trigger={"id": "made-up"}, before=suggest.shown_at(doc, "replace", PROFILE),
-                              afters=afters, section_id="summary")
+        draft = suggest.Draft(target=target, op="replace", kind=kind, title="Say more", why="Made up.",
+                              trigger={"id": f"made-up-{target}"}, before=suggest.shown_at(doc, "replace", target),
+                              afters=afters, section_id=target.split("/")[0][2:])
         sid = suggest._insert(self.con, draft, vid)
         self.con.commit()
         return sid
@@ -271,6 +271,36 @@ class SuggestionsKeepToTheLimit(CvCase):
         with stand_in():
             suggest.accept(self.con, sid, text=self.long)
         self.assertEqual(self.text_at(PROFILE), self.long)
+
+    def fixes(self, profile_lines: int, star_lines: int) -> None:
+        """Two Accept all fixes ("Dates"), each adding that many filler sentences to its line."""
+        for target, n in ((PROFILE, profile_lines), (STAR, star_lines)):
+            self.suggestion([self.text_at(target) + f" {FILLER}." * n], target, "Dates")
+
+    def test_accept_all_leaves_out_the_last_fixes_that_run_over_and_says_so(self):
+        self.fixes(5, 6)
+        before = self.text_at(STAR)
+        with stand_in():
+            out = suggest.accept_kind(self.con, "Dates")
+        self.assertEqual(out["accepted"], 1)
+        self.assertEqual(out["note"], "Hal left out 1 fix that would make this CV longer than 1 page.")
+        self.assertEqual(self.text_at(STAR), before)
+        self.assertIn(FILLER, self.text_at(PROFILE))
+
+    def test_accept_all_applies_nothing_when_even_one_fix_runs_over(self):
+        self.fixes(FILLER_PER_PAGE, FILLER_PER_PAGE)
+        first = store.current()[0]
+        with stand_in():
+            out = suggest.accept_kind(self.con, "Dates")
+        self.assertEqual((out["accepted"], out["version_id"]), (0, first))
+        self.assertEqual(out["note"], "Hal left out 2 fixes that would make this CV longer than 1 page.")
+
+    def test_accept_all_with_no_limit_applies_every_fix(self):
+        store.set_page_limit(0)
+        self.fixes(FILLER_PER_PAGE, FILLER_PER_PAGE)
+        with stand_in() as p:
+            out = suggest.accept_kind(self.con, "Dates")
+        self.assertEqual((out["accepted"], out["note"], p.calls), (2, "", 0))
 
 
 class FreshCvKeepsToTheLimit(unittest.TestCase):

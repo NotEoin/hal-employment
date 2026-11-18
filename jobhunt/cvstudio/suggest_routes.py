@@ -51,7 +51,7 @@ def look_again(req: Request) -> dict:
     return {"action_id": suggest_actions.start_review(_cv(req))}
 
 
-@route("POST", PREFIX + "/suggestions/accept-kind")
+@route("POST", PREFIX + "/suggestions/accept-kind", slow=True)   # may print to count pages
 def accept_kind(req: Request) -> dict:
     """Accept all of a kind (Consistency, Symbols, Dates)."""
     kind = json_body(req).get("kind")

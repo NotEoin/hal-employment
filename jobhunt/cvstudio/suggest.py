@@ -986,27 +986,68 @@ def accept(con: sqlite3.Connection, sugg_id: str, *, alt: int | None = None, tex
             "ask_send_copy": _store().doc(doc_id=row["doc_id"])["send"] == "original"}
 
 
+def _fixes_held_to_limit(start, doc, fixes: list, doc_id: str) -> tuple[object, list, str]:
+    """(the document, the fixes kept, a note): Accept all's fixes held to the CV's page limit, as one accepted
+    suggestion is (`_held_to_limit`).
+
+    Only fixes that make the CV's text longer are counted. Over the limit, Hal leaves fixes out from the last,
+    counting again after each, at most `pagelimit.HOLD_TRIES` times; when it is still over (or a count fails
+    part way), none is applied, as a job's CV keeps its base. The note says how many were left out. With no
+    limit, or no count at the start, every fix is kept.
+    """
+    from jobhunt.cvstudio import pagelimit
+
+    model = _model()
+    if not fixes or len(model.plain_text(doc, {})) <= len(model.plain_text(start, {})):
+        return doc, fixes, ""
+    limit = pagelimit.limit_of(doc_id)[0]
+    pages = pagelimit.count_doc(doc, doc_id) if limit else None
+    if pages is None or pages <= limit:
+        return doc, fixes, ""
+    kept = list(fixes)
+    for _ in range(pagelimit.HOLD_TRIES):
+        if not kept:
+            break
+        kept.pop()
+        doc = start
+        for _, change in kept:
+            doc = model.apply(doc, change)
+        pages = pagelimit.count_doc(doc, doc_id)
+        if pages is not None and pages <= limit:
+            break
+    if pages is None or pages > limit:      # over even with fewer fixes: the CV as it was, as for a job's CV
+        log.info("Accept all: CV %s is over its limit with fewer fixes too; none applied", doc_id)
+        doc, kept = start, []
+    left = len(fixes) - len(kept)
+    return doc, kept, pagelimit.FIXES_HELD.format(n=left, fixes="fix" if left == 1 else "fixes",
+                                                  limit=pagelimit.pages_words(limit))
+
+
 def accept_kind(con: sqlite3.Connection, kind: str, doc_id: str | None = None) -> dict:
     """Accepts every pending suggestion of a deterministic kind in one version of one CV (the lead CV by
-    default)."""
+    default); `note` says when Hal left some out to keep to the page limit (`_fixes_held_to_limit`)."""
     if kind not in DETERMINISTIC_KINDS:
         raise ValueError(f"Accept all works for {', '.join(DETERMINISTIC_KINDS)} only.")
     store, model = _store(), _model()
     vid, doc = store.current(doc_id=doc_id)
     recheck(con, vid, doc)
-    rows = [r for r in _pending(con, _doc_of(con, vid)) if r["kind"] == kind]
-    done = []
+    doc_id = _doc_of(con, vid)
+    rows = [r for r in _pending(con, doc_id) if r["kind"] == kind]
+    start, fixes = doc, []
     for r in rows:
         try:
             if shown_at(doc, r["op"], r["target"]) != (r["before"] or ""):
                 continue
-            doc = model.apply(doc, change_for(doc, r["op"], r["target"], json.loads(r["afters"])[r["alt"]]))
+            change = change_for(doc, r["op"], r["target"], json.loads(r["afters"])[r["alt"]])
+            doc = model.apply(doc, change)
         except model.CVError as e:
             log.info("skipped suggestion %s in accept all: %s", r["id"], e)
             continue
-        done.append(r["id"])
+        fixes.append((r["id"], change))
+    doc, fixes, note = _fixes_held_to_limit(start, doc, fixes, doc_id)
+    done = [sid for sid, _ in fixes]
     if not done:
-        return {"accepted": 0, "version_id": vid}
+        return {"accepted": 0, "version_id": vid, "note": note}
     words = f"{kind.lower()} fix" if len(done) == 1 else f"{kind.lower()} fixes"
     new_vid = store.new_version(doc, origin="improved", what=f"You accepted {len(done)} {words}", by="you",
                                 parent=vid)
@@ -1016,7 +1057,7 @@ def accept_kind(con: sqlite3.Connection, kind: str, doc_id: str | None = None) -
     con.commit()
     recheck(con, new_vid, doc)
     events.publish("suggestions")
-    return {"accepted": len(done), "version_id": new_vid}
+    return {"accepted": len(done), "version_id": new_vid, "note": note}
 
 
 def undo(con: sqlite3.Connection, sugg_id: str) -> dict:

@@ -34,7 +34,7 @@ What changed in each version, in plain words.
 - **Hal keeps its own changes inside your length.** When Hal adjusts a CV for a job, it undoes its own
   changes that would make the CV longer than you asked, newest first, and says so beside each one; **Redo**
   puts one back. When you accept a suggestion, Hal uses a shorter wording that fits, or leaves the line and
-  says why. **Build me a fresh CV** writes a shorter profile, or none, to fit. Your own lines and answers are
+  says why; **Accept all** leaves out the fixes that would not fit. **Build me a fresh CV** writes a shorter profile, or none, to fit. Your own lines and answers are
   never cut. An application's CV tab and its Documents step say how many pages the CV employers get is
   before you approve.
 

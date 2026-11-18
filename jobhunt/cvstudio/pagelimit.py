@@ -48,7 +48,9 @@ KEPT_BASE = ("Your CV was already longer than {limit} before Hal changed anythin
 SUGGESTION_HELD = ("Hal's wording would make this CV {pages} pages, and you asked for {limit}, so Hal did not use "
                    "it. Edit the words to use them anyway.")
 SUGGESTION_SHORTER = "Hal used its shorter wording, so this CV keeps to {limit}."
-FRESH_SHORTER = "Hal wrote a shorter profile, so this CV keeps to {limit}."
+FIXES_HELD = "Hal left out {n} {fixes} that would make this CV longer than {limit}."
+HOLD_TRIES = 8                  # prints at most while leaving Hal's fixes out of Accept all, a second or so each
+FRESH_SHORTER ="Hal wrote a shorter profile, so this CV keeps to {limit}."
 FRESH_NO_PROFILE = ("Hal left out the profile, so this CV keeps to {limit}. Add one on Edit your CV if you "
                     "want it.")
 FRESH_OVER = ("This CV is {pages} pages, and you asked for {limit}. Your answers alone take more room than that, "
