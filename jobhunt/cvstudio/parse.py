@@ -11,12 +11,8 @@ field. Design decisions, each with its reason:
   ElementTree over `word/document.xml` (paragraph styles, Word numbering, bold runs, tables flattened a row
   per line), so no extra library is needed on Windows. Each line keeps its paragraph index
   and a hash of its text, for an in-place Word editor later.
-- A PDF printed by a browser marks little: list markers are shapes, not text, and long lines wrap with no
-  sign. `pdf_lines` therefore finds bold from font names, list items from marker shapes or indents, and
-  joins a row to the one above when its first word would not have fitted there (see the constants below).
-- Markdown is read line by line with regular expressions (`md_lines`), not a Markdown library: a CV uses
-  headings, lists and bold, and the text Hal keeps holds no markup (formatting inside a line is not kept
-  yet).
+- A PDF printed by a browser marks little, so `pdflines.pdf_lines` finds bold, list items and wrapped
+  rows itself (see that module). Markdown is read by `mdread.md_lines`, with regular expressions.
 - A PDF with no text layer is refused with words that say what to do instead; there is no OCR for CVs.
 - Headings are the common ones (`HEADINGS`) plus every built-in CV type's own section titles, so a CV
   written to a type's outline is read back into the same sections.
@@ -28,12 +24,10 @@ field. Design decisions, each with its reason:
 """
 from __future__ import annotations
 
-import bisect
 import copy
 import functools
 import hashlib
 import io
-import itertools
 import logging
 import re
 import statistics
@@ -46,7 +40,10 @@ from xml.etree import ElementTree
 from jobhunt.ai import prompts
 from jobhunt.cvstudio import pdfread
 from jobhunt.cvstudio import types as cvtypes
+from jobhunt.cvstudio.lines import BULLET_GLYPHS, Line, _bulleted, _hash
+from jobhunt.cvstudio.mdread import md_lines
 from jobhunt.cvstudio.model import KINDS, Bullet, CVDoc, Entry, Module, Section
+from jobhunt.cvstudio.pdflines import SIZE_SLACK, pdf_lines
 
 log = logging.getLogger(__name__)
 
@@ -58,24 +55,6 @@ LARGE_TYPE = 1.15               # a line this much larger than the body text may
 HEADING_WORDS = 5               # headings are short
 HEADLINE_WORDS = 12             # a line under the name longer than this is a profile, not a headline
 PARAGRAPH_WORDS = 14            # a non-bullet line this long inside an entry is its paragraph, not a header
-LINE_TOLERANCE = 0.45           # share of the type size two baselines may differ by on one line (as pdfread)
-WORD_GAP = 0.25                 # a gap wider than this share of the type size parts two words (as pdfread)
-COLUMN_GAP = 2.0                # a gap wider than this many type sizes is a tab (dates on the right)
-# Joining wrapped rows and finding list items, in shares of the type size (checked on CVs printed by Chrome
-# from HTML and on the made-up fixtures, 2026-11-18):
-ALIGN_SLACK = 0.2               # two rows start in the same place when their pens are this close
-SIZE_SLACK = 0.05               # the same type: a bold entry heading (9.6 pt) beside body text (9.2 pt) is not
-WRAP_STEP = 1.6                 # a wrapped row sits at most one line below; 1.5 line spacing is the widest common
-PITCH_SLACK = 0.1               # Chrome puts baselines on whole pixels (0.75 pt), so a paragraph's line steps vary
-                                # by one pixel; the 2 pt between paragraphs is more than this over the usual step
-MARKER_REACH = 2.5              # a list marker sits within this many type sizes left of its text
-MARKER_DROP = 0.2               # ... its middle no lower than this below the baseline
-MARKER_RISE = 0.8               # ... and no higher than this above it (about the height of a capital)
-SPACE_WIDTH = 0.25              # a space is about a quarter of the type size in Arial, Helvetica and Calibri
-WRAP_SLACK = 0.3                # ink stops short of the advance a wrapping browser measures, by under a third
-INDENT_MIN = 0.5                # an indent under half the type size is ink overhang ("f", "T"), not a list
-INDENT_MAX = 5.0                # a list indents about 1.5 type sizes (CSS 13 pt at 9.2 pt, Word 0.25 in at
-                                # 11 pt); five allows deep ones while a centred line is usually further in
 
 PICTURE_WORDS = "This PDF is a picture of a CV, so Hal cannot read it. Upload the Word file, or paste the text."
 TOO_BIG_WORDS = ("This file is bigger than 10 MB, so Hal cannot read it. Save a smaller PDF or Word file, "
@@ -95,7 +74,6 @@ TWO_DIGIT_WHY = "The year is written with two digits."
 MISSING_WHY = "Hal did not find this in your file."
 
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
-BULLET_GLYPHS = ("\u2022", "\u25cf", "\u25aa", "\u25e6", "\u2023", "\u2043", "\u00b7", "\uf0b7", "\u27a2", "\u25ba")
 DASHES = "-\u2010\u2011\u2012\u2013\u2014"
 
 SECTION_KINDS = ("summary", "education", "experience", "volunteering", "projects", "research", "skills",
@@ -192,23 +170,6 @@ class CVReadError(ValueError):
 
 
 @dataclass
-class Line:
-    """One line of the file: its text and what the file said about it."""
-
-    text: str
-    size: float = 0.0
-    bold: bool = False
-    bullet: bool = False
-    style: str = ""
-    page: int = 1
-    index: int = 0          # the paragraph's place in a Word file, or the line's place in the text
-    hash: str = ""          # sha1 of the text, for finding the paragraph again
-    left: float = 0.0       # a PDF line's left edge in points
-    lead: str = ""          # the bold words the line starts with ("Security:"), or all of it when it is bold
-    italic: bool = False
-
-
-@dataclass
 class Reading:
     """A CV read into schema 2, with the fields that need a check (path -> why)."""
 
@@ -262,185 +223,6 @@ def check(data: bytes, name: str) -> tuple[str, int | None]:
     if not pdfread.text(data).strip():
         raise CVReadError(PICTURE_WORDS)
     return kind, pages
-
-
-def _hash(text: str) -> str:
-    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
-
-
-def _bulleted(text: str) -> tuple[str, bool]:
-    """The text without a leading bullet glyph or list hyphen, and whether it had one."""
-    stripped = text.lstrip()
-    for glyph in BULLET_GLYPHS:
-        if stripped.startswith(glyph):
-            return stripped[len(glyph):].strip(), True
-    if len(stripped) > 2 and stripped[0] in "-*\u2013" and stripped[1] == " ":
-        return stripped[2:].strip(), True
-    return text.strip(), False
-
-
-@dataclass
-class _Row:
-    """One printed row of a PDF page before wrapped rows are joined."""
-
-    text: str
-    page: int
-    y: float
-    size: float
-    left: float             # pen position of the first character after any bullet glyph
-    right: float            # right edge of the last character's ink
-    first_word: float       # width of the first word, to tell whether it would have fitted on the row above
-    bold: bool
-    lead: str
-    italic: bool
-    bullet: bool
-    tab: bool
-
-
-def _spacer(chars: list[pdfread.Char]):
-    """A test of whether a space separates two characters on one row.
-
-    PDFium's text order holds the PDF's own spaces and the ones PDFium works out from the gaps, so when the
-    file has any, a space is there exactly when one lies between the two characters in that order. Sorting
-    by position instead misplaced them: a space drawn 0.01 pt right of the "2" in "27" read as "2 7" (a CV
-    printed by Chrome, 2026-11-18). A PDF with no spaces at all falls back to the gap rule.
-    """
-    spaces: dict[int, list[int]] = {}
-    for c in chars:
-        if c.char.isspace():
-            spaces.setdefault(c.page, []).append(c.index)
-    if not spaces:
-        return lambda a, b: b.left - a.right > WORD_GAP * max(b.points, 1.0)
-
-    def spaced(a: pdfread.Char, b: pdfread.Char) -> bool:
-        if b.index <= a.index:      # drawn out of order: only the gap can tell
-            return b.left - a.right > WORD_GAP * max(b.points, 1.0)
-        found = spaces.get(a.page, [])
-        k = bisect.bisect_right(found, a.index)
-        return k < len(found) and found[k] < b.index
-    return spaced
-
-
-def _row(row: list[pdfread.Char], spaced) -> _Row | None:
-    """A row of characters as text, with its geometry and how much of it is bold."""
-    glyphs = sorted((c for c in row if not c.char.isspace()), key=lambda c: c.x)
-    if not glyphs:
-        return None
-    text, lead, tab, starts = "", None, False, []
-    for i, c in enumerate(glyphs):
-        if i:
-            prev = glyphs[i - 1]
-            if c.left - prev.right > COLUMN_GAP * max(c.points, 1.0):
-                text, tab = text + "\t", True
-            elif spaced(prev, c):
-                text += " "
-        if lead is None and not c.bold and i:
-            lead = text
-        starts.append(len(text))
-        text += c.char
-    body, bullet = _bulleted(text)
-    skip = 1 if bullet and len(glyphs) > 1 and glyphs[0].char not in body[:1] else 0
-    rest = glyphs[skip:]
-    first_word = rest
-    for i in range(1, len(rest)):
-        if starts[skip + i] > starts[skip + i - 1] + 1:     # a space or tab came before this character
-            first_word = rest[:i]
-            break
-    bold = all(c.bold for c in rest)
-    lead_text = "" if bold or not rest[0].bold else _bulleted((lead or "").rstrip())[0]
-    return _Row(body, row[0].page, row[0].y, max(c.points for c in glyphs), rest[0].x, max(c.right for c in glyphs),
-                first_word[-1].right - first_word[0].x, bold, body if bold else lead_text,
-                all(c.italic for c in rest), bullet, tab)
-
-
-def _pitches(rows: list[_Row]) -> dict[float, float]:
-    """The usual distance between baselines for each type size: the step most rows of that size take."""
-    steps: dict[float, Counter] = {}
-    for a, b in itertools.pairwise(rows):
-        if a.page == b.page and abs(a.size - b.size) <= SIZE_SLACK * a.size and a.y > b.y:
-            steps.setdefault(round(a.size, 1), Counter())[round(a.y - b.y, 2)] += 1
-    return {size: counts.most_common(1)[0][0] for size, counts in steps.items()}
-
-
-def _continues(a: _Row, b: _Row, right_edge: float, pitch: float | None, marked: bool) -> bool:
-    """True when `b` is the wrapped rest of `a`: same column and type, one line below, and `a` was full.
-
-    With list markers drawn as shapes (`marked`), an unmarked row under a list item is its continuation
-    whatever its length; elsewhere only a full row above says the text ran on.
-    """
-    if a.page != b.page or a.tab or b.tab or b.bullet:
-        return False
-    size = max(a.size, b.size)
-    if abs(a.left - b.left) > ALIGN_SLACK * size or abs(a.size - b.size) > SIZE_SLACK * size:
-        return False
-    step = a.y - b.y
-    if not 0 < step <= WRAP_STEP * size or (pitch is not None and step > pitch + PITCH_SLACK * size):
-        return False
-    if marked and a.bullet:
-        return True
-    return a.right + SPACE_WIDTH * size + b.first_word >= right_edge - WRAP_SLACK * size
-
-
-def _has_marker(r: _Row, shapes: list[pdfread.Shape]) -> bool:
-    """True when a list marker shape sits just left of the row, level with its letters."""
-    return any(s.page == r.page and s.right <= r.left and r.left - s.right <= MARKER_REACH * r.size
-               and r.y - MARKER_DROP * r.size <= (s.bottom + s.top) / 2 <= r.y + MARKER_RISE * r.size
-               for s in shapes)
-
-
-def _join(a: _Row, b: _Row) -> _Row:
-    """`a` with its wrapped continuation `b` added."""
-    glue = "" if len(a.text) > 1 and a.text[-1] in "-/" and a.text[-2].isalnum() and b.text[:1].isalnum() else " "
-    lead = (a.text + glue + b.lead).rstrip() if a.bold else a.lead
-    return _Row(a.text + glue + b.text, a.page, b.y, a.size, a.left, b.right, a.first_word, a.bold and b.bold,
-                a.text + glue + b.text if a.bold and b.bold else lead, a.italic and b.italic, a.bullet, False)
-
-
-def pdf_lines(data: bytes) -> list[Line]:
-    """The PDF's lines in reading order: wrapped rows joined, with type size, left edge, bold and list items.
-
-    A browser draws list markers as shapes, not text, so when no line has a bullet glyph a line indented a
-    little from the page's text is a list item. A row is joined to the one above when it starts in the same
-    place in the same type and its first word would not have fitted at the end of the row above, which is
-    how a browser or word processor wraps text.
-    """
-    chars = pdfread.chars(data)
-    widths = pdfread.page_widths(data)
-    spaced = _spacer(chars)
-    grouped: list[list[pdfread.Char]] = []
-    for c in sorted(chars, key=lambda c: (c.page, -c.y, c.x)):
-        if grouped and grouped[-1][0].page == c.page and \
-                abs(grouped[-1][0].y - c.y) <= LINE_TOLERANCE * max(c.points, 1.0):
-            grouped[-1].append(c)
-        else:
-            grouped.append([c])
-    rows = [r for r in (_row(g, spaced) for g in grouped) if r is not None and r.text]
-    edges: dict[int, float] = {}
-    for r in rows:
-        width = widths[r.page - 1] if r.page <= len(widths) else float("inf")
-        if r.right <= width:
-            edges[r.page] = max(edges.get(r.page, r.right), r.right)
-    marked = False
-    if not any(r.bullet for r in rows):
-        shapes = pdfread.markers(data)
-        for r in rows:
-            r.bullet = _has_marker(r, shapes)
-        marked = any(r.bullet for r in rows)
-    pitches = _pitches(rows)
-    joined: list[_Row] = []
-    for r in rows:
-        if joined and _continues(joined[-1], r, edges.get(r.page, r.right), pitches.get(round(r.size, 1)), marked):
-            joined[-1] = _join(joined[-1], r)
-        else:
-            joined.append(r)
-    if not any(r.bullet for r in joined):
-        margins: dict[int, float] = {}
-        for r in joined:
-            margins[r.page] = min(margins.get(r.page, r.left), r.left)
-        for r in joined:
-            r.bullet = INDENT_MIN * r.size <= r.left - margins[r.page] <= INDENT_MAX * r.size
-    return [Line(r.text, size=r.size, bold=r.bold, bullet=r.bullet, page=r.page, index=n, hash=_hash(r.text),
-                 left=r.left, lead=r.lead, italic=r.italic) for n, r in enumerate(joined)]
 
 
 def _docx_styles(z: zipfile.ZipFile) -> dict[str, str]:
@@ -559,136 +341,6 @@ def text_lines(text: str) -> list[Line]:
         body, bullet = _bulleted(raw)
         if body:
             out.append(Line(body, bullet=bullet, index=n, hash=_hash(body)))
-    return out
-
-
-MD_HEADING = re.compile(r"^ {0,3}(?P<marks>#{1,6})\s+(?P<text>.*?)(?:\s+#+)?\s*$")
-MD_ITEM = re.compile(r"^(?P<indent>\s*)(?:[-*+]|\d{1,3}[.)])\s+(?P<text>.*)$")
-MD_RULE = re.compile(r"^ {0,3}([-*_])(?:\s*\1){2,}\s*$")
-MD_SETEXT = re.compile(r"^ {0,3}(?P<marks>=+|-+)\s*$")
-MD_TABLE_RULE = re.compile(r"^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$")
-MD_FENCE = re.compile(r"^ {0,3}(```|~~~)")
-MD_ESCAPE = re.compile(r"\\([\\`*_{}\[\]()#+\-.!|>~])")
-MD_IMAGE = re.compile(r"!\[(?P<alt>[^\]]*)\]\([^)]*\)")
-MD_LINK = re.compile(r"\[(?P<text>[^\]]*)\]\((?P<url>[^)\s]*)(?:\s+\"[^\"]*\")?\)")
-MD_AUTOLINK = re.compile(r"<(?P<url>(?:https?://|mailto:)[^>\s]+)>")
-MD_TAG = re.compile(r"</?[A-Za-z][^>]*>")
-MD_CODE = re.compile(r"`+([^`]*)`+")
-MD_STRONG = re.compile(r"(\*\*|__)(?=\S)(.+?)(?<=\S)\1")
-MD_EMPHASIS = re.compile(r"(?<![\w*])\*(?=\S)(.+?)(?<=\S)\*(?![\w*])|(?<![\w_])_(?=\S)(.+?)(?<=\S)_(?![\w_])")
-MD_LEAD = re.compile(r"^(\*\*|__)(?=\S)(?P<lead>.+?)(?<=\S)\1")
-ESCAPED = "\ue000"      # a private-use character standing in for each escaped one while markers are stripped
-H1, H2 = 1, 2           # "#" is the name and "##" a section; "###" and deeper are entry headings
-
-
-def _md_plain(text: str) -> str:
-    """Markdown inline text as plain words: links as their text, no emphasis markers, escapes undone."""
-    kept: list[str] = []
-
-    def hold(m: re.Match) -> str:
-        kept.append(m.group(1))
-        return ESCAPED
-    out = MD_ESCAPE.sub(hold, text)
-    out = MD_IMAGE.sub(lambda m: m.group("alt"), out)
-    out = MD_LINK.sub(lambda m: m.group("text").strip() or m.group("url"), out)
-    out = MD_AUTOLINK.sub(lambda m: m.group("url").removeprefix("mailto:"), out)
-    out = MD_TAG.sub(" ", out)
-    out = MD_CODE.sub(lambda m: m.group(1), out)
-    for _ in range(2):      # bold inside italic and the other way round
-        out = MD_STRONG.sub(lambda m: m.group(2), out)
-        out = MD_EMPHASIS.sub(lambda m: m.group(1) or m.group(2), out)
-    for char in kept:
-        out = out.replace(ESCAPED, char, 1)
-    return re.sub(r"[ \t]+", " ", out).strip()
-
-
-def _md_line(raw: str, index: int, *, bullet: bool = False, style: str = "") -> Line | None:
-    """One Markdown block as a line, with its bold lead-in kept apart and its markers stripped."""
-    text = _md_plain(raw)
-    if not text:
-        return None
-    m = MD_LEAD.match(raw.strip())
-    lead = _md_plain(m.group("lead")) if m else ""
-    bold = bool(m) and m.end() == len(raw.strip())
-    if style in ("title", "entry"):
-        bold, lead = True, text
-    if "\t" not in text and raw.lstrip().startswith("|"):
-        cells = [_md_plain(c) for c in raw.strip().strip("|").split("|")]
-        text = "\t".join(c for c in cells if c)
-    return Line(text, bold=bold, bullet=bullet, style=style, index=index, hash=_hash(text),
-                lead=text if bold else lead)
-
-
-def md_lines(text: str) -> list[Line]:
-    """A Markdown CV as lines: "#" the name, "##" sections, "###" entry headings, list items as bullets.
-
-    Wrapped lines of a paragraph or list item are joined, as Markdown shows them. Emphasis and link markers
-    are taken out of the text, keeping a bold lead-in ("**Security:** ...") in `Line.lead`.
-    """
-    out: list[Line] = []
-    block: list[str] = []
-    start, item, fenced = 0, False, False
-
-    def flush() -> None:
-        nonlocal block, item
-        if block:
-            line = _md_line(" ".join(block), start, bullet=item)
-            if line is not None:
-                out.append(line)
-        block, item = [], False
-
-    rows = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-    if rows and rows[0].strip() == "---":      # front matter, as static site generators write it
-        end = next((n for n in range(1, len(rows)) if rows[n].strip() in ("---", "...")), None)
-        if end is not None:
-            rows = [""] * (end + 1) + rows[end + 1:]
-    for n, raw in enumerate(rows):
-        if MD_FENCE.match(raw):
-            flush()
-            fenced = not fenced
-            continue
-        if fenced:
-            line = _md_line(raw, n)
-            if line is not None:
-                out.append(line)
-            continue
-        if not raw.strip():
-            flush()
-            continue
-        setext = MD_SETEXT.match(raw)
-        if setext and block and not item:
-            level = H1 if setext.group("marks")[0] == "=" else H2
-            heading, block = " ".join(block), []
-            line = _md_line(heading, start, style="title" if level == H1 else "heading 2")
-            if line is not None:
-                out.append(line)
-            continue
-        if MD_RULE.match(raw) or (MD_TABLE_RULE.match(raw) and "|" in raw):
-            flush()
-            continue
-        heading = MD_HEADING.match(raw)
-        if heading:
-            flush()
-            level = len(heading.group("marks"))
-            style = "title" if level == H1 else "heading 2" if level == H2 else "entry"
-            line = _md_line(heading.group("text"), n, style=style)
-            if line is not None:
-                out.append(line)
-            continue
-        listed = MD_ITEM.match(raw)
-        if listed or raw.lstrip().startswith("|"):
-            flush()
-            block, start, item = [listed.group("text") if listed else raw], n, bool(listed)
-            if not listed:
-                flush()
-            continue
-        hard_break = raw.endswith("  ") or raw.endswith("\\")
-        if not block:
-            start = n
-        block.append(raw.strip().removesuffix("\\").lstrip(">").strip())
-        if hard_break:
-            flush()
-    flush()
     return out
 
 

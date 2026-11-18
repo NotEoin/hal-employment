@@ -21,7 +21,8 @@ from support.make_cv_fixtures import BROWSER_EXPECTED, BROWSER_NAME, EXPECTED, F
 from jobhunt import db
 from jobhunt.ai.base import LLMUnavailable
 from jobhunt.core import paths, runner, settings
-from jobhunt.cvstudio import parse, pdfread, store
+from jobhunt.cvstudio import mdread, parse, pdflines, pdfread, store
+from jobhunt.cvstudio.lines import Line
 from jobhunt.cvstudio.model import KINDS, to_json
 
 WAIT_S = 20
@@ -131,7 +132,7 @@ class Rules(unittest.TestCase):
             for kind, part in types.load(type_id).sections.items():
                 if kind in KINDS and part.get("title"):
                     with self.subTest(type=type_id, title=part["title"]):
-                        self.assertEqual(parse.heading_kind(parse.Line(text=part["title"]), None), kind)
+                        self.assertEqual(parse.heading_kind(Line(text=part["title"]), None), kind)
 
     def test_marks_in_a_technical_cv_become_modules(self):
         edu = next(s for s in rules_doc("technical", "docx").sections if s.kind == "education")
@@ -249,10 +250,10 @@ class BrowserPrinted(unittest.TestCase):
                  char(" ", 222.40, 4), char("2", 222.39, 5), char("7", 227.89, 6), char(" ", 235.23, 7),
                  char("m", 236.14, 8)]
         with mock.patch.object(pdfread, "chars", return_value=drawn):
-            self.assertEqual([ln.text for ln in parse.pdf_lines(b"")], ["from 27 m"])
+            self.assertEqual([ln.text for ln in pdflines.pdf_lines(b"")], ["from 27 m"])
 
     def test_markdown_markers_are_stripped_and_headings_mapped(self):
-        lines = parse.md_lines("---\ntitle: cv\n---\n# Ada Example\n\n## Work history\n\n### Tester\n\n"
+        lines = mdread.md_lines("---\ntitle: cv\n---\n# Ada Example\n\n## Work history\n\n### Tester\n\n"
                                "Made-up Ltd | 2024 - 2025\n\n* **Speed:** cut a run from *27* to `6` minutes,\n"
                                "  see [the report](https://example.org/r) or <https://example.org/s>\n"
                                "1. A\\* search over snake_case_names\n\n| Tool | Use |\n|---|---|\n| Git | code |\n")

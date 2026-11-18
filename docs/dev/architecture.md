@@ -364,16 +364,16 @@ runs: tests use `tests/support/fake_claude/`.
   `PrivateLeak` or an empty reply, Hal's own reading is kept and a step says why.
 - Report rows name one field each (`contact/<key>`, `s:<section>/e:<entry>/<field>`, `.../b:<bullet>`). A
   correction makes "You corrected N things Hal misread".
-- Every reader gives `Line`s with text, size, bold, a bold lead-in (`lead`), bullet and style. `pdf_lines`
-  works from `pdfread.chars`, which carry bold and italic from the font name (a subset font such as
-  `AAAAAA+Arimo-Bold`), then its flags and weight, the printed size (`points`, after the page's scale) and
-  PDFium's text order. A space goes between two characters when PDFium's text has one between them; only a
+- Every reader gives `Line`s (`cvstudio/lines.py`) with text, size, bold, a bold lead-in (`lead`), bullet and
+  style. `pdf_lines` (`cvstudio/pdflines.py`) works from `pdfread.chars`, which carry bold and italic from
+  the font name (a subset font such as `AAAAAA+Arimo-Bold`), then its flags and weight, the printed size
+  (`points`, after the page's scale) and PDFium's text order. A space goes between two characters when PDFium's text has one between them; only a
   PDF with no spaces at all falls back to the gap rule. A row is joined to the one above when it starts at
   the same place in the same type, sits one usual line step below, and either continues a list item (when
   the PDF draws list markers as shapes, `pdfread.markers`) or its first word would not have fitted on the
   row above. Without bullet glyphs or marker shapes, a small indent marks a list item. The thresholds are
-  named constants in `parse.py`, each with its reason.
-- `md_lines` reads Markdown: `#` is the name (`style="title"`), `##` a section (`"heading 2"`), `###` and
+  named constants in `pdflines.py`, each with its reason.
+- `md_lines` (`cvstudio/mdread.py`) reads Markdown: `#` is the name (`style="title"`), `##` a section (`"heading 2"`), `###` and
   deeper an entry heading (`style="entry"`, never a section). Wrapped lines are joined; emphasis, code and
   link markers are taken out (a link keeps its text); a starting `**bold**` is kept in `lead`.
 - In an entry section where the file marks headings (a bold line, a `###`, or a "**Heading**, details:
