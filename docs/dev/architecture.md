@@ -612,7 +612,10 @@ runs: tests use `tests/support/fake_claude/`.
   read Hal's temporary files. 60 s timeout, and the whole process tree is ended when it runs out. Every PDF
   is checked (opens, has pages, name, first section title). A CV is printed whole however long it is
   (`export.cv_pdf` passes no page bound; 2.3.0 refused a CV over its type's length by more than a page).
-  When no browser can print, `pdf.draw_view` draws a simple PDF itself and Activity says why.
+  When no browser can print, `pdf.draw_view` draws a simple PDF itself and Activity says why. It draws a
+  line's bold and italic in the Helvetica faces built into every PDF reader (bold, oblique and bold oblique),
+  wraps by measuring each run in its own face (`pdfdraw.wrap`), and underlines a link with a link annotation
+  over its words.
 - `export.py` gives PDF, Word (WordprocessingML written with the standard library), plain text, JSON Resume
   1.0.0 and `cv.json`. PDFs are cached in `cache/cv-print/` by the page's hash.
 

@@ -4,10 +4,12 @@ import unittest
 from pathlib import Path
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
+from support import people
+from test_cv_render import GUIDES, formatted_cv, profile_of, type_for
 from test_pdfread import PEOPLE, Person, draw, made_up_cvs
 
+from jobhunt.cvstudio import inline, pdfdraw, pdfread, render
 from jobhunt.cvstudio import pdf as cvpdf
-from jobhunt.cvstudio import pdfdraw, pdfread
 
 
 class Drawing(unittest.TestCase):
@@ -42,6 +44,36 @@ class Drawing(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"U\+4E2D\) at cv.json.summary"):
             pdfdraw.check_ascii({"summary": "\u4e2d"})
         self.assertEqual(cvpdf._drawable({"a": ["\u4e2dx"]}), {"a": ["x"]})
+
+    def test_a_lines_bold_italic_and_links_are_drawn_in_their_own_faces(self):
+        person = people.HUMANITIES
+        Person(self, PEOPLE[0])
+        view = render.view(formatted_cv(), type_for(person.key), profile_of(person))
+        out = cvpdf.draw_view(view, Path(tempfile.mkdtemp()) / "cv.pdf")
+        text = " ".join(pdfread.text(out).split())
+        self.assertIn("Gave 15 tours to school groups and wrote two visitor guides.", text)
+        self.assertIn("Collections volunteer *A*", text)       # a heading's stars are drawn as typed
+        self.assertNotIn("**", text)
+        glyphs = [c for c in pdfread.chars(out) if not c.char.isspace()]
+        line = "".join(c.char for c in glyphs)
+        for words, bold, italic in (("15tours", True, False), ("schoolgroups", False, True), ("Gave", False, False)):
+            at = line.index(words)
+            self.assertEqual({(c.bold, c.italic) for c in glyphs[at:at + len(words)]}, {(bold, italic)}, words)
+        self.assertIn(f"/URI ({GUIDES})".encode(), out.read_bytes())
+
+    def test_a_wrapped_line_of_mixed_runs_fits_its_column(self):
+        text = ("Wrote ***forty*** short guides for *Made-up Record Office* visitors and **catalogued** the "
+                "parish papers, then [published the list](https://example.org/list) online for families")
+        width, size = 160.0, 10.0
+        lines = pdfdraw.wrap(text, width, size)
+        self.assertGreater(len(lines), 3)
+        space = pdfdraw.measure(" ", pdfdraw.F_REG, size)
+        for line in lines:
+            self.assertLessEqual(sum(pdfdraw.word_width(w, size) for w in line) + space * (len(line) - 1), width)
+        words = [" ".join("".join(p for _, p, _ in w) for w in line) for line in lines]
+        self.assertEqual(" ".join(words), inline.plain(text))
+        self.assertEqual(pdfdraw.wrap("*Hamlet*'s ghost", 500, size)[0][0],
+                         [(pdfdraw.F_ITAL, "Hamlet", ""), (pdfdraw.F_REG, "'s", "")])
 
     def test_the_writer_needs_no_folder_of_its_own(self):
         out = Path(tempfile.mkdtemp()) / "nested" / "cv.pdf"

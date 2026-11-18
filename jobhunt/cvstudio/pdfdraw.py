@@ -12,11 +12,16 @@ Incorporated. All rights reserved. Adobe permits the AFM files to be used, copie
 purpose and without charge, with or without modification, provided the copyright notices are retained.
 Only the width numbers are copied here.
 
+A line's bold, italic and links (`cvstudio/inline.py`) are drawn in Helvetica-Bold, Helvetica-Oblique and
+Helvetica-BoldOblique, each measured with its own widths so a wrapped line of mixed runs fits its column; a
+link is underlined and gets a link annotation over its words.
+
 Callers set `OUT` to the file to write before calling `write_pdf`.
 """
-import re
 import zlib
 from pathlib import Path
+
+from jobhunt.cvstudio import inline
 
 OUT = Path("CV.pdf")
 IDENTITY = {"NAME": "you.name", "EMAIL": "you.email", "PHONE": "you.phone"}
@@ -45,7 +50,10 @@ COL_GAP = 26.0
 COL_W = (CW - COL_GAP) / 2
 
 # ----------------------------------------------------------- typography
-F_REG, F_BOLD, F_ITAL = "F1", "F2", "F3"
+F_REG, F_BOLD, F_ITAL, F_BOLD_ITAL = "F1", "F2", "F3", "F4"
+FACE = {(False, False): F_REG, (True, False): F_BOLD, (False, True): F_ITAL, (True, True): F_BOLD_ITAL}
+BASE_FONTS = {F_REG: "Helvetica", F_BOLD: "Helvetica-Bold", F_ITAL: "Helvetica-Oblique",
+              F_BOLD_ITAL: "Helvetica-BoldOblique"}
 
 NAME_SIZE = 20.0
 CONTACT_SIZE = 8.6
@@ -70,6 +78,7 @@ AFM_FILES = {
     F_REG: "NimbusSans-Regular.afm",
     F_BOLD: "NimbusSans-Bold.afm",
     F_ITAL: "NimbusSans-Italic.afm",
+    F_BOLD_ITAL: "NimbusSans-BoldItalic.afm",
 }
 
 # ASCII 32-126 by PostScript glyph name, so a width lookup is exact rather
@@ -102,7 +111,10 @@ FALLBACK = {
              333, 556, 611, 556, 611, 556, 333, 611, 611, 278, 278, 556, 278, 889, 611, 611,
              611, 611, 389, 556, 333, 611, 556, 778, 556, 556, 500, 389, 280, 389, 584],
 }
-FALLBACK[F_ITAL] = FALLBACK[F_REG]
+FALLBACK[F_ITAL] = FALLBACK[F_REG]            # an oblique face slants its upright one, widths unchanged
+FALLBACK[F_BOLD_ITAL] = FALLBACK[F_BOLD]
+LINK_RULE = 0.4                                 # points: the line under a link
+LINK_DROP = 1.2                                 # points below the baseline
 
 
 def load_widths():
@@ -153,55 +165,69 @@ def measure(text, font, size, tracking=0.0):
 
 
 # ---------------------------------------------------------- inline runs
-BOLD_SPLIT = re.compile(r"(\*\*.+?\*\*)", re.S)
-
-
 def runs_of(text):
-    """'plain **bold** plain' -> [(font, 'plain '), (F_BOLD, 'bold'), ...]"""
-    out = []
-    for part in BOLD_SPLIT.split(text):
-        if not part:
-            continue
-        if part.startswith("**") and part.endswith("**"):
-            out.append((F_BOLD, part[2:-2]))
-        else:
-            out.append((F_REG, part))
-    return out
+    """'plain **bold** [site](https://...)' -> [(F_REG, 'plain ', ''), (F_BOLD, 'bold', ''), ...], each run
+    with its font and the address it links to ("" for none)."""
+    return [(FACE[(r.bold, r.italic)], r.text, r.link) for r in inline.runs(text)]
+
+
+def words_of(text):
+    """The words of a line, each a list of (font, piece, link): "*Hamlet*'s" is one word of two pieces."""
+    words, cur = [], []
+    for font, chunk, link in runs_of(text):
+        for k, part in enumerate(chunk.replace("\n", " ").split(" ")):
+            if k and cur:
+                words.append(cur)
+                cur = []
+            if part:
+                cur.append((font, part, link))
+    if cur:
+        words.append(cur)
+    return words
+
+
+def word_width(word, size):
+    """The width of a word of pieces, each measured in its own font."""
+    return sum(measure(piece, font, size) for font, piece, _ in word)
+
+
+def _broken(word, width, size):
+    """A word wider than the column, broken into parts that each fit, rather than run off the page."""
+    parts, cur, used = [], [], 0.0
+    for font, piece, link in word:
+        for ch in piece:
+            w = measure(ch, font, size)
+            if cur and used + w > width:
+                parts.append(cur)
+                cur, used = [], 0.0
+            if cur and cur[-1][0] == font and cur[-1][2] == link:
+                cur[-1] = (font, cur[-1][1] + ch, link)
+            else:
+                cur.append((font, ch, link))
+            used += w
+    if cur:
+        parts.append(cur)
+    return parts
 
 
 def wrap(text, width, size):
-    """Greedy wrap over bold-aware runs. Returns lines of [(font, word)]."""
-    words = []
-    for font, chunk in runs_of(text):
-        for word in chunk.split(" "):
-            if word == "":
-                continue
-            words.append((font, word))
+    """Greedy wrap over the line's runs. Returns lines of words, each word a list of (font, piece, link)."""
     lines, line, used = [], [], 0.0
-    for font, word in words:
-        w = measure(word, font, size)
+    for word in words_of(text):
+        w = word_width(word, size)
         if w > width:
-            # one token wider than the whole column: break it, rather than
-            # let it run off the edge of the page
             if line:
                 lines.append(line)
-                line, used = [], 0.0
-            piece = ""
-            for ch in word:
-                if piece and measure(piece + ch, font, size) > width:
-                    lines.append([(font, piece)])
-                    piece = ch
-                else:
-                    piece += ch
-            if piece:
-                line, used = [(font, piece)], measure(piece, font, size)
+            parts = _broken(word, width, size)
+            lines += [[p] for p in parts[:-1]]
+            line, used = [parts[-1]], word_width(parts[-1], size)
             continue
-        space = measure(" ", font, size) if line else 0.0
+        space = measure(" ", line[-1][-1][0], size) if line else 0.0
         if line and used + space + w > width:
             lines.append(line)
-            line, used = [(font, word)], w
+            line, used = [word], w
         else:
-            line.append((font, word))
+            line.append(word)
             used += space + w
     if line:
         lines.append(line)
@@ -267,33 +293,39 @@ class Doc:
         )
 
     def line_runs(self, line, x, y, size, pad=False):
-        """Draw one wrapped line as contiguous same-font runs, joined with
-        real space characters.
+        """Draw one wrapped line (words of `wrap`) as contiguous runs of one
+        font and link, joined with real space characters; a link is
+        underlined and recorded for its annotation.
 
         Drawing it word by word - one text object each, advancing by the
         width of a space without ever emitting one - looks identical on the
         page, because the text matrix puts every word in the right place.
         But a reader that simply concatenates the (...) Tj literals in
         stream order, which is what a plain-text CV parser does, then gets
-        `Upper-secondHistorygraduate...` and fails silently. Helvetica
-        and Helvetica-Bold share a space width, so the geometry is unchanged.
+        `Upper-secondHistorygraduate...` and fails silently. The four
+        Helvetica faces share a space width, so the geometry is unchanged.
+        The gap after a word belongs to the run before it, so a link's box
+        ends at its last word.
         """
-        cursor, i = x, 0
-        while i < len(line):
-            font = line[i][0]
-            j = i
-            words = []
-            while j < len(line) and line[j][0] == font:
-                words.append(line[j][1])
-                j += 1
-            run = " ".join(words)
-            if i:
-                run = " " + run      # the gap to the previous run
-            if pad and j == len(line):
-                run += " "           # the gap to the line below
+        segs = []
+        for wi, word in enumerate(line):
+            for pi, (font, piece, link) in enumerate(word):
+                if wi and not pi:
+                    segs[-1][1] += " "
+                if segs and segs[-1][0] == font and segs[-1][2] == link:
+                    segs[-1][1] += piece
+                else:
+                    segs.append([font, piece, link])
+        if pad and segs:
+            segs[-1][1] += " "       # the gap to the line below
+        cursor = x
+        for font, run, link in segs:
             self.text(run, cursor, y, font, size)
+            if link:
+                width = measure(run.rstrip(), font, size)
+                self.links.append((len(self.pages), cursor, y - 2.0, cursor + width, y + size * 0.78, link))
+                self.rule(cursor, y - LINK_DROP, width, ink=BODY_INK, thickness=LINK_RULE)
             cursor += measure(run, font, size)
-            i = j
 
     # -- blocks ----------------------------------------------------------
     def paragraph(self, text, x=ML, width=CW, size=BODY_SIZE, lead=BODY_LEAD, gap=0.0):
@@ -411,8 +443,7 @@ def write_pdf(pages, links=(), title="CV"):
         return counter[0]
 
     catalog_id, pages_id, res_id = alloc(), alloc(), alloc()
-    font_ids = {name: alloc() for name in (F_REG, F_BOLD, F_ITAL)}
-    base = {F_REG: "Helvetica", F_BOLD: "Helvetica-Bold", F_ITAL: "Helvetica-Oblique"}
+    font_ids = {name: alloc() for name in BASE_FONTS}
 
     page_ids, content_ids = [], []
     for _ in pages:
@@ -441,7 +472,7 @@ def write_pdf(pages, links=(), title="CV"):
     ).encode()
     for name, oid in font_ids.items():
         objects[oid] = (
-            f"<< /Type /Font /Subtype /Type1 /BaseFont /{base[name]} "
+            f"<< /Type /Font /Subtype /Type1 /BaseFont /{BASE_FONTS[name]} "
             f"/Encoding /WinAnsiEncoding >>"
         ).encode()
 

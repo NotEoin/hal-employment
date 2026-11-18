@@ -4,13 +4,15 @@ It draws with `pdfdraw.py`, Hal's own PDF writer, and changes what applicant tra
 recruiters read badly: body text is 10pt, the strongest module marks (when the CV has any) sit on one line
 as "Module mark" rather than in a grid of bars, an entry written as "- " lines is drawn as bullets with a
 hanging indent, and there is no "References available on request". Text the fonts cannot draw is mapped
-to its plain form first (`_drawable`), so a curly quote never stops a CV being made. The file is named from
+to its plain form first (`_drawable`), so a curly quote never stops a CV being made. A line's bold, italic
+and links are drawn as `pdfdraw` draws them; fields that hold no formatting (skills, modules, "Also") are
+passed as `_literal` text, so their stars stay stars as on the HTML page. The file is named from
 the `cvdocs.file_name` setting (`core.naming`), never from code.
 """
 from pathlib import Path
 
 from jobhunt.core import naming
-from jobhunt.cvstudio import cv, pdfdraw
+from jobhunt.cvstudio import cv, inline, pdfdraw
 
 # Section headings; a CV may rename any of them in its "titles" (a history CV might say "Research and projects").
 TITLES = {"education": "Education", "projects": "Projects", "experience": "Experience", "skills": "Skills",
@@ -96,6 +98,11 @@ def _drawable(value):
 ORDER = ("education", "projects", "experience", "skills", "additional")
 
 
+def _literal(text: str) -> str:
+    """Text drawn as it is written, its stars never taken as marks."""
+    return inline.to_text([inline.Run(text)]) if text else text
+
+
 def draw_view(view, out: Path) -> Path:
     """Draws a CV as `cvstudio.render.view` lays it out: the printer's fallback when no browser can print.
 
@@ -123,19 +130,20 @@ def draw_view(view, out: Path) -> Path:
             if i:
                 doc.y -= 5
             if section.kind in ("skills", "languages") and e.items and not e.bullets:
-                label = f"**{_drawable(e.heading)}:** " if e.heading else ""
-                doc.paragraph(label + _drawable(e.items), size=BODY, lead=LEAD, gap=1.5)
+                label = f"**{_literal(_drawable(e.heading))}:** " if e.heading else ""
+                doc.paragraph(label + _literal(_drawable(e.items)), size=BODY, lead=LEAD, gap=1.5)
                 continue
             lines = [f"- {t}" for _, t in e.bullets] or ([e.text] if e.text else [])
             meta = " | ".join(x for x in (e.org, e.dates, e.meta) if x)
             _entry(b, doc, _drawable(e.heading), _drawable(meta), _drawable("\n".join(lines)), size=10.4)
             if e.items:
-                doc.paragraph(_drawable(e.items), size=BODY, lead=LEAD, gap=1.0)
+                doc.paragraph(_literal(_drawable(e.items)), size=BODY, lead=LEAD, gap=1.0)
             if e.modules:
-                doc.paragraph("**Selected modules:** " + _drawable(e.modules), size=BODY, lead=LEAD, gap=1.0)
+                doc.paragraph("**Selected modules:** " + _literal(_drawable(e.modules)), size=BODY, lead=LEAD,
+                              gap=1.0)
         if section.also:
             doc.y -= 4
-            doc.paragraph("**Also:** " + _drawable(section.also), size=BODY, lead=LEAD)
+            doc.paragraph("**Also:** " + _literal(_drawable(section.also)), size=BODY, lead=LEAD)
     pages = doc.finish()
     b.add_footers(pages)
     out = Path(out)
@@ -190,7 +198,8 @@ def render(variant: dict, out_dir: Path) -> Path:
                     doc.y -= 7
                 _entry(b, doc, p["name"], p.get("stack", ""), p["body"], size=10.4)
             rest = [p["name"] for p in data["projects"][len(shown):]]
-            more = " ".join(x for x in ((f"**Also:** {'; '.join(rest)}." if rest else ""), data.get("moreProjects", "")) if x)
+            more = " ".join(x for x in ((f"**Also:** {_literal('; '.join(rest))}." if rest else ""),
+                                        _literal(data.get("moreProjects", ""))) if x)
             if more:
                 doc.y -= 4
                 doc.paragraph(more, size=BODY, lead=LEAD)
@@ -203,11 +212,12 @@ def render(variant: dict, out_dir: Path) -> Path:
         elif section == "skills" and data.get("skills"):
             heading({**TITLES, **(data.get("titles") or {})}["skills"])
             for group, items in data["skills"]:
-                doc.paragraph(f"**{group}:** " + ", ".join(items), size=BODY, lead=LEAD, gap=1.5)
+                doc.paragraph(f"**{_literal(group)}:** " + _literal(", ".join(items)), size=BODY, lead=LEAD,
+                              gap=1.5)
         elif section == "additional" and data.get("additional"):
             heading({**TITLES, **(data.get("titles") or {})}["additional"])
             for label, text in data["additional"]:
-                doc.paragraph(f"**{label}:** {text}", size=BODY, lead=LEAD, gap=1.5)
+                doc.paragraph(f"**{_literal(label)}:** {text}", size=BODY, lead=LEAD, gap=1.5)
 
     pages = doc.finish()
     b.add_footers(pages)
