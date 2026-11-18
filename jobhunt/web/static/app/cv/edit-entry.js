@@ -4,11 +4,13 @@
    change to the editor (cv/edit-tab.js), which shows it at once and saves the list on "Save changes".
    On an application's CV, `marks` (from `tailor.editor`, by `model.diff`) say what Hal changed for the job
    and what the person changed after it, in words beside the part, and `onCopy` adds "Copy to my main CV" (named
-   for the CV the application was built from, `copyTo`, when several are in use). */
+   for the CV the application was built from, `copyTo`, when several are in use). A line and an entry's
+   paragraph are `FormatBox`es (cv/format.js), with Bold, Italic and Link. */
 import { html, useState } from "../core/html.js";
 import { Chip, Switch } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 import { target, blankLine } from "./doc-changes.js";
+import { FormatBox } from "./format.js";
 
 const YOUR_WORDS = "you";   // `model.YOUR_WORDS`: the person typed or reworded this line
 const CARD = "card:";       // `edit.CARD`: the line came from a card of your record
@@ -76,8 +78,8 @@ function Line({ s, e, b, i, n, name, act, addId, marks }) {
   const fromCard = (b.sources || []).some(x => x.startsWith(CARD));
   return html`<div class=${"cv-line" + markClass(here)}>
     <${UpDown} i=${i} n=${n} name=${lineName} onMove=${p => act({ op: "move", target: t, position: p })} />
-    <div class="grow"><textarea class="input" rows="2" id=${"f-" + t} aria-label=${"Line " + (i + 1) + " of " + name} value=${b.text}
-      onInput=${ev => act({ op: "replace", target: t + "/text", value: ev.target.value })}></textarea>
+    <div class="grow"><${FormatBox} id=${"f-" + t} label=${"Line " + (i + 1) + " of " + name} name=${lineName} value=${b.text}
+      onText=${v => act({ op: "replace", target: t + "/text", value: v })} />
       ${(mine || fromCard || here.length > 0) && html`<div class="row tight"><${Marks} list=${here} />${mine
         ? html`<${Chip}>Your words<//>` : fromCard && html`<${Chip} tone="why">From your record<//>`}</div>`}</div>
     <span class="row tight"><${Switch} on=${!!b.locked} label=${"Lock " + lineName} onChange=${v => act({ op: "replace", target: t + "/locked", value: v })} /><${Icon} n="lock" c="s" /></span>
@@ -107,7 +109,8 @@ export function EntryCard({ s, e, i, n, act, addId, marks, onCopy, copyTo = "you
       ${(LISTED.includes(s.kind) || (e.items || []).length > 0) && html`<${Items} id=${"f-" + t + "/items"} label="Items" items=${e.items}
         onChange=${v => act({ op: "replace", target: t + "/items", value: v })} />`}
       ${e.style === "paragraph" && html`<div class="rec-field wide"><label class="lab" for=${"f-" + t + "/text"}>What it says</label>
-        <textarea class="input" id=${"f-" + t + "/text"} value=${e.text} onInput=${ev => act({ op: "replace", target: t + "/text", value: ev.target.value })}></textarea></div>`}</div>
+        <${FormatBox} id=${"f-" + t + "/text"} name=${"what " + name + " says"} value=${e.text}
+          onText=${v => act({ op: "replace", target: t + "/text", value: v })} /></div>`}</div>
     ${(e.modules || []).length > 0 && html`<p class="small sub">${e.modules.length} modules, as they are now.</p>`}
     ${e.style !== "paragraph" && (!LISTED.includes(s.kind) || e.bullets.length > 0) && html`<div class="cv-lines">${e.bullets.map((b, k) => html`<${Line} key=${b.id} s=${s} e=${e} b=${b} i=${k}
       n=${e.bullets.length} name=${name} act=${act} addId=${lineAdd} marks=${marks} />`)}

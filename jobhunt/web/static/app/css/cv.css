@@ -9,6 +9,11 @@
 .cv-line { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 8px 10px; align-items: center; width: 100%; }
 .cv-line .grow { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .cv-from-record { margin-top: 8px; }
+.fmt { display: flex; flex-direction: column; gap: 4px; min-width: 0; width: 100%; }
+.fmt .fmt-bar { display: none; flex-wrap: wrap; }
+.fmt:focus-within .fmt-bar, .fmt.fmt-open .fmt-bar { display: flex; }
+.fmt-link { flex-wrap: wrap; }
+.fmt-link .input { min-width: 0; flex: 1 1 160px; }
 .cv-mark-hal { border-left: 4px solid var(--primary); padding-left: 8px; }
 .cv-mark-you { border-left: 4px dashed var(--good); padding-left: 8px; }
 .cv-list { margin: 0 0 14px; }

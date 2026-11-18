@@ -27,6 +27,18 @@ CLERK = {"title": "Ticket clerk", "employer": "Made-up Rail", "start": "2023-09"
          "duties": ["Sold tickets at the morning window"]}
 
 
+def select(box, words: str) -> None:
+    """Focuses a text box and selects `words` in it, as a person dragging over them would."""
+    box.evaluate("(el, w) => { el.focus(); const at = el.value.indexOf(w); el.setSelectionRange(at, at + w.length); }",
+                 words)
+
+
+def now(box) -> tuple[str, str]:
+    """(the text box's words, the words selected in it) once the page has drawn the last change."""
+    return tuple(box.evaluate("el => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(() =>"
+                              " done([el.value, el.value.slice(el.selectionStart, el.selectionEnd)]))))"))
+
+
 def entry(doc: model.CVDoc, heading: str) -> model.Entry:
     """The entry of the document with this heading."""
     return next(e for s in doc.sections for e in s.entries if e.heading == heading)
@@ -90,6 +102,34 @@ class EditCv(unittest.TestCase):
                 self.assertEqual(p.page.locator(".cv-entry[role=group][aria-label='Lab assistant']").count(), 1)
                 self.assertEqual(p.sideways(), 0)
                 self.assertEqual(p.serious_axe(), [])
+                self.assertEqual(p.errors, [])
+
+    def test_bold_italic_and_a_link_go_round_the_selected_words_at_both_sizes(self) -> None:
+        linked = "Helped 40 first-years *debug* their [labs](https://example.org/labs)"
+        for size, scheme in (("wide", "light"), ("narrow", "dark")):
+            with self.subTest(size=size):
+                p = self.page(size, scheme)
+                line = p.page.locator(f"textarea[aria-label='Line 1 of {JOB}']")
+                line.fill("Helped 40 first-years debug their labs")
+                select(line, "0 first-ye")                            # parts of words widen to whole words
+                p.page.locator(f"button[aria-label='Bold, line 1 of {JOB}']").click()
+                self.assertEqual(now(line), ("Helped **40 first-years** debug their labs", "40 first-years"))
+                p.page.keyboard.press("Control+b")                    # again: the marks come off
+                self.assertEqual(now(line)[0], "Helped 40 first-years debug their labs")
+                select(line, "debug")
+                p.page.keyboard.press("Control+i")
+                self.assertEqual(now(line), ("Helped 40 first-years *debug* their labs", "debug"))
+                select(line, "labs")
+                p.page.locator(f"button[aria-label='Link, line 1 of {JOB}']").click()
+                p.page.get_by_label("Link to", exact=True).fill("example.org/labs")
+                p.page.keyboard.press("Enter")
+                self.assertEqual(now(line), (linked, "labs"))
+                self.assertEqual(p.sideways(), 0)
+                self.assertEqual(p.serious_axe(), [])
+                if size == "wide":      # saved once: the phone's same words are then no change to save
+                    p.page.locator("button:has-text('Save changes')").click()
+                    p.page.wait_for_selector("text=Saved your CV as version")
+                    self.assertEqual(entry(store.current()[1], JOB).bullets[0].text, linked)
                 self.assertEqual(p.errors, [])
 
     def test_a_card_from_your_record_is_added_with_its_lines(self) -> None:

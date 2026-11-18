@@ -659,6 +659,11 @@ runs: tests use `tests/support/fake_claude/`.
   still on did and what the person's edits did, each by `model.diff`. `POST .../cv/copy` copies one entry's
   lines into the CV the job's CV was built from (`main_version_id`, `main_doc_id`) through `edit.save`, the
   same base-checked save as My CV's editor.
+- In both editors every line, paragraph and profile is a `FormatBox` (`cv/format.js`): its Bold, Italic and
+  Link buttons show while the box has focus, Ctrl+B and Ctrl+I do the same, and each writes the marks of
+  `cvstudio/inline.py` into the text around the selection (`toggleMark`, `addLink`), trimmed of spaces and
+  widened to whole words, so the pair always hugs words. The words stay selected; the change is an ordinary
+  `replace` of the text.
 - An application whose documents were written before has no `job_cvs` row (`tailor.kept`), and keeps the
   cv.json path until it is sent: `documents.tailored` reorders the main CV with `cv.tailor`, and Undo is
   `docs["undone_changes"]`. Both paths send the main CV as it is while the setting is No, and the person's

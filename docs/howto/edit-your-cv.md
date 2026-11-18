@@ -17,10 +17,15 @@ changes**, and each save is a new version, so you can always go back.
 3. Press **Save changes**. Hal saves everything you changed as one new version and says its number.
 4. To undo a save, open **Versions** and press **Use this version** on the version before it.
 
-To make words bold or italic, or a link, type marks around them in a line, a paragraph or your profile:
-two stars for bold (`**Python**`), one star for italic (`*Hamlet*`), and square brackets then the web address
-in round brackets for a link (`[my portfolio](https://example.org)`). Once you save, the preview on **Your
-CV** shows the result. A star with no partner, as in "A* in Maths", stays a star.
+To make words bold or italic, or a link, in a line, a paragraph or your profile:
+
+1. Click in the box and select the words. **Bold**, **Italic** and **Link** appear under it.
+2. Press **Bold** or **Italic**, or press Ctrl+B or Ctrl+I (Cmd on a Mac). Press it again to take it off.
+3. For a link, press **Link**, type the web or email address in **Link to**, and press **Add link**.
+
+The box shows the marks Hal keeps: two stars for bold (`**Python**`), one star for italic (`*Hamlet*`), and
+`[my portfolio](https://example.org)` for a link. You can also type them yourself. Once you save, the preview
+on **Your CV** shows the result. A star with no partner, as in "A* in Maths", stays a star.
 
 Lines you typed or reworded are marked **Your words**. Hal treats them as yours: its suggestions never call
 them a writing problem to fix. Lines added from your record are marked **From your record**.
@@ -73,3 +78,5 @@ Hal's on a line you also changed, your words stay.
 | "Your CV changed since you started editing. Your changes are not saved." | Your CV was changed somewhere else meanwhile, for example by accepting a suggestion. Copy what you want to keep, press **Start again from your CV now**, and make the changes again. |
 | "Your record has nothing to add here yet." | Add the job, qualification, project or certificate on **Your record** first, then press **Add from your record** again. |
 | **Save changes** cannot be pressed | Nothing has changed since the last save. |
+| The preview shows stars instead of bold or italic | A mark counts only when it hugs words: `**Python**`, not `** Python **`, and not inside a word (`Py**thon**`). Select the words and press **Bold** or **Italic** to write the marks for you. |
+| "Type a web address with no spaces" | A link needs a web or email address with no spaces, such as `example.org/my-work`. |

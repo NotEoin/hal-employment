@@ -7,9 +7,10 @@ What changed in each version, in plain words.
 ### What's new
 
 - **Bold, italic and links in your CV.** A line of your CV can now have words in bold or italic, and words
-  that link to a web page or an email address. Type two stars around words for bold (`**like this**`), one
-  star for italic (`*like this*`), and `[words](https://example.org)` for a link. The preview, the PDF and the
-  Word file show them, and their links can be clicked. A star on its own, as in "A*" or "5* rating", stays as you
+  that link to a web page or an email address. On **Edit your CV**, select the words and press **Bold**,
+  **Italic** or **Link** (or Ctrl+B and Ctrl+I), or type the marks yourself: two stars around words for bold
+  (`**like this**`), one star for italic (`*like this*`), and `[words](https://example.org)` for a link. The
+  preview, the PDF and the Word file show them, and their links can be clicked. A star on its own, as in "A*" or "5* rating", stays as you
   typed it. Checks, scores and Hal's writing read the words without the marks.
 
 - **Your CV file's bold, italic and links are kept.** When Hal reads a CV you add, it keeps the bold and

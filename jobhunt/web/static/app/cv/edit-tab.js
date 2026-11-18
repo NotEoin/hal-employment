@@ -5,7 +5,8 @@
    person's changes on screen until they choose. While there are changes, leaving the tab, the page or
    Hal asks first (core/router.js `guardLeave`). After a save Hal counts the printed pages (GET /cv/pages,
    about a second) and warns, in the server's words, when the CV is now longer than its "Keep this CV to";
-   the save itself never waits for that.
+   the save itself never waits for that. The profile, like every line and paragraph, is a FormatBox
+   (cv/format.js) with Bold, Italic and Link.
 
    With `job`, the same editor works on one application's CV (the documents step, app/docs-step.js):
    it reads and saves /applications/<id>/cv, lists Hal's changes for the job with Undo and Redo
@@ -23,6 +24,7 @@ import { Note, Chip } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 import { ask } from "../ui/dialog.js";
 import { EntryCard, Marks, focusSoon, marksAt, copyWords } from "./edit-entry.js";
+import { FormatBox } from "./format.js";
 import { JobChanges, MAIN_CV } from "./job-changes.js";
 import { applyChange, addChange, blankEntry, newId, target } from "./doc-changes.js";
 import { cvUrl } from "./chosen.js";
@@ -63,8 +65,8 @@ function SectionCard({ s, act, marks, onCopy, copyTo }) {
       <${Marks} list=${marksAt(marks, target(s), true)} />
       ${!s.visible && html`<${Chip} tone="warn">Hidden from your CV<//>`}${s.locked && html`<${Chip}><${Icon} n="lock" c="s" />Locked<//>`}</div>
     ${(s.kind === "summary" || s.text) && html`<div class="rec-field" style="margin-top:12px"><label class="lab" for=${"f-" + target(s) + "/text"}>What it says</label>
-      <textarea class="input" rows="4" id=${"f-" + target(s) + "/text"} value=${s.text}
-        onInput=${e => act({ op: "replace", target: target(s) + "/text", value: e.target.value })}></textarea></div>`}
+      <${FormatBox} id=${"f-" + target(s) + "/text"} rows=${4} name=${"what " + s.title + " says"} value=${s.text}
+        onText=${v => act({ op: "replace", target: target(s) + "/text", value: v })} /></div>`}
     <div class="stack s" style="margin-top:12px">${s.entries.map((e, i) => html`<${EntryCard} key=${e.id} s=${s} e=${e} i=${i} n=${s.entries.length}
       act=${act} addId=${addId} marks=${marks} onCopy=${onCopy} copyTo=${copyTo} />`)}</div>
     ${s.kind !== "summary" && html`<div class="row" style="margin-top:12px">
