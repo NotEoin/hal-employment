@@ -15,6 +15,8 @@ Design decisions, each with its reason:
   its card (`profile.store.set_star`). A CV is not marked here: "Use this for applications" belongs to the CV
   of My CVs read from the same file (`cvstudio.store.file_cvs`, by SHA-256), and the CV that leads is
   `profile.cvs.current_source`, which also writes the `current` column (`profile.cvs.settle`).
+- The CVs list in an order of their own (`cv_order`): the CVs in use for applications first, in the person's
+  order on My CVs, then the rest newest first, so the list reads as the person's CVs, not as an upload log.
 - Coursework and lecture material can be for one module of their education card (`MODULE_SECTIONS`,
   migration 0029). `module` is only the person's choice, NULL until they make one and '' for "not for one
   module"; Hal's suggestion is the reader's (`details["module"]`), so a read again never changes the choice.
@@ -31,7 +33,7 @@ from pathlib import Path
 from jobhunt import db
 from jobhunt.core import paths
 from jobhunt.cvstudio import store as cv_store
-from jobhunt.profile import cvs
+from jobhunt.profile import cvs, merge
 from jobhunt.profile import store as profile_store
 from jobhunt.sections import registry, wrong_place
 
@@ -49,6 +51,8 @@ DISSERTATION_SECTION, DISSERTATION = "coursework", "dissertation"
 NOT_DISSERTATION = "other"     # the kind a piece takes when the person says it is not the dissertation after all
 SPLIT_KINDS = ("repo", "repo_url", "upload")   # code projects a monorepo may be (`sections.split`)
 TITLE_MAX = 200            # a title is a line; a longer one is a pasted paragraph
+MONTH_CHARS = len("2026-11")   # the year and month at the start of an ISO timestamp
+NO_MONTH = -1              # a CV with neither date goes after every dated one
 FILES_FOLDER = "record-sources"
 
 
@@ -218,7 +222,8 @@ def _project_shape(r: sqlite3.Row, found: dict) -> dict:
 
 
 def listing(con: sqlite3.Connection, section: str | None = None, target: int | None = None) -> list[dict]:
-    """The sources of one section (every section when None), for one card when `target` is given, oldest first."""
+    """The sources of one section (every section when None), for one card when `target` is given, oldest first;
+    the CVs alone in their own order (`cv_order`)."""
     sql, args = "SELECT * FROM record_sources WHERE 1 = 1", []
     if section:
         registry.get(section)
@@ -227,7 +232,25 @@ def listing(con: sqlite3.Connection, section: str | None = None, target: int | N
     if target is not None:
         sql += " AND target_id = ?"
         args.append(int(target))
-    return [shape(con, r) for r in con.execute(sql + " ORDER BY id", args)]
+    rows = con.execute(sql + " ORDER BY id", args).fetchall()
+    if section == CV_SECTION:
+        rows = cv_order(con, rows)
+    return [shape(con, r) for r in rows]
+
+
+def cv_order(con: sqlite3.Connection, rows: list[sqlite3.Row]) -> list[sqlite3.Row]:
+    """CVs in the order the page lists them: those in use for applications first, in the person's order on My
+    CVs; then the rest newest first, by the CV's own date (`dated`), else the month it was added, then when it
+    was added. A CV just added has no date until it is read, so it shows near the top, not at the bottom."""
+    used = cvs.in_use(con)
+
+    def month(r: sqlite3.Row) -> int:
+        return merge.month_index(r["dated"] or "", "end") or merge.month_index(r["added"][:MONTH_CHARS]) or NO_MONTH
+
+    first = sorted((r for r in rows if r["sha256"] in used), key=lambda r: (used[r["sha256"]], r["id"]))
+    rest = sorted((r for r in rows if r["sha256"] not in used), key=lambda r: (month(r), r["added"], r["id"]),
+                  reverse=True)
+    return first + rest
 
 
 def get(con: sqlite3.Connection, source_id) -> dict:

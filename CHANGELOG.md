@@ -51,6 +51,9 @@ What changed in each version, in plain words.
   **Make this my current CV** is gone. The chips say **Your record follows this CV** and **Fills gaps in your
   record**.
 
+- **Your CVs in a useful order.** On Your record, the CVs you use for applications come first, in the order
+  on My CVs, then your other CVs, newest first.
+
 ### Fixed
 
 - **A CV you add starts at version 1.** Adding a new CV used to show it as, say, "version 9" of your old one,

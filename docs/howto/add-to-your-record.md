@@ -13,7 +13,8 @@ the same for any subject: history essays, design portfolios, lab reports, busine
    Press **Use this for applications** on each CV Hal may write your applications from. It becomes one of
    your CVs on **My CVs** (Hal reads it first if it is new there, and the button shows how far it has got).
    The first CV in use, in the order on My CVs, shows **Your record follows this CV**: its facts come first.
-   With none in use, your newest CV leads. The others show **Fills gaps in your record**.
+   With none in use, your newest CV leads. The others show **Fills gaps in your record**. The list shows
+   the CVs in use first, in the order on My CVs, then the rest, newest first.
 2. Open **Work history**. On a job's card, open **Add a document for this job** and add a reference, a
    contract or the job description. Hal takes the job's title, dates and duties from it, after your current
    CV.

@@ -415,6 +415,10 @@ runs: tests use `tests/support/fake_claude/`.
     `in_use` and `my_cv`. On screen the toggle is `cv/cv-list.js` `UseToggle`, shared by both pages, with
     the words "Use this for applications" and no "star" (the words test bans it for the STAR method). Both
     lists reload on the `cv` events `star`, `archive`, `order`, `create` and `rename`.
+  - `sections.store.listing(con, "cv")` lists the record's CVs in `cv_order`: those in use first, in the
+    starred order (`profile.cvs.in_use`), then the rest newest first by `dated`, else the month in `added`
+    (so a CV still being read is near the top), then `added`. Children stay under their parent on the page
+    (`nested()` in `record/sections.js`).
 - Versions never change after they are written. `store.new_version` adds one under `BEGIN IMMEDIATE`, so two
   saves at once get two numbers, and publishes the event `cv` (with the CV's id as `cv`). The CV is `doc_id=`,
   else the one `base` or `parent` belongs to, else the lead CV. Numbers count one CV's own versions from 1.

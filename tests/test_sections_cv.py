@@ -301,6 +301,24 @@ class CurrentAndOlderCvs(unittest.TestCase):
         self.assertTrue(waiting["added"])
         self.assertEqual(third, newer, "a CV in use that is not read yet does not lead")
 
+    def test_the_cvs_list_puts_those_in_use_first_in_my_order_then_the_rest_newest_first(self):
+        with home() as (con, _, _):
+            old = add_cv(con, "Marnie CV old.md", MARNIE.older_cv)
+            new = add_cv(con, "Marnie CV.md", MARNIE.cv)
+            oldest = add_cv(con, "Marnie CV 2019.md", "# Marnie Quillfeather\n\nCV, May 2019\n")
+            waiting = pipeline.add_uploads(con, "cv", [Incoming("Marnie CV draft.md", b"# Marnie\n\nDraft\n")])
+            before = [s["id"] for s in store.listing(con, "cv")]
+            a, b = my_cv(con, "Marnie CV 2019.md", "# Marnie Quillfeather\n\nCV, May 2019\n"), \
+                my_cv(con, "Marnie CV old.md", MARNIE.older_cv)
+            cv_store.reorder([b, a], con=con)
+            after = [s["id"] for s in store.listing(con, "cv")]
+            cv_store.reorder([a, b], con=con)
+            swapped = [s["id"] for s in store.listing(con, "cv")][:2]
+        draft = waiting["added"][0]
+        self.assertEqual(before, [draft, new, old, oldest], "newest first; one not read yet by when it was added")
+        self.assertEqual(after, [old, oldest, draft, new], "the CVs in use first, in the order on My CVs")
+        self.assertEqual(swapped, [oldest, old])
+
     def test_an_old_current_choice_is_replaced_by_the_rule_and_the_record_no_longer_takes_one(self):
         with home() as (con, _, _):
             current = add_cv(con, "Marnie CV.md", MARNIE.cv)
