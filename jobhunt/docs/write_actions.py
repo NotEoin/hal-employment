@@ -26,7 +26,7 @@ from typing import Any
 from jobhunt import documents, pack
 from jobhunt.apply import actions as apply_actions
 from jobhunt.apply.queries import load_job
-from jobhunt.core import runner
+from jobhunt.core import runner, work
 from jobhunt.cvstudio import cv
 from jobhunt.docs import contacts, prep
 from jobhunt.writing import critique as writing_critique
@@ -92,7 +92,7 @@ def _changed_others(ctx, job, who: dict, docs: dict, words: str, read: dict, abo
 
 
 @runner.action("docs.change", area="documents", label="Changing your documents for {title} at {company}",
-               why="You asked: {words}", priority=1, example=_letter_example)
+               why="You asked: {words}", priority=1, work_class=work.ON_SCREEN, example=_letter_example)
 def change(ctx, job_id: str, words: str) -> dict:
     """Rewrites the letter, the message and the answers in the way the person asked, each checked as the pack's
     drafts are; nothing is sent."""
@@ -113,7 +113,7 @@ def change(ctx, job_id: str, words: str) -> dict:
 
 
 @runner.action("docs.rewrite_letter", area="documents", label="Rewriting the letter for {title} at {company}",
-               why="You asked: {words}", priority=1, example=_letter_example)
+               why="You asked: {words}", priority=1, work_class=work.ON_SCREEN, example=_letter_example)
 def rewrite_letter(ctx, job_id: str, words: str = "") -> dict:
     """Rewrites the cover letter alone, in the way the person asked, and checks it like any other."""
     job = load_job(ctx.con, job_id)
@@ -158,7 +158,7 @@ def prepare_for_interview(ctx, job_id: str) -> dict:
 
 
 @runner.action("docs.contacts", area="documents", label="Finding who to message about {title} at {company}",
-               why="You asked who to message", priority=1,
+               why="You asked who to message", priority=1, work_class=work.ON_SCREEN,
                example=_stand_in_example(contacts, "find", {"people": [], "by": "rules", "note": ""}))
 def find_contacts(ctx, job_id: str) -> dict:
     """Finds people worth messaging about one application; Hal sends nothing."""

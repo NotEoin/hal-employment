@@ -9,7 +9,7 @@ card and no CV (`pack.has_facts`): every pack would fail in turn.
 """
 from jobhunt import db, pack
 from jobhunt.ai import gpu
-from jobhunt.core import settings
+from jobhunt.core import settings, work
 from jobhunt.find import screen
 
 # A pack that failed is retried after this long, in case the cause was transient.
@@ -86,7 +86,8 @@ def step(con, report=lambda msg: None) -> tuple[bool, str]:
 
     report(f"drafting the pack for {job['company']}: {job['title']}")
     try:
-        pack.build(con, job["id"])
+        with work.entered(work.DOCUMENTS):   # the worker thread is in no action, so it says what it writes
+            pack.build(con, job["id"])
     except Exception as e:  # noqa: BLE001 - a bad advert or model reply must not stop the queue
         db.log(con, job["id"], "pack-error", f"{type(e).__name__}: {e}")
         con.commit()

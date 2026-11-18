@@ -6,6 +6,7 @@ import unittest
 from support.api import HalServer
 
 from jobhunt import db
+from jobhunt.core import work
 from jobhunt.core.settings.registry import SettingError
 from jobhunt.web import router
 from jobhunt.web.router import BadRequest, NotFound, Request, route
@@ -41,6 +42,11 @@ def _missing(req: Request) -> None:
 @route("GET", f"{PREFIX}/lost-key")
 def _lost_key(req: Request) -> None:
     return {}["a made-up key"]
+
+
+@route("GET", f"{PREFIX}/work-class")
+def _work_class(req: Request) -> dict:
+    return {"class": work.current()}
 
 
 @route("GET", f"{PREFIX}/lost-item")
@@ -119,6 +125,9 @@ class Routing(unittest.TestCase):
 
     def test_a_json_body_reaches_the_handler(self):
         self.assertEqual(self.c.post(f"{PREFIX}/body", {"a": [1, 2]}).json(), {"got": {"a": [1, 2]}})
+
+    def test_a_handler_runs_as_on_screen_work_for_the_ai_queue(self):
+        self.assertEqual(self.c.get(f"{PREFIX}/work-class").json(), {"class": work.ON_SCREEN})
 
     def test_none_becomes_ok(self):
         self.assertEqual(self.c.get(f"{PREFIX}/nothing").json(), {"ok": True})

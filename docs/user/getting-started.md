@@ -71,7 +71,8 @@ The first time you open Hal, the setup guide opens by itself. Each answer is sav
 3. On a job you like, press **Apply with Hal**. Hal writes the documents for this job: your CV adjusted
    for it, a cover letter, and answers to the form's questions. To choose several jobs first, press
    **Add to queue** on each instead (or Q): they wait under **Getting ready** on the **Applications**
-   board while Hal writes, and **Approve all** there approves them together.
+   board while Hal writes, and **Approve all** there approves them together. While Hal writes them, what
+   you ask for on a page and what you add to your record still go first.
 4. Read the documents. Change anything you like, the CV line by line
    ([how](../howto/edit-your-cv.md#edit-your-cv-for-one-job)), or ask Hal for changes. When you are happy,
    press **Approve and fill in the form**.

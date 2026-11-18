@@ -2,6 +2,7 @@
 job-keyed API that the form driver uses.
 """
 import contextlib
+import contextvars
 import json
 import os
 import subprocess
@@ -11,13 +12,14 @@ import textwrap
 import threading
 import unittest
 import unittest.mock
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 
 import support  # noqa: F401 - puts the run in a temporary home before jobhunt is imported
 
 from jobhunt import db
-from jobhunt.core import paths, runner
+from jobhunt.core import paths, runner, work
 
 WAIT_S = 10
 SHORT_S = 0.2   # long enough to see that a held action keeps `idle` waiting
@@ -214,6 +216,25 @@ class Runner(unittest.TestCase):
         runner.wait(runner.start("test.priority", priority=0))
         self.assertEqual(seen, [(2, 2), (0, 0)])
         self.assertEqual(runner.current_priority(), 0)
+
+    def test_an_actions_work_class_reaches_the_ai_queue_and_its_helper_threads(self):
+        seen = []
+
+        def look(ctx):
+            seen.append(work.current())
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                seen.append(pool.submit(contextvars.copy_context().run, work.current).result(WAIT_S))
+            return "ok"
+        self.kinds.add("record.test_read", look, priority=2)
+        self.kinds.add("test.document", look, priority=1, work_class=work.DOCUMENTS)
+        runner.wait(runner.start("record.test_read"))
+        runner.wait(runner.start("test.document"))
+        self.assertEqual(seen, [work.RECORD, work.RECORD, work.DOCUMENTS, work.DOCUMENTS])
+        self.assertIsNone(work.current())
+
+    def test_a_kind_with_an_unknown_work_class_is_refused(self):
+        with self.assertRaises(ValueError):
+            self.kinds.add("test.nowhere", lambda ctx: "ok", work_class=9)
 
     def test_what_the_person_just_asked_for_never_waits_behind_queued_jobs(self):
         """Regression (testers, 2026-11-04): "Fill it in again" waited behind a hundred queued jobs' documents."""

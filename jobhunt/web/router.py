@@ -4,6 +4,8 @@ A handler takes a `Request` and returns a dict or list (sent as JSON), None (`{"
 response types below. Errors become `{"error": {"code", "message", "field", "fix"}}` with the status of
 its code; an unexpected error is logged with its traceback and recorded in Activity, and the person sees
 plain words only. Handlers never do slow work: anything that may take over a second starts an action.
+A handler runs as on-screen work (`core.work.ON_SCREEN`), so the rare AI call one makes while the page waits
+goes ahead of background work in the AI's queue.
 """
 from __future__ import annotations
 
@@ -19,6 +21,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import parse_qs, unquote, urlparse
+
+from jobhunt.core import work
 
 if TYPE_CHECKING:
     from jobhunt.web.app import AppHandler
@@ -373,7 +377,8 @@ def dispatch(handler: AppHandler, method: str) -> bool:
         _allowed(r, req, handler)
         if method in ("POST", "PUT", "DELETE", "PATCH"):
             req.body, req.files = _read_body(handler, r.max_body)
-        result = r.fn(req)
+        with work.entered(work.ON_SCREEN):
+            result = r.fn(req)
         try:
             handler.reply(result)
         except ConnectionError:

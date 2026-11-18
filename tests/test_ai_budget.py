@@ -16,7 +16,7 @@ from jobhunt.ai import budget
 from jobhunt.ai.base import Limited, LLMUnavailable
 from jobhunt.ai.claude_cli import ClaudeCLIBackend
 from jobhunt.ai.openai_compat import OpenAICompatBackend
-from jobhunt.core import clock, paths, settings
+from jobhunt.core import clock, paths, settings, work
 from jobhunt.core.settings import store
 
 MORNING = "2026-10-22T10:00:00Z"        # 11:00 in London (summer time until 25 October)
@@ -118,6 +118,67 @@ class Allowance(InHome):
         for t in threads:
             t.join(5)
         self.assertEqual(order, [0, 1, 2])
+
+    def test_work_classes_go_in_order_and_first_come_first_served_within_one(self):
+        order, turns = [], ai._Turns()
+
+        def call(cls, name):
+            with turns.turn(cls, 1, 5):
+                order.append(name)
+
+        queued = [(work.OTHER, "mail"), (work.DOCUMENTS, "letter 1"), (work.RECORD, "record 1"),
+                  (work.DOCUMENTS, "letter 2"), (work.ON_SCREEN, "critique"), (work.RECORD, "record 2")]
+        with turns.turn(work.DOCUMENTS, 1, 5):
+            threads = []
+            for cls, name in queued:
+                threads.append(threading.Thread(target=call, args=(cls, name)))
+                threads[-1].start()
+                deadline = time.monotonic() + QUEUED_WAIT_S
+                while len(turns._queue) < len(threads) and time.monotonic() < deadline:
+                    time.sleep(QUEUED_POLL_S)
+                self.assertEqual(len(turns._queue), len(threads))
+        for t in threads:
+            t.join(5)
+        self.assertEqual(order, ["critique", "record 1", "record 2", "letter 1", "letter 2", "mail"])
+
+    def test_a_record_update_queued_behind_document_writes_gets_the_next_ai_turn(self):
+        settings.set("ai.parallel", 1)
+        release = threading.Event()
+        first_in = threading.Event()
+
+        class Held(FakeBackend):
+            def chat(self, req, model):
+                first_in.set()
+                release.wait(QUEUED_WAIT_S)
+                return super().chat(req, model)
+
+        def ask(cls, purpose):
+            with work.entered(cls):
+                ai.chat("s", "u", purpose=purpose)
+
+        with ai.use(Held(default="ok")) as fake:
+            threads = [threading.Thread(target=ask, args=(work.DOCUMENTS, "letter 0"))]
+            threads[0].start()
+            self.assertTrue(first_in.wait(QUEUED_WAIT_S))
+            for cls, purpose in [(work.DOCUMENTS, "letter 1"), (work.DOCUMENTS, "letter 2"),
+                                 (work.DOCUMENTS, "letter 3"), (work.RECORD, "record read")]:
+                threads.append(threading.Thread(target=ask, args=(cls, purpose)))
+                threads[-1].start()
+                deadline = time.monotonic() + QUEUED_WAIT_S
+                while len(ai._turns._queue) < len(threads) - 1 and time.monotonic() < deadline:
+                    time.sleep(QUEUED_POLL_S)
+            release.set()
+            for t in threads:
+                t.join(QUEUED_WAIT_S)
+        self.assertEqual([r.purpose for r in fake.log],
+                         ["letter 0", "record read", "letter 1", "letter 2", "letter 3"])
+        # the class only orders the queue: the allowance still sees background work, as before
+        self.assertEqual({r.priority for r in fake.log}, {budget.BACKGROUND})
+
+    def test_an_explicit_priority_picks_the_class_outside_any_action(self):
+        self.assertEqual([work.of_call(p) for p in (0, 1, 2)], [work.ON_SCREEN, work.DOCUMENTS, work.OTHER])
+        with work.entered(work.RECORD):
+            self.assertEqual(work.of_call(0), work.RECORD)
 
 
 class ClaudeLimit(InHome):

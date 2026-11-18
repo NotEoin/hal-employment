@@ -176,6 +176,15 @@ processes, once a second. Payloads carry ids, never private data.
   `done_total` and `eta_s`: the time per item since the action started, times the items left.
 - Two pools: user (4 threads, priorities 0 and 1) and background (2, priority 2). One running action per
   subject unless `replace=True`.
+- Each kind has a work class (`core/work.py`, `ActionKind.work_class`) that orders its AI calls: 0 on screen
+  (what the person waits for), 1 record updates, 2 document writes, 3 everything else. The default is on
+  screen at priority 0; else a `record.*` kind is a record update; else a background kind is other work;
+  else `cv.*`, `apply.*` and `form.*` are on screen and the rest are document writes. Set explicitly:
+  `docs.change`, `docs.rewrite_letter`, `docs.picks` and `docs.contacts` are on screen (the person typed or
+  ticked something and waits), and `record.sort` is other work (it proposes places and reads nothing in).
+  The runner enters the class while an action runs (`work.enter`); code that hands work to its own threads
+  copies the context (`contextvars.copy_context().run`), as `sections.actions` and the ingest workers do.
+  A web request handler runs on screen; the worker's pack builds enter document writes themselves.
 - Bookkeeping writes go through one writer thread with its own connection, so a caller holding a write
   transaction never waits on itself; reads in the same process call `runner.flush()` first.
 - `runner.idle(timeout)` waits until no action of this process is queued or running, each has closed its
@@ -303,9 +312,14 @@ comes from their settings.
 2. The allowance (`ai/budget.py`): the "Never use online AI" switch, the pause after a Claude limit, and for
    Claude only the hours kept free and the daily cap on background checks.
 3. The GPU gate (`ai/gpu.py`, local models only): wait while another program holds the graphics card.
-4. The backend, under `ai.at_once()` turns served lowest priority first: the slots the backend says its
-   model serves (Hal's gateway lists `meta.slots`, its writer's `parallel`), else `ai.parallel`. More calls
-   than slots would only queue at the model, inside each call's timeout.
+4. The backend, under `ai.at_once()` turns (`ai._Turns`, keyed on work class then arrival, so first come
+   first served within a class): the slots the backend says its model serves (Hal's gateway lists
+   `meta.slots`, its writer's `parallel`), else `ai.parallel`. More calls than slots would only queue at the
+   model, inside each call's timeout. A call's class is the one entered around it (`work.current`), else its
+   priority's (`work.for_priority`: an explicit `priority=` of 0 is on screen, 1 a document write, 2 other
+   work). The allowance (step 2) and the GPU wait and claim (step 3) still go by the priority alone, which
+   is background (2) for calls made in actions, as before classes: the class only orders the queue, so a
+   document write never gets past the Claude daily cap or the keep-free hours by being moved.
 5. One `ai_usage` row of sizes only.
 
 Backends: `ai/ollama.py` (a local model through Ollama), `ai/openai_compat.py` (any local server that speaks
@@ -1316,7 +1330,7 @@ people). Readers only take facts out of a source, within that frame.
 - `actions`: `record.sources` reads a list of source ids at priority 1, resumable, and then publishes a
   `profile` event naming them, so the profile tabs read their cards again. It keeps `ai.at_once()` sources
   with the AI at once: `read` is `begin`, `run` and `finish`, and only `run` (the reader, which touches no
-  database) goes to a worker thread, with the action's context (`as_batch`, its priority); the action's
+  database) goes to a worker thread, with the action's context (`as_batch`, its work class); the action's
   own thread takes each source up and files it, so the record and the database keep one writer. A source
   the AI could not read goes back first, and no source is handed out until the wait is over. `routes`: under
   `/api/v2/record/sources` (the shapes are in its header), with `GET /api/v2/record/sections`, and

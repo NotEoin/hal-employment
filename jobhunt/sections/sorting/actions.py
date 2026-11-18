@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from jobhunt.core import events, runner
+from jobhunt.core import events, runner, work
 from jobhunt.sections import actions
 from jobhunt.sections.sorting import store as sorts
 
@@ -57,7 +57,7 @@ def _accept_example(world) -> dict:
 
 
 @runner.action(SORT, area="documents", label="Sorting your folder", why="You asked Hal to sort a big folder",
-               priority=2, exclusive="kind", resumable=True, example=_example)
+               priority=2, work_class=work.OTHER, exclusive="kind", resumable=True, example=_example)
 def sort_folder(ctx, sort_id: int) -> dict:
     """Proposes a section for each file and project folder of the sort; reads nothing into the record."""
     ctx.step("Looking through your files")

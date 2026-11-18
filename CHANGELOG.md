@@ -12,6 +12,12 @@ What changed in each version, in plain words.
   into your record gives the same time as the Record page. Work that is not counted in files or pages, such
   as writing a cover letter, shows no time.
 
+- **What you are waiting for goes first.** Hal's AI now serves work in this order: what you asked for on
+  the page (such as a recruiter's read of your CV, or a change to a letter), then updates to your record,
+  then application documents, then everything else (job searches, email, upkeep). Before, everything waited
+  in one line, so adding to your record or asking for a critique could wait behind a long run of
+  applications being written.
+
 - **Add your CV as a Markdown file.** Hal now reads CVs written in Markdown (.md): the top heading is your
   name, `##` headings are sections and `###` headings are jobs, qualifications or projects. Bold, italic
   and link marks are left out of what Hal keeps.

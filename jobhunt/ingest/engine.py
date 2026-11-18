@@ -31,6 +31,7 @@ first written by rules back in a batch and rewrites each at its own path, so lin
 """
 from __future__ import annotations
 
+import contextvars
 import logging
 import os
 import re
@@ -525,7 +526,9 @@ def _read_items(con: sqlite3.Connection, todo: list[sqlite3.Row], batch: str, dr
                     continue
                 if sha:
                     handed.add(sha)
-                in_hand.append((row, pool.submit(_prepare, dict(row), _rule(row), templates)))
+                # the worker carries this thread's context: the action's work class for the AI's queue
+                in_hand.append((row, pool.submit(contextvars.copy_context().run, _prepare, dict(row), _rule(row),
+                                                 templates)))
             if not in_hand:
                 break
             row, job = in_hand.popleft()

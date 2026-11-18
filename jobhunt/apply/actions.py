@@ -25,7 +25,7 @@ from typing import Any
 from jobhunt import browser, db, documents
 from jobhunt.apply import driver
 from jobhunt.apply.queries import column_of, load_app, load_job, mark_applied, set_app, site_of
-from jobhunt.core import runner, settings
+from jobhunt.core import runner, settings, work
 from jobhunt.cvstudio import tailor
 
 log = logging.getLogger(__name__)
@@ -104,7 +104,8 @@ def _picks_example(world: Any) -> dict:
 
 
 @runner.action("docs.picks", area="documents", label="Adjusting your CV for what {title} at {company} cares about",
-               why="You ticked what this job cares about most", priority=1, example=_picks_example)
+               why="You ticked what this job cares about most", priority=1, work_class=work.ON_SCREEN,
+               example=_picks_example)
 def adjust_for_picks(ctx, job_id: str, priorities: list[str]) -> dict:
     """Makes the job's CV again from the requirements the person ticked (`tailor.prepare`), then its PDF.
 

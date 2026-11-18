@@ -2,9 +2,16 @@
 
 `chat` runs, in order: the private-answer guard; the allowance (`budget.admit`); the GPU gate
 for backends on this computer's card; the backend call, at most `at_once` at once (the slots the backend says its
-model serves, else `ai.parallel`) with lower priority numbers served first; and one `ai_usage` row with
-sizes only. A failure raises `LLMUnavailable` with a `kind` and plain words, and callers fall back to rules
-as they always have.
+model serves, else `ai.parallel`) with lower work classes served first (`core.work`: on screen, record updates,
+document writes, the rest), first come first served within a class; and one `ai_usage` row with sizes only.
+
+A call's class is the one entered around it (the runner enters its action's class), else its explicit
+`priority` mapped by `work.for_priority`. The allowance and the GPU claim still go by the priority alone
+(`budget.current_priority`, 2 inside actions as before): the class only orders the queue, so moving a document
+write behind a record update never lets it past the Claude daily cap or the keep-free hours.
+
+A failure raises `LLMUnavailable` with a `kind` and plain words, and callers fall back to rules as they always
+have.
 
 The backend comes from `ai.provider` (`provider.current`, which never changes by itself) and is rebuilt
 when any setting changes. In a test run it is a made-up AI that is never ready, unless a test installs one
@@ -38,7 +45,7 @@ from jobhunt.ai.base import (
 )
 from jobhunt.ai.budget import at_priority, current_priority
 from jobhunt.ai.counting import Calls, count, counted
-from jobhunt.core import plugins
+from jobhunt.core import plugins, work
 
 __all__ = [
     "Backend",
@@ -193,7 +200,8 @@ def at_once(role: str = "checker") -> int:
 
 
 class _Turns:
-    """At most `limit` calls at once; a waiting call with a lower priority number goes first."""
+    """At most `limit` calls at once; a waiting call of a lower work class goes first, then the one that came
+    first."""
 
     def __init__(self) -> None:
         self._cond = threading.Condition()
@@ -202,8 +210,8 @@ class _Turns:
         self._seq = itertools.count()
 
     @contextlib.contextmanager
-    def turn(self, priority: int, limit: int, timeout: float) -> Iterator[None]:
-        me = (priority, next(self._seq))
+    def turn(self, cls: int, limit: int, timeout: float) -> Iterator[None]:
+        me = (cls, next(self._seq))
         with self._cond:
             heapq.heappush(self._queue, me)
             ok = self._cond.wait_for(lambda: self._running < limit and self._queue[0] == me, timeout=timeout)
@@ -251,7 +259,8 @@ def chat(system: str, user: str, *, role: str = "checker", json_out: bool = Fals
     if be.local_gpu and gpu.gate_on():
         gpu.wait(req.priority)
     model = model_for(be, req.role)
-    with _turns.turn(req.priority, at_once(req.role), req.timeout), \
+    cls = work.of_call(req.priority)
+    with _turns.turn(cls, at_once(req.role), req.timeout), \
             (gpu.claim(req.priority) if be.local_gpu else contextlib.nullcontext()):
         try:
             result = be.chat(req, model)

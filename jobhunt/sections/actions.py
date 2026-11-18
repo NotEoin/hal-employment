@@ -152,7 +152,7 @@ class _Reading:
                 self.done += 1
                 continue
             self.begun[source_id] = begun
-            # the worker carries this thread's context: the batch token (`as_batch`) and the action's priority
+            # the worker carries this thread's context: the batch token (`as_batch`) and the action's work class
             self.in_hand[source_id] = pool.submit(contextvars.copy_context().run, pipeline.run, begun)
 
     def _file(self, source_id: int, reading) -> None:

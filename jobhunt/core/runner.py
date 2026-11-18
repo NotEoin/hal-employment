@@ -3,8 +3,10 @@
 An action kind is registered with `@action(kind, area=, label=, why=)`; `start(kind, ...)` writes an
 `actions` row and its Activity row (`running = 1`) and runs `fn(ctx, **params)` on one of two pools: the
 user pool for priorities 0 and 1, the background pool for 2. `run(kind, ...)` does the same in the calling
-thread, for the command line and scheduled children. Steps go to `action_steps`; the server's `DbPoller`
-turns those rows into `step` events, so the runner itself publishes only `action` and `status`.
+thread, for the command line and scheduled children. Each kind also has a work class (`core.work`, the kind's
+`work_class`), entered while it runs, which orders its AI calls in the AI's queue. Steps go to
+`action_steps`; the server's `DbPoller` turns those rows into `step` events, so the runner itself publishes
+only `action` and `status`.
 
 Design decisions, each with its reason:
 
@@ -44,7 +46,7 @@ from pathlib import Path
 from typing import Any
 
 from jobhunt import db
-from jobhunt.core import clock, events, filelock, paths, plugins
+from jobhunt.core import clock, events, filelock, paths, plugins, work
 
 log = logging.getLogger(__name__)
 
@@ -87,6 +89,13 @@ class ActionKind:
     exclusive: str = "subject"    # "subject": one running per subject unless replace=True; "kind"; "none"
     example: Callable[[Any], dict] | None = None   # params for the synthetic world (gate G9)
     icon: str = "hal"
+    work_class: int | None = None  # the AI queue's class (`core.work`); None takes the kind's default
+
+    def __post_init__(self) -> None:
+        cls = work.for_kind(self.kind, self.priority) if self.work_class is None else self.work_class
+        if cls not in work.CLASSES:
+            raise ValueError(f"action kind {self.kind!r}: work_class must be one of {work.CLASSES}")
+        object.__setattr__(self, "work_class", cls)
 
 
 # Records a failed job-keyed action where its caller keeps state: `(con, job_id, message)`.
@@ -675,7 +684,7 @@ def _execute_counted(live: _Live, fn: Callable[[Ctx], Any], resumed_from: str | 
         _finish(live, "error", message=f"{e}", error=f"{e}", tone="bad")
         return
     ctx = Ctx(live, con, resumed_from)
-    tokens = (_CURRENT.set(ctx), _PRIORITY.set(live.priority))
+    tokens = (_CURRENT.set(ctx), _PRIORITY.set(live.priority), work.enter(live.kind.work_class))
     if not hasattr(_RUN, "actions"):
         _RUN.actions, _RUN.ctx = {}, {}
     if live.subject:
@@ -704,6 +713,7 @@ def _execute_counted(live: _Live, fn: Callable[[Ctx], Any], resumed_from: str | 
     finally:
         _CURRENT.reset(tokens[0])
         _PRIORITY.reset(tokens[1])
+        work.leave(tokens[2])
         if live.subject:
             _RUN.actions.pop(live.subject, None)
             _RUN.ctx.pop(live.subject, None)
