@@ -149,7 +149,10 @@ The server speaks HTTP/1.1 and keeps a connection open for the next request, for
 idle. With a connection per request, a page load opened about a hundred, and Windows, which keeps each closed
 connection's port for two minutes, ran out of ports in the browser tests (`net::ERR_NO_BUFFER_SPACE`). Over
 `tests/ui` the servers now accept 1,893 connections instead of 19,289 (measured 2026-11-18). An idle
-connection checks every 0.25 s whether the server is stopping, so `stop()` never waits on one. A connection
+connection checks every 0.25 s whether the server is stopping, so `stop()` never waits on one. Once a
+request starts arriving, each read of its line, headers and body waits at most `REQUEST_READ_S` (30 s), so a
+client that sends part of a request and stops loses its connection instead of holding a thread and `stop()`;
+`send_response` lifts the limit, so replies and event streams are written with none. A connection
 closes after an event stream, an error, or any request that carried a body, because a refusal answers before
 reading the body, and the unread bytes would be taken for the next request. The app's own files carry an
 `ETag` and `Cache-Control: no-cache`: a reload revalidates each file and gets a 304 with no body. The browser

@@ -61,6 +61,10 @@ CONNECT_TIMEOUT_S = 0.5    # a loopback connect to a listening port is instant; 
 GIT_TIMEOUT_S = 5
 KEEP_ALIVE_S = 15          # an idle connection closes after this; a page reuses one within milliseconds
 IDLE_POLL_S = 0.25         # how soon an idle connection sees the server stop, so `stop` never waits on one
+# A request that has started arriving must keep arriving: a pause this long between its bytes ends the
+# connection, so a client that sends part of a request and stops cannot hold a thread (and `stop`) for good.
+# Each read waits this long, not the whole request, so a big upload over a slow tunnel still arrives.
+REQUEST_READ_S = 30
 STATIC_CACHE = "no-cache"  # the browser keeps a copy of the app's files but asks before each use
 LOG_BYTES = 2 * 1024 * 1024        # 5 files of 2 MB
 LOG_COUNT = 5
@@ -124,9 +128,23 @@ class AppHandler(BaseHTTPRequestHandler):
     def handle(self) -> None:
         """Answers requests on this connection until the browser closes it, it idles or the server stops."""
         self.close_connection = True
-        self.handle_one_request()
+        self._one_request()
         while not self.close_connection and self._next_request_comes():
+            self._one_request()
+
+    def _one_request(self) -> None:
+        """One request, its line, headers and body read with `REQUEST_READ_S` per read; the reply is written
+        with no limit (`send_response` lifts it), so an event stream or a long download is never cut."""
+        self.connection.settimeout(REQUEST_READ_S)
+        try:
             self.handle_one_request()
+        except TimeoutError:
+            self.close_connection = True
+
+    def send_response(self, code: int, message: str | None = None) -> None:
+        """Starts a reply; the request has been read by now, so its read limit is lifted for the writing."""
+        self.connection.settimeout(None)
+        super().send_response(code, message)
 
     def _next_request_comes(self) -> bool:
         """True once the next request starts arriving; False after `KEEP_ALIVE_S` idle or when the server stops.
@@ -259,9 +277,9 @@ class AppHandler(BaseHTTPRequestHandler):
             self.close_connection = True
         try:
             self._route(method)
-        except ConnectionError:
+        except (ConnectionError, TimeoutError):
             self.close_connection = True
-            return  # the browser went away; there is no one to send the error to
+            return  # the browser went away, or stopped sending its request; there is no one to answer
         except Exception:
             self.close_connection = True   # part of a reply may have gone before the error
             log.exception("%s %s failed", method, self.path)

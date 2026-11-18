@@ -28,6 +28,8 @@ HOLD_S = 0.3      # how long the slow route keeps its request in flight
 BURST = 24        # about what a page opens at once: its modules, styles, data and event stream
 CONNECT_S = 2     # a connection the backlog has room for is made at once
 STATIC = "/app/core/store.js"   # one of the app's own files
+SHORT_READ_S = 0.3   # the read limit in these tests, so a stalled request ends quickly
+BUFFER = 4096
 ENTERED, RELEASE = threading.Event(), threading.Event()
 
 
@@ -52,9 +54,10 @@ class Gone(io.RawIOBase):
 
 
 def handler(cls, error: type[OSError]):
-    """A request handler with no socket, writing to a `Gone` file."""
+    """A request handler with a stand-in socket, writing to a `Gone` file."""
     h = cls.__new__(cls)
     h.wfile = Gone(error)
+    h.connection = mock.Mock(spec=socket.socket)   # the socket under the file: only its read limit is changed
     h.request_version = "HTTP/1.1"
     h.requestline = "GET / HTTP/1.1"
     h.command = "GET"
@@ -175,6 +178,38 @@ class Serving(unittest.TestCase):
         started = time.monotonic()
         self.assertTrue(self.httpd.stop())
         self.assertLess(time.monotonic() - started, app.KEEP_ALIVE_S / 2)
+
+    def test_a_request_that_stops_arriving_ends_its_connection_and_never_holds_stop(self):
+        # regression: no read timeout, so half a request held its thread for good and `stop` waited it out
+        for kept_alive in (False, True):
+            with self.subTest(kept_alive=kept_alive), mock.patch.object(app, "REQUEST_READ_S", SHORT_READ_S):
+                if kept_alive:
+                    con = self.connection()
+                    self.assertEqual(self.ask(con, "GET", "/healthz")[0].status, 200)
+                    sock = con.sock
+                else:
+                    sock = socket.create_connection((app.BIND, self.port), timeout=WAIT_S)
+                    self.addCleanup(sock.close)
+                sock.sendall(b"GET /healthz HTTP/1.1\r\nHo")
+                started = time.monotonic()
+                self.assertEqual(sock.recv(BUFFER), b"")      # the server closed it
+                self.assertLess(time.monotonic() - started, WAIT_S / 2)
+        started = time.monotonic()
+        self.assertTrue(self.httpd.stop())
+        self.assertLess(time.monotonic() - started, app.STOP_WAIT_S / 2)
+
+    def test_a_reply_is_never_cut_by_the_read_limit(self):
+        with mock.patch.object(app, "REQUEST_READ_S", SHORT_READ_S):
+            ENTERED.clear()
+            RELEASE.clear()
+            got: list[int] = []
+            client = threading.Thread(target=self.get, args=("/api/v2/test-app/slow", got))
+            client.start()
+            self.assertTrue(ENTERED.wait(WAIT_S))
+            time.sleep(SHORT_READ_S * 2)           # the route works longer than a read may wait
+            RELEASE.set()
+            client.join(WAIT_S)
+        self.assertEqual(got, [200])
 
     def test_a_running_server_answers_its_health_check(self):
         self.assertTrue(app.answering(self.port))
