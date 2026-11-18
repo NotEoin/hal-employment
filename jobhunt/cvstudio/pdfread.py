@@ -228,6 +228,56 @@ def page_widths(pdf: Path | bytes) -> list[float]:
 
 
 @dataclass(frozen=True)
+class Link:
+    """A link annotation: the box it covers on its page, in points from the bottom left, and its address."""
+
+    page: int
+    left: float
+    bottom: float
+    right: float
+    top: float
+    url: str
+
+
+def _uri(doc: pdfium.PdfDocument, link: pdfium_c.FPDF_LINK) -> str:
+    """The address a link's action opens, or "" for a link inside the document."""
+    action = pdfium_c.FPDFLink_GetAction(link)
+    if not action:
+        return ""
+    size = pdfium_c.FPDFAction_GetURIPath(doc.raw, action, None, 0)
+    if size <= 1:
+        return ""
+    buf = ctypes.create_string_buffer(size)
+    pdfium_c.FPDFAction_GetURIPath(doc.raw, action, buf, size)
+    return buf.value.decode("utf-8", "replace")
+
+
+def links(pdf: Path | bytes) -> list[Link]:
+    """Every link annotation that opens an address, with the box it covers; [] when the PDF cannot be read."""
+    with _LOCK:
+        try:
+            doc = _open(pdf)
+        except Unreadable:
+            return []
+        try:
+            out = []
+            for n in range(len(doc)):
+                page = doc[n]
+                pos, link = ctypes.c_int(0), pdfium_c.FPDF_LINK()
+                while pdfium_c.FPDFLink_Enumerate(page.raw, ctypes.byref(pos), ctypes.byref(link)):
+                    box = pdfium_c.FS_RECTF()
+                    url = _uri(doc, link)
+                    if url and pdfium_c.FPDFLink_GetAnnotRect(link, ctypes.byref(box)):
+                        out.append(Link(n + 1, min(box.left, box.right), min(box.bottom, box.top),
+                                        max(box.left, box.right), max(box.bottom, box.top), url))
+            return out
+        except pdfium.PdfiumError:
+            return []
+        finally:
+            doc.close()
+
+
+@dataclass(frozen=True)
 class Shape:
     """A small drawn shape, such as a list marker a browser draws instead of a bullet character."""
 

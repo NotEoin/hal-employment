@@ -199,19 +199,6 @@ class Rules(unittest.TestCase):
                     self.assertEqual(e.end, "")
 
 
-def unlinked(doc):
-    """The document with every link's words kept and its address left out."""
-    def words(text: str) -> str:
-        return inline.to_text([inline.Run(r.text, r.bold, r.italic) for r in inline.runs(text)])
-    for s in doc.sections:
-        s.text = words(s.text)
-        for e in s.entries:
-            e.text = words(e.text)
-            for b in e.bullets:
-                b.text = words(b.text)
-    return doc
-
-
 def browser_doc(ext: str):
     """The rules' reading of the made-up CV printed by a browser ("pdf") or of its Markdown ("md")."""
     name = f"{BROWSER_NAME}.{ext}"
@@ -245,8 +232,26 @@ class BrowserPrinted(unittest.TestCase):
                 self.assertTrue(inline.plain(tide.text).startswith("Also: a seat finder"))
 
     def test_the_printed_pdf_and_its_markdown_read_the_same(self):
-        # the made-up PDF draws no link annotations, so only the Markdown keeps its links
-        self.assertEqual(to_json(unlinked(browser_doc("pdf"))), to_json(unlinked(browser_doc("md"))))
+        self.assertEqual(to_json(browser_doc("pdf")), to_json(browser_doc("md")))
+
+    def test_a_printed_link_over_a_lines_words_is_kept_as_a_link(self):
+        data = (FOLDER / f"{BROWSER_NAME}.pdf").read_bytes()
+        self.assertIn("https://example.org/bus-board", [k.url for k in pdfread.links(data)])
+        bus = next(ln for ln in parse.lines_of(data, "pdf") if ln.text.startswith("Bus Board"))
+        self.assertTrue(bus.marked.startswith("[**Bus Board**](https://example.org/bus-board) (TypeScript): live"))
+
+    def test_only_web_and_email_links_are_read_from_a_pdf(self):
+        def char(ch: str, x: float, index: int) -> pdfread.Char:
+            return pdfread.Char(ch, 1, x, 700.0, x + 4.5, 709.0, 10.0, x, 700.0, index=index)
+
+        drawn = [char(ch, 200.0 + 6 * i, i) for i, ch in enumerate("see notes or mail")]
+        boxes = [pdfread.Link(1, 223.0, 698.0, 252.0, 712.0, "javascript:alert(1)"),
+                 pdfread.Link(1, 271.0, 698.0, 302.0, 712.0, "mailto:a@example.org")]
+        with mock.patch.object(pdfread, "chars", return_value=drawn), \
+                mock.patch.object(pdfread, "links", return_value=boxes):
+            lines = pdflines.pdf_lines(b"")
+        self.assertEqual([(ln.text, ln.marked) for ln in lines],
+                         [("see notes or mail", "see notes or [mail](mailto:a@example.org)")])
 
     def test_bold_entry_headings_and_bold_lead_ins_are_seen_in_the_pdf(self):
         lines = parse.lines_of((FOLDER / f"{BROWSER_NAME}.pdf").read_bytes(), "pdf")

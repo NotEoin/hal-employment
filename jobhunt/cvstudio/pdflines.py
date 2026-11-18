@@ -10,8 +10,10 @@ judgement here means `pdfread.py` stays free of CV rules and this one stays free
   sign. `pdf_lines` therefore finds bold from font names, list items from marker shapes or indents, and
   joins a row to the one above when its first word would not have fitted there (see the constants below).
 - The thresholds are shares of the type size, so they hold at any scale; each says where its value comes from.
-- Each row keeps every character's bold and italic (`styles`, one per character of its text, a space taking
-  what both its neighbours share), so a line keeps bold and italic words inside it as marks (`Line.marked`).
+- Each row keeps every character's bold, italic and link (`styles`, one per character of its text, a space
+  taking what both its neighbours share), so a line keeps bold and italic words and links inside it as marks
+  (`Line.marked`). A character links to an address when its middle lies inside a link annotation of its
+  page (`pdfread.links`), as a browser prints `<a href>`; only http, https and mailto addresses are kept.
 
 Moved out of `parse.py` with no change.
 """
@@ -44,7 +46,8 @@ INDENT_MIN = 0.5                # an indent under half the type size is ink over
 INDENT_MAX = 5.0                # a list indents about 1.5 type sizes (CSS 13 pt at 9.2 pt, Word 0.25 in at
                                 # 11 pt); five allows deep ones while a centred line is usually further in
 
-PLAIN = (False, False)          # a character's (bold, italic) when it is neither
+PLAIN = (False, False, "")      # a character's (bold, italic, link) when it is none of them
+Style = tuple[bool, bool, str]
 
 
 @dataclass
@@ -63,7 +66,7 @@ class _Row:
     italic: bool
     bullet: bool
     tab: bool
-    styles: tuple[tuple[bool, bool], ...] = ()     # (bold, italic) of each character of `text`
+    styles: tuple[Style, ...] = ()     # (bold, italic, link) of each character of `text`
 
 
 def _spacer(chars: list[pdfread.Char]):
@@ -90,16 +93,29 @@ def _spacer(chars: list[pdfread.Char]):
     return spaced
 
 
-def _row(row: list[pdfread.Char], spaced) -> _Row | None:
+def _link_of(c: pdfread.Char, links: list[pdfread.Link]) -> str:
+    """The web or email address of the link annotation over the character's middle, or ""."""
+    x, y = (c.left + c.right) / 2, (c.bottom + c.top) / 2
+    return next((inline.safe_link(k.url) for k in links
+                 if k.page == c.page and k.left <= x <= k.right and k.bottom <= y <= k.top), "")
+
+
+def _shared(a: Style, b: Style) -> Style:
+    """The style a space between two characters takes: what both of them have."""
+    return (a[0] and b[0], a[1] and b[1], a[2] if a[2] == b[2] else "")
+
+
+def _row(row: list[pdfread.Char], spaced, links: list[pdfread.Link] = ()) -> _Row | None:
     """A row of characters as text, with its geometry and how much of it is bold."""
     glyphs = sorted((c for c in row if not c.char.isspace()), key=lambda c: c.x)
     if not glyphs:
         return None
     text, lead, tab, starts, styles = "", None, False, [], []
+    own = [(c.bold, c.italic, _link_of(c, links) if links else "") for c in glyphs]
     for i, c in enumerate(glyphs):
         if i:
             prev = glyphs[i - 1]
-            gap = (prev.bold and c.bold, prev.italic and c.italic)
+            gap = _shared(own[i - 1], own[i])
             if c.left - prev.right > COLUMN_GAP * max(c.points, 1.0):
                 text, tab = text + "\t", True
                 styles.append(gap)
@@ -110,7 +126,7 @@ def _row(row: list[pdfread.Char], spaced) -> _Row | None:
             lead = text
         starts.append(len(text))
         text += c.char
-        styles.append((c.bold, c.italic))
+        styles.append(own[i])
     body, bullet = _bulleted(text)
     off = text.find(body)
     skip = 1 if bullet and len(glyphs) > 1 and glyphs[0].char not in body[:1] else 0
@@ -167,7 +183,7 @@ def _join(a: _Row, b: _Row) -> _Row:
     glue = "" if len(a.text) > 1 and a.text[-1] in "-/" and a.text[-2].isalnum() and b.text[:1].isalnum() else " "
     lead = (a.text + glue + b.lead).rstrip() if a.bold else a.lead
     last, first = a.styles[-1] if a.styles else PLAIN, b.styles[0] if b.styles else PLAIN
-    joint = ((last[0] and first[0], last[1] and first[1]),) if glue else ()
+    joint = (_shared(last, first),) if glue else ()
     return _Row(a.text + glue + b.text, a.page, b.y, a.size, a.left, b.right, a.first_word, a.bold and b.bold,
                 a.text + glue + b.text if a.bold and b.bold else lead, a.italic and b.italic, a.bullet, False,
                 a.styles + joint + b.styles)
@@ -191,7 +207,8 @@ def pdf_lines(data: bytes) -> list[Line]:
             grouped[-1].append(c)
         else:
             grouped.append([c])
-    rows = [r for r in (_row(g, spaced) for g in grouped) if r is not None and r.text]
+    links = pdfread.links(data)
+    rows = [r for r in (_row(g, spaced, links) for g in grouped) if r is not None and r.text]
     edges: dict[int, float] = {}
     for r in rows:
         width = widths[r.page - 1] if r.page <= len(widths) else float("inf")
@@ -221,7 +238,7 @@ def pdf_lines(data: bytes) -> list[Line]:
 
 
 def _marked(r: _Row) -> str:
-    """The row's text with its bold and italic words as marks; "" when it has none."""
+    """The row's text with its bold and italic words and its links as marks; "" when it has none."""
     if len(r.styles) != len(r.text) or "\t" in r.text:
         return ""
-    return marked_text([inline.Run(ch, b, i) for ch, (b, i) in zip(r.text, r.styles, strict=True)], r.text)
+    return marked_text([inline.Run(ch, *style) for ch, style in zip(r.text, r.styles, strict=True)], r.text)

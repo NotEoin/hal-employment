@@ -241,8 +241,9 @@ def pdf_bytes(lines: list[Line], *, pages: int | None = None) -> bytes:
 # A fourth made-up person, written as Markdown and printed the way Chrome prints a web page (Producer
 # "Skia/PDF"): type set in CSS pixels on a page scaled by 0.75, subset font names, no space characters
 # (each word is placed by a TJ offset, so PDFium has to work the spaces out), kerning inside words, list
-# markers drawn as small filled squares instead of bullet characters, and long lines wrapped. Blocks are
-# (kind, text); `**...**` at the start of a text is a bold lead-in, `[text](url)` a link, `\*` an escape.
+# markers drawn as small filled squares instead of bullet characters, long lines wrapped, and each link a
+# link annotation over its words, as Chrome prints `<a href>`. Blocks are (kind, text); `**...**` at the start
+# of a text is a bold lead-in, `[text](url)` a link, `\*` an escape.
 BROWSER = (
     ("h1", "Avery Quillon"),
     ("contact", "Lowmere | avery.quillon@example.org | 07700 900464 | "
@@ -346,26 +347,43 @@ FIRST_CHAR = 32
 MARKDOWN_WRAP = 100                # where an editor wraps a long Markdown line, so the reader must join it again
 
 
+LINK = re.compile(r"\[([^\]]+)\]\(([^)]*)\)")
+LINK_BELOW, LINK_ABOVE = 0.25, 0.9   # a link's box reaches this share of the type size below and above the baseline
+
+
+def _linked(text: str) -> list[tuple[str, str]]:
+    """Markdown inline text as (text, address) pieces, "" for words that link nowhere."""
+    out, at = [], 0
+    for m in LINK.finditer(text):
+        out += [(text[at:m.start()], ""), (m.group(1), m.group(2))]
+        at = m.end()
+    return [*out, (text[at:], "")]
+
+
 def _plain(text: str) -> str:
     """Markdown inline text as a browser shows it: no bold markers, links as their text, escapes undone."""
     text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)
     return text.replace("**", "").replace("\\*", "*")
 
 
-def _runs(kind: str, text: str) -> list[tuple[str, bool, bool]]:
-    """The words of a block: (word, bold, glued), where `glued` means no space before it (the "," after a
-    bold lead-in)."""
+def _runs(kind: str, text: str) -> list[tuple[str, bool, bool, str]]:
+    """The words of a block: (word, bold, glued, link), where `glued` means no space before it (the "," after
+    a bold lead-in) and `link` is the address the word links to."""
     whole = kind in ("h1", "h2", "h3")
     m = re.match(r"\*\*(.+?)\*\*(.*)$", text)
     parts = [(m.group(1), True), (m.group(2), False)] if m else [(text, False)]
-    out: list[tuple[str, bool, bool]] = []
+    out: list[tuple[str, bool, bool, str]] = []
     for part, bold in parts:
-        plain = _plain(part)
-        if kind == "h2":
-            plain = plain.upper()
-        for i, word in enumerate(plain.split(" ")):
-            if word:
-                out.append((word, bold or whole, i == 0 and bool(out)))
+        before = ""          # the text just before this piece: a space there means its first word is not glued
+        for k, (piece, link) in enumerate(_linked(part)):
+            plain = _plain(piece)
+            if kind == "h2":
+                plain = plain.upper()
+            for i, word in enumerate(plain.split(" ")):
+                if word:
+                    glued = i == 0 and bool(out) and not (k and before.endswith(" "))
+                    out.append((word, bold or whole, glued, link))
+            before = piece
     return out
 
 
@@ -387,24 +405,25 @@ def _tj(word: str) -> bytes:
     return b" ".join(out)
 
 
-def _browser_pages(blocks: tuple) -> list[bytes]:
-    """Each page's content stream for `blocks`, laid out the way the print style sheet lays it out."""
-    pages, ops = [], [b"q %.2f 0 0 %.2f 0 0 cm\n" % (PX, PX)]
+def _browser_pages(blocks: tuple) -> tuple[list[bytes], list[tuple[float, float, float, float, str]]]:
+    """Each page's content stream for `blocks`, laid out the way the print style sheet lays it out, and the
+    link annotations of its one page: (left, bottom, right, top) in points, and the address."""
+    pages, ops, links = [], [b"q %.2f 0 0 %.2f 0 0 cm\n" % (PX, PX)], []
     top = BROWSER_MARGIN
     for kind, text in blocks:
         size = BROWSER_SIZES[kind]
         left = BROWSER_MARGIN + (LIST_INDENT if kind == "li" else 0.0)
         width = PAGE_PX_W - BROWSER_MARGIN - left
         spacing = LETTER_SPACING * size if kind == "h2" else 0.0
-        lines: list[list[tuple[str, bool, bool]]] = [[]]
+        lines: list[list[tuple[str, bool, bool, str]]] = [[]]
         used = 0.0
-        for word, bold, glued in _runs(kind, text):
+        for word, bold, glued, link in _runs(kind, text):
             w = _width(word, bold, size) + spacing * len(word)
             gap = 0.0 if glued or not lines[-1] else _width(" ", bold, size)
             if lines[-1] and used + gap + w > width and not glued:
                 lines.append([])
                 used, gap = 0.0, 0.0
-            lines[-1].append((word, bold, glued))
+            lines[-1].append((word, bold, glued, link))
             used += gap + w
         top += BROWSER_ABOVE[kind]
         for n, line in enumerate(lines):
@@ -415,22 +434,29 @@ def _browser_pages(blocks: tuple) -> list[bytes]:
                 ops.append(b"%.2f %.2f %.2f %.2f re f\n" % (left - MARKER_GAP - MARKER, mid - MARKER / 2,
                                                             MARKER, MARKER))
             x = left
-            for i, (word, bold, glued) in enumerate(line):
+            for i, (word, bold, glued, link) in enumerate(line):
                 if i and not glued:
                     x += _width(" ", bold, size)
                 ops.append(b"BT /%s %.2f Tf %.2f Tc %.2f %.2f Td [%s] TJ ET\n" % (
                     b"F2" if bold else b"F1", size, spacing, x, baseline, _tj(word)))
-                x += _width(word, bold, size) + spacing * len(word)
+                right = x + _width(word, bold, size) + spacing * len(word)
+                if link:
+                    links.append((x * PX, (baseline - LINK_BELOW * size) * PX, right * PX,
+                                  (baseline + LINK_ABOVE * size) * PX, link))
+                x = right
     ops.append(b"Q\n")
     pages.append(b"".join(ops))
-    return pages
+    return pages, links
 
 
 def browser_pdf_bytes(blocks: tuple = BROWSER) -> bytes:
     """`blocks` printed as Chrome prints a page: see the note above `BROWSER`."""
-    streams = _browser_pages(blocks)
+    streams, links = _browser_pages(blocks)
     first_page = 5
+    first_link = first_page + 2 * len(streams)
     kids = b" ".join(b"%d 0 R" % (first_page + 2 * i) for i in range(len(streams)))
+    refs = b" ".join(b"%d 0 R" % (first_link + k) for k in range(len(links)))
+    annots = b" /Annots [%s]" % refs if links else b""
 
     def font(name: bytes, widths: tuple[int, ...]) -> bytes:
         listed = b" ".join(b"%d" % w for w in widths)
@@ -442,8 +468,12 @@ def browser_pdf_bytes(blocks: tuple = BROWSER) -> bytes:
                font(b"BAAAAA+Helvetica", HELVETICA_WIDTHS), font(b"AAAAAA+Helvetica-Bold", HELVETICA_BOLD_WIDTHS)]
     for i, content in enumerate(streams):
         objects.append(b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %d %d] /Resources << /Font << /F1 3 0 R "
-                       b"/F2 4 0 R >> >> /Contents %d 0 R >>" % (PAGE_W, PAGE_H, first_page + 2 * i + 1))
+                       b"/F2 4 0 R >> >> /Contents %d 0 R%s >>" % (PAGE_W, PAGE_H, first_page + 2 * i + 1,
+                                                                   annots if i == 0 else b""))
         objects.append(_stream(content))
+    for left, bottom, right, top, url in links:
+        objects.append(b"<< /Type /Annot /Subtype /Link /Rect [%.2f %.2f %.2f %.2f] /Border [0 0 0] "
+                       b"/A << /S /URI /URI %s >> >>" % (left, bottom, right, top, _pdf_string(url)))
     return _pdf(objects)
 
 

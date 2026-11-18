@@ -17,8 +17,8 @@ What changed in each version, in plain words.
   versions show them the same way, never as stars.
 
 - **Your CV file's bold, italic and links are kept.** When Hal reads a CV you add, it keeps the bold and
-  italic words inside a line, as your Word file, PDF or Markdown file shows them, and the links of a Word
-  or Markdown file. A line that is bold from start to end, such as a job title, stays a heading as before.
+  italic words inside a line, as your Word file, PDF or Markdown file shows them, and their links to web
+  pages and email addresses. A line that is bold from start to end, such as a job title, stays a heading as before.
   Hal 2.3.0 left these out of Markdown files.
 
 - **Choose how long each CV is.** On **My CV**, **Type and look**, the new **Length** card has **Keep this

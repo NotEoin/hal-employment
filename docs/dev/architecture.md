@@ -558,8 +558,9 @@ runs: tests use `tests/support/fake_claude/`.
   deeper an entry heading (`style="entry"`, never a section). Wrapped lines are joined; emphasis, code and
   link markers are taken out of `text` (a link keeps its text); a starting `**bold**` is kept in `lead`.
 - Each `Line` also keeps the file's bold, italic and links inside it in `marked` (`lines.marked_text`): a
-  PDF's per-character fonts (`pdflines`), a Word file's `w:b`/`w:i` runs and `w:hyperlink`s (`parse.docx_lines`,
-  addresses from `word/_rels/document.xml.rels`), Markdown's marks (`mdread`, with `_x_` and `__x__` as
+  PDF's per-character fonts and its link annotations over a character's middle (`pdflines`,
+  `pdfread.links`), a Word file's `w:b`/`w:i` runs and `w:hyperlink`s (`parse.docx_lines`, addresses from
+  `word/_rels/document.xml.rels`), Markdown's marks (`mdread`, with `_x_` and `__x__` as
   stars and only http, https and mailto links). A style the whole line shares is structure and is left out.
   The rules and the AI read plain `text`; `parse.keep_marks` then puts each marked line back into the
   section text, entry text or bullet that holds its words, only when the plain words come out the same.
