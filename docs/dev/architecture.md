@@ -461,7 +461,10 @@ runs: tests use `tests/support/fake_claude/`.
   CVs" once there are several, counted by `GET /cv/cvs` and Home's `cv_count`.
 - Per-CV data: `cv_suggestions.doc_id` (a review, its list, "Accept all" and the "nothing more" mark in `meta`
   are per CV), line preferences, `cv_parse_reports` and `cv_checks` (by version). Tone and length preferences,
-  `cv_keywords_off` (by job) and `cv_types` hold for every CV.
+  `cv_keywords_off` (by job) and `cv_types` hold for every CV. Reviews (`cv.suggest`) and fresh CVs
+  (`cv.fresh`) run one at a time per CV, with the CV in the subject (`suggest_actions.start_review`,
+  `start_fresh`): Look again on one CV while another is reviewed starts at once, a type change replaces only
+  its own CV's review, and the list says "looking" only for the CV being reviewed.
 - `cvstudio/choose.py` picks the CV an application is built from among the starred ones (`choose.choose(con,
   job)` gives a `Choice`: CV, version, `by`, reason, Hal's pick and a score per CV). Each CV's fit blends the
   share of the advert's skills it names (`score.keywords`, with the skill lists of all the candidates' types)

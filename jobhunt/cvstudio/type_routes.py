@@ -93,8 +93,10 @@ def choose_type(req: Request) -> dict:
     except LookupError:
         log.info("no CV yet; only the type was saved")
     if version_id and SUGGEST_KIND in runner.KINDS:
-        runner.start(SUGGEST_KIND, subject="cv", replace=True,
-                     params={"doc_id": _store().version(version_id)["doc_id"]})
+        from jobhunt.cvstudio import suggest_actions  # loaded already: it registered SUGGEST_KIND
+
+        # replaces this CV's own review only, which was reading the type before (2026-11-18: it stopped any CV's)
+        suggest_actions.start_review(_store().version(version_id)["doc_id"], replace=True)
     return {"ok": True, "type": {"id": t.id, "name": t.name}, "version_id": version_id}
 
 

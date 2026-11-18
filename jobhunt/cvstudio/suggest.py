@@ -24,7 +24,10 @@ Design decisions:
   each store call and never holds a write transaction across one.
 - Suggestions belong to one CV (`cv_suggestions.doc_id`): a review, the list and "Accept all" work on the CV
   they are given (the lead CV by default), and a decision on one suggestion works on that suggestion's CV. A
-  line preference (keep my wording, lock a line) holds in its own CV only, the others in every CV.
+  line preference (keep my wording, lock a line) holds in its own CV only, the others in every CV. Reviews
+  run one at a time per CV (subject `REVIEW_SUBJECT`), so one CV's review never waits for or stops
+  another's, and the list says "looking" only while its own CV is reviewed (2026-11-18: one review across
+  every CV answered 409 to "Look again" on a second CV).
 - A skills list never gives a skill only studied in a course as one the person has (`_studied`, sections plan,
   2026-11-09): a skill whose every source in the record is lecture material
   (`profile.writing.studied_skills`) in a list that is not already labelled as knowledge gets one suggestion,
@@ -61,6 +64,7 @@ FIRST_PERSON = re.compile(r"\b(?:I|I'm|I've|me|[Mm]y|[Ww]e|[Oo]ur)\b")
 # "[which languages, and what level?]" on 2026-10-23, and a gap of any wording must stop Accept.
 GAP = re.compile(r"\[[^\[\]\n]{1,80}\?\]")
 META_REVIEWED = "cv_suggest_reviewed:{doc}"  # per CV: the version id a full pass last found nothing more in
+REVIEW_SUBJECT = "cv.suggest:{doc}"           # the `cv.suggest` action's subject: one review at a time per CV
 LINE_PREFERENCES = ("keep_wording", "lock_line")   # preferences about one line, so about one CV
 WHOLE_CV = "cv"     # a suggestion's target and reviewer id for the whole CV; the model's own target is ""
 
@@ -800,10 +804,12 @@ def shape(row: sqlite3.Row, doc=None) -> dict:
             "result_version_id": row["result_version_id"]}
 
 
-def _looking(con: sqlite3.Connection) -> bool:
+def _looking(con: sqlite3.Connection, doc_id: str) -> bool:
+    """True while a review of this CV is queued or running (another CV's review is not this one's)."""
     try:
-        row = con.execute("SELECT 1 FROM actions WHERE kind = 'cv.suggest' AND state IN ('queued', 'running') "
-                          "LIMIT 1").fetchone()
+        row = con.execute("SELECT 1 FROM actions WHERE kind = 'cv.suggest' AND subject = ? "
+                          "AND state IN ('queued', 'running') LIMIT 1",
+                          (REVIEW_SUBJECT.format(doc=doc_id),)).fetchone()
     except sqlite3.OperationalError:
         return False
     return row is not None
@@ -823,7 +829,7 @@ def listing(con: sqlite3.Connection, kind: str | None = None, doc_id: str | None
     pending = _pending(con, doc_id)
     done = con.execute("SELECT * FROM cv_suggestions WHERE doc_id = ? AND job_id IS NULL AND status IN "
                        "('accepted', 'edited', 'left') ORDER BY decided DESC, rowid DESC", (doc_id,)).fetchall()
-    if _looking(con):
+    if _looking(con, doc_id):
         state = "looking"
     elif not pending and _meta(con, META_REVIEWED.format(doc=doc_id)) == vid:
         state = "nothing_more"

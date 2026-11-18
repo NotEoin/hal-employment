@@ -8,6 +8,7 @@ from __future__ import annotations
 import contextlib
 import json
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -21,6 +22,7 @@ from jobhunt.core import paths, runner, settings
 from jobhunt.core.settings import store as settings_store
 from jobhunt.cvstudio import model, store, suggest
 
+WAIT_S = 20
 PROFILE = "s:summary/text"
 TABLE = "s:experience/e:ex-shop/b:b-table"
 STAR = "s:volunteering/e:vo-archive/b:b-letters"
@@ -445,6 +447,42 @@ class Api(unittest.TestCase):
             self.assertEqual(asked.status, 400)
             for action in self._actions():
                 runner.wait(action)
+
+    def test_each_cv_is_reviewed_on_its_own(self):
+        """One review ran across every CV: Look again on a second CV answered 409, its list said "looking", and a
+        type change on it stopped the first CV's review (2026-11-18)."""
+        with HalServer() as hal:
+            client = hal.signed_in()
+            store.new_version(made_up_cv(), origin="imported", what="Your made-up CV", by="baseline")
+            first = store.lead_id()
+            second = store.create("Second CV", made_up_cv(), origin="imported", what="Another made-up CV",
+                                  by="baseline", star=False)
+            entered, release = threading.Event(), threading.Event()
+            real = suggest.look_again
+
+            def held(con, **kw):
+                if kw.get("doc_id") == first:
+                    entered.set()
+                    release.wait(WAIT_S)
+                return real(con, **kw)
+
+            with mock.patch.object(suggest, "look_again", held):
+                a = client.post(f"/api/v2/cv/suggestions/look-again?cv={first}")
+                self.assertEqual(a.status, 200, a.text)
+                self.assertTrue(entered.wait(WAIT_S), "the first CV is being reviewed")
+                b = client.post(f"/api/v2/cv/suggestions/look-again?cv={second}")
+                self.assertEqual(b.status, 200, b.text)
+                self.assertEqual(runner.wait(b.json()["action_id"], WAIT_S)["state"], "done")
+                states = [client.get(f"/api/v2/cv/suggestions?cv={cv}").json()["state"] for cv in (first, second)]
+                self.assertEqual(states[0], "looking")
+                self.assertNotEqual(states[1], "looking", "the second CV is not the one being reviewed")
+                typed = client.request("PUT", f"/api/v2/cv/type?cv={second}", {"id": "humanities_grad"})
+                self.assertEqual(typed.status, 200, typed.text)
+                release.set()
+                self.assertEqual(runner.wait(a.json()["action_id"], WAIT_S)["state"], "done",
+                                 "a type change on another CV leaves this review running")
+            for action in self._actions():
+                runner.wait(action, WAIT_S)
 
     def _actions(self) -> list[str]:
         con = db.connect()

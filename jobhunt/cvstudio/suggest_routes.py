@@ -14,7 +14,7 @@ from jobhunt.core import runner
 from jobhunt.cvstudio import (
     fresh,
     suggest,
-    suggest_actions,  # noqa: F401 - registers the cv.* kinds before a route starts one
+    suggest_actions,
     tailor,
 )
 from jobhunt.web.router import BadRequest, Request, json_body, route
@@ -30,11 +30,12 @@ def _cv(req: Request) -> str | None:
 
 
 def _review_next(doc_id: str | None) -> str | None:
-    """Starts a review of one CV unless one is running already; the running one sees the new version too."""
+    """Starts a review of one CV unless that CV is reviewed already: the running review reads the CV's version
+    in use section by section, so it sees the new version too."""
     try:
-        return runner.start("cv.suggest", params={"doc_id": doc_id} if doc_id else None)
+        return suggest_actions.start_review(doc_id)
     except RuntimeError as e:
-        log.info("a CV review is running already: %s", e)
+        log.info("this CV's review is running already: %s", e)
         return None
 
 
@@ -47,8 +48,7 @@ def listing(req: Request) -> dict:
 @route("POST", PREFIX + "/suggestions/look-again")
 def look_again(req: Request) -> dict:
     """Look again."""
-    doc_id = _cv(req)
-    return {"action_id": runner.start("cv.suggest", params={"doc_id": doc_id} if doc_id else None)}
+    return {"action_id": suggest_actions.start_review(_cv(req))}
 
 
 @route("POST", PREFIX + "/suggestions/accept-kind")
@@ -117,9 +117,7 @@ def build_fresh(req: Request) -> dict:
         raise BadRequest("Send the answers to the questions.", field="answers")
     if not isinstance(type_id, str) or not type_id:
         raise BadRequest("Choose a CV type first.", field="type_id")
-    params = {"answers": answers, "type_id": type_id}
-    doc_id = _cv(req)
-    return {"action_id": runner.start("cv.fresh", params={**params, **({"doc_id": doc_id} if doc_id else {})})}
+    return {"action_id": suggest_actions.start_fresh(answers, type_id, _cv(req))}
 
 
 @route("GET", PREFIX + "/adjust")
