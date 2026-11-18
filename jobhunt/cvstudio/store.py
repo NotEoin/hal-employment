@@ -69,7 +69,7 @@ STALE_ORDER = "Your list of CVs changed since this page opened. Reload the page 
 ARCHIVED = "This CV is in the archive. Restore it first."
 STARTER_WHAT = "A starting CV made from your settings"
 PASTED_NAME = "Pasted CV.txt"      # the file name pasted text is kept under
-PAGE_LIMITS = (0, 1, 2)            # "Keep this CV to": no limit, one page, two pages (`cv_documents.page_limit`)
+PAGE_LIMITS = (0, 1, 2, 3, 4)      # "Keep this CV to" (`cv_documents.page_limit`), as far as a type's `MAX_PAGES`
 READ_ONLY = stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH
 _COLUMNS = ("id, name, starred, archived, position, current_version_id, baseline_file_id, type_id, look_id, "
             "route, send, created, updated")
@@ -863,12 +863,13 @@ def set_look(look_id: str, con: sqlite3.Connection | None = None, doc_id: str | 
 
 
 def set_page_limit(pages: int, con: sqlite3.Connection | None = None, doc_id: str | None = None) -> None:
-    """Records "Keep this CV to" for a CV: 0 (no limit), 1 or 2 pages (`PAGE_LIMITS`); CVError otherwise.
+    """Records "Keep this CV to" for a CV: 0 (no limit) to 4 pages (`PAGE_LIMITS`); CVError otherwise.
 
-    Read it through `pagelimit.limit_of`, which falls back to the CV type's rule while none is chosen.
+    Read it through `pagelimit.limit_of`, which falls back to the CV type's rule while none is chosen. The card
+    offers 3 and 4 only for a copied type with that rule (`pagelimit.choices`); the route checks that.
     """
     if isinstance(pages, bool) or pages not in PAGE_LIMITS:
-        raise CVError("pages: choose no limit, one page or two pages")
+        raise CVError("pages: choose no limit, or one to four pages")
     with _conn(con) as c:
         doc_id = _doc_id(c, doc_id)
         with writing(c):

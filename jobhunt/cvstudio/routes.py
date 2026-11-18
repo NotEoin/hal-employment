@@ -301,9 +301,14 @@ def get_pages(req) -> dict:
 
 @route("PUT", "/api/v2/cv/pages")
 def put_pages(req) -> dict:
-    """Sets "Keep this CV to" (`{pages}`: 0 for no limit, 1 or 2) for `?cv=`; answers as GET without printing."""
+    """Sets "Keep this CV to" (`{pages}`, one of the card's choices: 0 for no limit, 1 or 2, or a copied type's
+    longer rule) for `?cv=`; answers as GET without printing."""
     pages = (req.body or {}).get("pages")
     doc_id = cv_of(req)
+    offered = [n for n, _ in pagelimit.state(doc_id, req.con, count=False)["choices"]]
+    if isinstance(pages, bool) or pages not in offered:
+        raise BadRequest(f"Choose one of: {', '.join(pagelimit.CHOICE_WORDS[n].lower() for n in offered)}.",
+                         field="pages")
     try:
         store.set_page_limit(pages, con=req.con, doc_id=doc_id)
     except CVError as e:

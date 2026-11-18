@@ -40,7 +40,8 @@ log = logging.getLogger(__name__)
 
 KEY_CHARS = 20                  # as the export cache's file names, so a count's PDF serves Download PDF too
 TEST_ENV, REAL_PRINT_ENV = "HAL_TEST_MODE", "HAL_TEST_REAL_PRINT"
-CHOICE_WORDS = {0: "No limit", 1: "One page", 2: "Two pages"}
+CHOICE_WORDS = {0: "No limit", 1: "One page", 2: "Two pages", 3: "Three pages", 4: "Four pages"}
+OFFERED = (0, 1, 2)             # the card's choices for every CV; longer ones only from a copied type (`choices`)
 OVER = "This CV is {now}{pages} pages. You asked for {limit}."
 UNKNOWN = "Hal cannot count this CV's pages: no browser on this computer can print it."
 UNKNOWN_JOB = "Hal could not count the pages of this CV."
@@ -90,18 +91,31 @@ def limit_of(doc_id: str | None = None, con: sqlite3.Connection | None = None) -
 
     Until the person chooses, the CV type in use sets it (its `pages`); a type that cannot be read sets none.
     """
-    from jobhunt.cvstudio import types
-
     with _conn(con) as c:
         d = store.doc(c, doc_id)
         if d.get("page_limit") is not None:
             return int(d["page_limit"]), True
-        type_id = store.type_in_use(c, d["id"])
-        try:
-            return int(types.load(type_id, c).pages or 0), False
-        except LookupError as e:
-            log.warning("CV %s: type %s is gone, so it has no page limit: %s", d["id"], type_id, e)
-            return 0, False
+        return type_rule(d["id"], c), False
+
+
+def type_rule(doc_id: str, con: sqlite3.Connection) -> int:
+    """The `pages` rule of the CV type CV `doc_id` uses (0 when its type cannot be read)."""
+    from jobhunt.cvstudio import types
+
+    type_id = store.type_in_use(con, doc_id)
+    try:
+        return int(types.load(type_id, con).pages or 0)
+    except LookupError as e:
+        log.warning("CV %s: type %s is gone, so it has no page limit: %s", doc_id, type_id, e)
+        return 0
+
+
+def choices(limit: int, rule: int) -> list[list]:
+    """"Keep this CV to" as the card offers it: [[pages, words], ...]. No limit, one and two pages always; a
+    longer rule of a copied CV type (up to `types.MAX_PAGES`) only while it is the type's or the person's, so a
+    CV on such a type shows its real limit ("Three pages") and can go back to it."""
+    offered = set(OFFERED) | {n for n in (limit, rule) if n > max(OFFERED)}
+    return [[n, CHOICE_WORDS[n]] for n in sorted(offered)]
 
 
 def words(pages: int | None, limit: int, *, now: bool = False, job: bool = False) -> str:
@@ -253,8 +267,9 @@ def state(doc_id: str | None = None, con: sqlite3.Connection | None = None, *, c
     with _conn(con) as c:
         limit, chosen = limit_of(doc_id, c)
         vid = store.current(c, doc_id)[0]
+        rule = type_rule(store.doc(c, doc_id)["id"], c)
         pages = measure(vid, c) if count else known(vid, c)[0]
-    return {"limit": limit, "chosen": chosen, "choices": [[k, v] for k, v in CHOICE_WORDS.items()],
+    return {"limit": limit, "chosen": chosen, "choices": choices(limit, rule),
             "pages": pages, "counted": pages is not None,
             "over": pages is not None and bool(limit) and pages > limit, "words": words(pages, limit, now=now)}
 

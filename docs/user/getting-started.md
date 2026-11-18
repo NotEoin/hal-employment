@@ -324,7 +324,8 @@ were using is starred and the others are in the archive.
 
 Each CV has its own length. Open **My CV**, **Type and look**, and choose **Keep this CV to**: **No limit**,
 **One page** or **Two pages**. Until you choose, the CV follows its CV type: each type's card shows its
-**Length**, such as one page for a student and no limit for an academic CV.
+**Length**, such as one page for a student and no limit for an academic CV. If you copied a CV type and
+gave it three or four pages, **Three pages** or **Four pages** is offered too, for the CVs of that type.
 
 Hal counts the pages of the CV as it prints, in the look you chose, and says "It prints on 2 pages now".
 When the CV runs longer than you asked, Hal tells you, for example "This CV is now 3 pages. You asked for

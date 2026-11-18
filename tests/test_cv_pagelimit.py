@@ -82,7 +82,7 @@ class OneSourceOfTruth(unittest.TestCase):
             store.set_page_limit(0, doc_id=doc_id)
             store.set_type("humanities_grad", doc_id=doc_id)
             self.assertEqual(pagelimit.limit_of(doc_id), (0, True), "the person's choice stays")
-            for bad in (3, True, "2", None):
+            for bad in (5, -1, True, "2", None):
                 with self.assertRaises(model.CVError):
                     store.set_page_limit(bad, doc_id=doc_id)
 
@@ -167,6 +167,32 @@ class Routes(unittest.TestCase):
             self.assertIn("You asked for 1", client.get(f"/api/v2/cv/pages?cv={doc_id}&saved=1").json()["words"])
             self.assertFalse(client.get(f"/api/v2/cv/pages?cv={other}").json()["chosen"], "each CV has its own")
             self.assertEqual(client.request("PUT", f"/api/v2/cv/pages?cv={doc_id}", {"pages": 4}).status, 400)
+
+    def test_a_copied_type_of_three_pages_is_offered_as_three_pages_and_no_other_cv_gets_it(self):
+        with HalServer() as hal, stand_in():
+            doc_id = humanities_cv_in_use()
+            other = store.create("Made-up second CV", made_up_cv(people.HUMANITIES.key), origin="imported",
+                                 what="Made-up CV", by="baseline", star=False)
+            store.set_type("humanities_grad", doc_id=other)
+            store.set_type(three_page_type(), doc_id=doc_id)
+            client = hal.signed_in()
+            got = client.get(f"/api/v2/cv/pages?cv={doc_id}").json()
+            self.assertEqual((got["limit"], got["chosen"]), (3, False))
+            self.assertEqual(got["choices"], [[0, "No limit"], [1, "One page"], [2, "Two pages"],
+                                              [3, "Three pages"]])
+            self.assertEqual(client.request("PUT", f"/api/v2/cv/pages?cv={doc_id}", {"pages": 1}).status, 200)
+            back = client.request("PUT", f"/api/v2/cv/pages?cv={doc_id}", {"pages": 3}).json()
+            self.assertEqual((back["limit"], back["chosen"]), (3, True), "the type's longer limit can be chosen")
+            self.assertEqual(len(client.get(f"/api/v2/cv/pages?cv={other}").json()["choices"]), 3)
+            self.assertEqual(client.request("PUT", f"/api/v2/cv/pages?cv={other}", {"pages": 3}).status, 400)
+
+
+def three_page_type() -> str:
+    """A copy of the humanities type with a three-page rule; its id."""
+    t = cvtypes.copy("humanities_grad", "Made-up long CV")
+    cvtypes.save_source(t.id, t.source.replace("\npages = 2\n", "\npages = 3\n"))
+    assert cvtypes.load(t.id).pages == 3, "the made-up copy keeps its three-page rule"
+    return t.id
 
 
 def job_pages(base: int):

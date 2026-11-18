@@ -587,7 +587,8 @@ runs: tests use `tests/support/fake_claude/`.
   opinion and part of no score.
 - A CV's page limit (`cvstudio/pagelimit.py`, migration 0035) has one source: `cv_documents.page_limit`
   ("Keep this CV to", 0, 1 or 2, set by `store.set_page_limit`), else the type's `pages` while it is NULL
-  (`pagelimit.limit_of`). The Writing card no longer edits a type's `pages`. The length check
+  (`pagelimit.limit_of`). A copied type's rule of 3 or 4 (`types.MAX_PAGES`) is offered as a fourth choice
+  ("Three pages") only for CVs of that type or already set to it (`pagelimit.choices`; `PUT` refuses others). The Writing card no longer edits a type's `pages`. The length check
   (`pages_within`) holds the printed count to that limit and is `ok: None` with no count; the 500-words-a-page
   estimate is gone.
 - Page counts are real: `pagelimit.measure(version_id)` prints the version as Download PDF does (the CV's

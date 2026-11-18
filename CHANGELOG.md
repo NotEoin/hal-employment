@@ -23,8 +23,8 @@ What changed in each version, in plain words.
 
 - **Choose how long each CV is.** On **My CV**, **Type and look**, the new **Length** card has **Keep this
   CV to**: no limit, one page or two pages, for each CV on its own. Until you choose, a CV follows its CV
-  type, as before. The length is no longer on the Writing card, so changing it no longer makes a copy of
-  the type.
+  type, as before; a type you copied and gave three or four pages offers that length too. The length is no
+  longer on the Writing card, so changing it no longer makes a copy of the type.
 
 - **Real page counts.** Hal counts the pages of your CV as it prints in your look, instead of guessing from
   the number of words. After you save in **Edit your CV**, Hal says when the CV runs longer than you asked,

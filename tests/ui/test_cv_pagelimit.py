@@ -62,6 +62,8 @@ class PageLimit(unittest.TestCase):
                 card = p.page.locator("section.card", has_text="Keep this CV to")
                 p.shows(card.get_by_role("radiogroup", name="Keep this CV to"), "the three choices")
                 card.get_by_role("radio", name=words).click()
+                # the toast, after the choice is stored: one page is also the starting type's own rule
+                p.page.wait_for_selector("text=Saved. Hal keeps an eye on this CV's length.")
                 p.page.wait_for_selector(f"text=This CV is {PRINTED} pages. You asked for {pages}.")
                 self.assertEqual(pagelimit.limit_of(self.doc_id), (pages, True))
                 self.assertEqual(card.get_by_role("radio", name=words).get_attribute("aria-checked"), "true")
@@ -70,6 +72,21 @@ class PageLimit(unittest.TestCase):
                 self.assertEqual(p.sideways(), 0)
                 self.assertEqual(p.serious_axe(), [])
                 self.assertEqual(p.errors, [])
+
+    def test_a_copied_type_of_three_pages_shows_three_pages_on_the_card(self) -> None:
+        from test_cv_pagelimit import three_page_type
+
+        store.set_type(three_page_type(), doc_id=self.doc_id)
+        for size, scheme in (("wide", "light"), ("narrow", "dark")):
+            with self.subTest(size=size):
+                p = self.page("cv-style", size, scheme)
+                card = p.page.locator("section.card", has_text="Keep this CV to")
+                three = card.get_by_role("radio", name="Three pages")
+                p.shows(three, "the type's own longer limit")
+                self.assertEqual(three.get_attribute("aria-checked"), "true")
+                self.assertIn(f"It prints on {PRINTED} pages now.", card.inner_text())
+                self.assertEqual(p.sideways(), 0)
+                self.assertEqual(p.serious_axe(), [])
 
     def test_a_save_that_runs_over_the_limit_is_kept_and_warned_about(self) -> None:
         store.set_page_limit(2, doc_id=self.doc_id)
