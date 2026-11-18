@@ -20,6 +20,10 @@ Design decisions, each with its reason:
 - The choice is kept with the job's CV (`job_cvs.base_choice`, migration 0034, with `base_version_id`), as
   {by, reason, pick, scores}: `by` "you" for a CV the person picked, which a rewrite keeps (on that CV's
   version in use then), and "hal" for Hal's, which a rewrite makes again (`for_writing`).
+- One choice per job at a time (`job_lock`): `tailor.prepare` chooses and stores under it and `base_doc` reads
+  under it, so two document writes for one job (Hal's adjusting and the person's Change CV, say) cannot each
+  choose a CV and store different answers, the later one undoing the person's pick (review of 2.3.0,
+  2026-11-18). The lock is per process, as Hal's writes all run in the one server.
 """
 from __future__ import annotations
 
@@ -54,8 +58,15 @@ FALLBACK = "Hal could not compare your CVs this time, so it used the first one i
 NO_SKILLS = "This advert names none of the skills Hal compares, so Hal used the first CV in your list."
 YOU_CHOSE = "You chose this CV for this application."
 
+# A job's CV is chosen, then made with a few AI calls (each with its own timeout), then stored; a second
+# write for the same job waits this long for the first to store its choice.
+LOCK_WAIT_S = 900
+SECONDS_PER_MINUTE = 60
+
 _VECTORS: dict[tuple[str, str], list[float]] = {}
 _VECTORS_LOCK = threading.Lock()
+_JOB_LOCKS: dict[str, threading.RLock] = {}      # one per job id, made on first use (`job_lock`)
+_JOB_LOCKS_LOCK = threading.Lock()
 
 
 @dataclass
@@ -261,10 +272,29 @@ def kept(con: sqlite3.Connection, job_id: str) -> Choice | None:
                   hal_reason=data.get("hal_reason") or "")
 
 
+@contextlib.contextmanager
+def job_lock(job_id: str) -> Iterator[None]:
+    """Holds one job's choice of CV while it is chosen and stored (`tailor.prepare`) or read (`base_doc`).
+
+    Re-entrant, so a write that reads its own choice does not wait for itself. TimeoutError, in plain words,
+    when another write for the job holds it past `LOCK_WAIT_S`.
+    """
+    with _JOB_LOCKS_LOCK:
+        lock = _JOB_LOCKS.setdefault(job_id, threading.RLock())
+    if not lock.acquire(timeout=LOCK_WAIT_S):
+        raise TimeoutError("Hal was still making this job's CV after "
+                           f"{LOCK_WAIT_S // SECONDS_PER_MINUTE} minutes. Try again.")
+    try:
+        yield
+    finally:
+        lock.release()
+
+
 def base_doc(job_id: str, con: sqlite3.Connection | None = None) -> str | None:
     """The CV the job's documents are built from; None while it has no job's CV (an older application, or
-    none written yet)."""
-    with _conn(con) as c:
+    none written yet). It waits while another write for the job is choosing and storing (`job_lock`), so it
+    never answers with a choice that write is about to replace."""
+    with job_lock(job_id), _conn(con) as c:
         found = kept(c, job_id)
     return found.doc_id if found else None
 

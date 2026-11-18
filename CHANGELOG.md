@@ -27,6 +27,10 @@ What changed in each version, in plain words.
 - **A long CV prints whole.** A CV more than a page longer than its CV type's length could not be printed
   or downloaded as a PDF. It now prints however long it is.
 
+- **Your choice of CV for an application stays chosen.** If you pressed **Change CV** while Hal was still
+  adjusting that application's CV, Hal could finish afterwards and put back the CV it had chosen. Hal now
+  finishes one before it starts the other, so your choice is the one kept.
+
 ## 2.3.0 (2026-11-18)
 
 ### What's new

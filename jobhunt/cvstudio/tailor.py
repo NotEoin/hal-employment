@@ -308,16 +308,24 @@ def prepare(job: dict, *, level: str | None = None, priorities: list[str] | None
     CV the job's CV was built on before, else the CV Hal chooses for it (`choose.for_writing`). The person's
     own edits from an earlier row are kept after Hal's new changes; an edit that no longer fits the new CV is
     left out and logged. RuntimeError once approved, as `drop_your_edits`: the approved CV is what the form is
-    filled with, and only `reopen` lets it change.
+    filled with, and only `reopen` lets it change. The CV is chosen and stored under the job's lock
+    (`choose.job_lock`), so a second write for the job waits and then builds on what this one stored.
     """
     from jobhunt.cvstudio import choose
+
+    with choose.job_lock(job["id"]):
+        return _prepare(job, level=level, priorities=priorities, base=base, con=con)
+
+
+def _prepare(job: dict, *, level: str | None, priorities: list[str] | None, base,
+             con: sqlite3.Connection | None) -> dict:
+    """`prepare` while holding the job's lock."""
+    from jobhunt.cvstudio import choose, cv, pagelimit
 
     model = _model()
     if base is None:
         with _conn(con) as c:
             base = choose.for_writing(c, job, again=False)
-    from jobhunt.cvstudio import cv, pagelimit
-
     used, why = level_for(level, base.doc_id)
     doc, changes = for_job(job, level=level, priorities=priorities, base=base)
     with _conn(con) as c:

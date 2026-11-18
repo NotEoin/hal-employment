@@ -2,6 +2,7 @@
 the wording reads, the lead CV on a near tie, skills alone when the AI on this computer gives no vectors, and the
 lead CV with a reason when comparing fails. Every CV and advert here is made up.
 """
+import threading
 import unittest
 from unittest import mock
 
@@ -10,7 +11,10 @@ from test_cv_store import cv_home
 
 from jobhunt import ai, db
 from jobhunt.ai.fake import FakeBackend
-from jobhunt.cvstudio import choose, model, score, store
+from jobhunt.cvstudio import choose, model, score, store, tailor
+
+WAIT_S = 20          # bounds a thread that would otherwise hang the test
+SETTLE_S = 0.5       # long enough for an unlocked write to store its choice
 
 ADVERT = {"id": "made-up:1", "title": "Backend engineer",
           "description": "Requirements:\nPython, SQL, Docker, AWS and Linux for our services. Git and testing."}
@@ -140,6 +144,56 @@ class Choose(unittest.TestCase):
                 self.assertLogs("jobhunt.cvstudio.choose", "ERROR"):
             got = choose.choose(self.con, ADVERT)
         self.assertEqual((got.doc_id, got.reason), (self.ai_cv, choose.FALLBACK))
+
+
+class OneChoicePerJob(unittest.TestCase):
+    """Two document writes for one job at once each choose and store in turn (review of 2.3.0): Hal adjusting
+    the job's CV on the CV it chose, while the person picks another for it with Change CV."""
+
+    def setUp(self):
+        self.enterContext(cv_home())
+        self.enterContext(mock.patch.object(store, "type_in_use", return_value="technical_grad"))
+        self.ai_cv = make_cv("Applied AI", APPLIED_AI)
+        self.backend = make_cv("Backend", BACKEND)
+        con = db.connect()
+        try:
+            con.execute("INSERT INTO jobs (id, source, company, title, first_seen, last_seen) VALUES "
+                        "(?, 'manual', 'Made-up Shop', ?, '2026-11-18T09:00:00Z', '2026-11-18T09:00:00Z')",
+                        (ADVERT["id"], ADVERT["title"]))
+            con.commit()
+        finally:
+            con.close()
+
+    def test_the_persons_pick_made_during_hals_write_is_the_one_kept(self):
+        entered, release = threading.Event(), threading.Event()
+        real = tailor.for_job
+
+        def slow(job, *, level=None, priorities=None, base=None):
+            if base.doc_id == self.ai_cv:      # Hal's write, which chose before the person picked
+                entered.set()
+                release.wait(WAIT_S)
+            return real(job, level="no", base=base)
+
+        hals = choose.Choice(self.ai_cv, store.current(doc_id=self.ai_cv)[0])
+        with mock.patch.object(tailor, "for_job", slow), mock.patch.object(choose, "choose", return_value=hals):
+            first = threading.Thread(target=tailor.prepare, args=(ADVERT,))
+            first.start()
+            self.assertTrue(entered.wait(WAIT_S))
+            con = db.connect()
+            self.addCleanup(con.close)
+            picked = choose.by_you(con, ADVERT, self.backend)
+            second = threading.Thread(target=tailor.prepare, args=(ADVERT,), kwargs={"base": picked})
+            read = []
+            reader = threading.Thread(target=lambda: read.append(choose.base_doc(ADVERT["id"])))
+            second.start()
+            reader.start()
+            second.join(SETTLE_S)         # without the lock the person's pick is stored here, then overwritten
+            release.set()
+            for t in (first, second, reader):
+                t.join(WAIT_S)
+        self.assertEqual(choose.base_doc(ADVERT["id"]), self.backend)
+        self.assertEqual(choose.kept(con, ADVERT["id"]).by, choose.YOU)
+        self.assertIn(read[0], (self.ai_cv, self.backend), "a read waits for a stored choice, never None mid-write")
 
 
 if __name__ == "__main__":

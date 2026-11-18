@@ -477,6 +477,9 @@ runs: tests use `tests/support/fake_claude/`.
   order wins unless another fits by more than `LEAD_MARGIN`. The reason names what each CV covers. With one
   CV in use there is no comparison and no AI call; when comparing fails the lead CV is used and the reason
   says so.
+- `choose.job_lock(job_id)` (a re-entrant lock per job, `LOCK_WAIT_S`) is held by `tailor.prepare` from
+  choosing the CV to storing `job_cvs`, and by `choose.base_doc` while it reads, so two document writes for
+  one job store their choices in turn and a reader never sees one about to be replaced.
 - An application's choice is kept with its job's CV: the CV is the one `job_cvs.base_version_id` belongs to,
   and `job_cvs.base_choice` (migration 0034) holds `{by, reason, pick, hal_reason, scores}` as JSON
   (`Choice.stored`, `choose.kept`). `choose.for_writing(con, job, again=...)` is the CV to write on, on its
