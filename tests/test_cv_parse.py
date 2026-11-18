@@ -15,6 +15,7 @@ import unittest
 import uuid
 from unittest import mock
 
+from support import make_cv_fixtures as maker
 from support.api import TIMEOUT_S, HalServer
 from support.fake_ai import fake_ai
 from support.make_cv_fixtures import BROWSER_EXPECTED, BROWSER_NAME, EXPECTED, FOLDER, NAMES, PEOPLE, main, pdf_bytes
@@ -275,6 +276,63 @@ class BrowserPrinted(unittest.TestCase):
         with self.assertRaises(parse.CVReadError) as caught:
             parse.kind_of("CV.odt", b"odt")
         self.assertIn("Markdown (.md)", str(caught.exception))
+
+
+class OneProfile(unittest.TestCase):
+    """A CV has one summary section. Before 2026-11-18 a row of facts under the contact line, then a "Profile"
+    heading, read as two summaries, so the CV showed "PROFILE" twice, the first holding only that row."""
+
+    def test_a_row_of_facts_above_a_profile_heading_joins_the_headline_not_a_second_profile(self):
+        docs = {}
+        for ext in ("pdf", "md"):
+            with self.subTest(file=ext):
+                name = f"{maker.FACTS_NAME}.{ext}"
+                data = (FOLDER / name).read_bytes()
+                docs[ext] = parse.read_rules(parse.lines_of(data, parse.check(data, name)[0])).doc
+                self.assertEqual([s.kind for s in docs[ext].sections], maker.FACTS_EXPECTED["kinds"])
+                self.assertEqual(docs[ext].headline, maker.FACTS_EXPECTED["headline"])
+                self.assertTrue(docs[ext].sections[0].text.startswith(maker.FACTS_EXPECTED["profile"]))
+        self.assertEqual(to_json(docs["pdf"]), to_json(docs["md"]))
+
+    def test_the_same_row_of_facts_in_a_word_file_or_pasted_text_reads_one_profile(self):
+        rows = [maker.Line("name", "Rowan Fieldmere"), maker.Line("contact", maker.FACTS[1][1]),
+                maker.Line("contact", maker.FACTS[2][1]), maker.Line("heading", "PROFILE"),
+                maker.Line("para", maker.FACTS[4][1]), maker.Line("heading", "EDUCATION"),
+                maker.Line("entry", "BA (Hons) History, First", "2023 - 2026")]
+        made = {"docx": maker.docx_bytes(rows), "txt": maker.ascii_text_of(rows).encode(), "pdf": pdf_bytes(rows)}
+        for ext, data in made.items():
+            with self.subTest(file=ext):
+                doc = parse.read_rules(parse.lines_of(data, ext)).doc
+                self.assertEqual([s.kind for s in doc.sections], ["summary", "education"])
+                self.assertEqual(doc.headline, maker.FACTS_EXPECTED["headline"])
+
+    def test_a_paragraph_above_a_profile_heading_is_merged_into_it_in_reading_order(self):
+        doc = parse.read_rules(parse.text_lines(
+            "Ada Example\nada@example.org | 07700 900466\nI sort records and answer questions about them for "
+            "visitors to a made-up archive in the fens.\n\nProfile\nCareful with sources and calm with people.\n\n"
+            "Education\nBA History    2023 - 2026\n")).doc
+        summaries = [s for s in doc.sections if s.kind == "summary"]
+        self.assertEqual(len(summaries), 1)
+        self.assertEqual(summaries[0].title, "Profile")
+        self.assertTrue(summaries[0].text.startswith("I sort records"))
+        self.assertTrue(summaries[0].text.endswith("calm with people."))
+
+    def test_a_paragraph_above_the_first_heading_with_no_profile_heading_is_still_the_profile(self):
+        doc = parse.read_rules(parse.text_lines(
+            "Ada Example\nada@example.org | 07700 900466\nI sort records and answer questions about them for "
+            "visitors to a made-up archive in the fens.\n\nEducation\nBA History    2023 - 2026\n")).doc
+        self.assertEqual([s.kind for s in doc.sections], ["summary", "education"])
+        self.assertTrue(doc.sections[0].text.startswith("I sort records"))
+
+    def test_the_ais_two_summaries_are_merged_into_one_as_the_rules_merge_them(self):
+        reply = {"headline": "", "contact": {"name": "Ada Example"}, "sections": [
+            {"kind": "summary", "title": "", "text": "I sort records."},
+            {"kind": "custom", "title": "Personal statement", "text": "Careful with sources."},
+            {"kind": "interests", "title": "Interests", "text": "Old maps."}]}
+        doc = parse.from_ai(reply).doc
+        self.assertEqual([(s.kind, s.title) for s in doc.sections],
+                         [("summary", "Personal statement"), ("interests", "Interests")])
+        self.assertEqual(doc.sections[0].text, "I sort records. Careful with sources.")
 
 
 class Upload(unittest.TestCase):

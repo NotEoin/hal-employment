@@ -15,7 +15,8 @@ list of lines that both writers draw, so the PDF and the Word file say the same 
   tab before the dates, bold runs for entry headings, and a table for the technical graduate's skills.
 
 A fourth person, Avery Quillon, has a CV printed the way a web browser prints one (see `BROWSER`), with
-`BROWSER_EXPECTED` for it.
+`BROWSER_EXPECTED` for it. A fifth, Rowan Fieldmere (`FACTS`), is printed the same way and has a row of
+facts under the contact line before a "Profile" heading, a shape that once read as two profiles.
 
 `EXPECTED` lists what a reader must find in each CV; `tests/test_cv_parse.py` checks against it.
 """
@@ -282,6 +283,29 @@ BROWSER = (
     ("p", "Sea kayaking, choir singing and restoring old maps."),
 )
 BROWSER_NAME = "Avery-Quillon-CV"
+# A row of facts under the contact line, then a "Profile" heading: read before 2026-11-18 as two summary
+# sections, the first holding only that row, so the CV showed "PROFILE" twice.
+FACTS = (
+    ("h1", "Rowan Fieldmere"),
+    ("contact", "rowan.fieldmere@example.org | 07700 900465 | github.com/example-fieldmere"),
+    ("contact", "Lowmere / Eastwold | British citizen, no visa sponsorship needed | Available to start immediately"),
+    ("h2", "Profile"),
+    ("p", "First-class History graduate looking for a research or archive role. I catalogue records with care "
+          "and write them up so that visitors can follow them."),
+    ("h2", "Education"),
+    ("h3", "BA (Hons) History, First"),
+    ("meta", "University of Nowhere Fen | Sep 2023 - Jun 2026"),
+    ("li", "Dissertation on the harbour ledgers of a made-up port, 1790 to 1820."),
+    ("h2", "Experience"),
+    ("h3", "Archive Volunteer"),
+    ("meta", "Fenland Parish Archive | 2024 - Present"),
+    ("li", "Catalogued 300 letters from the 1840s into the archive's spreadsheet."),
+)
+FACTS_NAME = "Rowan-Fieldmere-CV"
+FACTS_EXPECTED = {
+    "headline": "Lowmere / Eastwold | British citizen, no visa sponsorship needed | Available to start immediately",
+    "kinds": ["summary", "education", "experience"], "profile": "First-class History graduate",
+}
 BROWSER_EXPECTED = {
     "name": "Avery Quillon", "email": "avery.quillon@example.org", "phone": "07700 900464", "city": "Lowmere",
     "kinds": ["summary", "education", "projects", "experience", "skills", "interests"],
@@ -363,11 +387,11 @@ def _tj(word: str) -> bytes:
     return b" ".join(out)
 
 
-def _browser_pages() -> list[bytes]:
-    """Each page's content stream for `BROWSER`, laid out the way the print style sheet lays it out."""
+def _browser_pages(blocks: tuple) -> list[bytes]:
+    """Each page's content stream for `blocks`, laid out the way the print style sheet lays it out."""
     pages, ops = [], [b"q %.2f 0 0 %.2f 0 0 cm\n" % (PX, PX)]
     top = BROWSER_MARGIN
-    for kind, text in BROWSER:
+    for kind, text in blocks:
         size = BROWSER_SIZES[kind]
         left = BROWSER_MARGIN + (LIST_INDENT if kind == "li" else 0.0)
         width = PAGE_PX_W - BROWSER_MARGIN - left
@@ -402,9 +426,9 @@ def _browser_pages() -> list[bytes]:
     return pages
 
 
-def browser_pdf_bytes() -> bytes:
-    """`BROWSER` printed as Chrome prints a page: see the note above `BROWSER`."""
-    streams = _browser_pages()
+def browser_pdf_bytes(blocks: tuple = BROWSER) -> bytes:
+    """`blocks` printed as Chrome prints a page: see the note above `BROWSER`."""
+    streams = _browser_pages(blocks)
     first_page = 5
     kids = b" ".join(b"%d 0 R" % (first_page + 2 * i) for i in range(len(streams)))
 
@@ -423,11 +447,11 @@ def browser_pdf_bytes() -> bytes:
     return _pdf(objects)
 
 
-def browser_markdown() -> str:
-    """`BROWSER` as the Markdown it was printed from, with long paragraphs wrapped as an editor wraps them."""
+def browser_markdown(blocks: tuple = BROWSER) -> str:
+    """`blocks` as the Markdown they were printed from, with long paragraphs wrapped as an editor wraps them."""
     out: list[str] = []
     prefix = {"h1": "# ", "h2": "## ", "h3": "### ", "li": "- "}
-    for kind, text in BROWSER:
+    for kind, text in blocks:
         if kind != "li" or (out and not out[-1].startswith("- ")):
             out.append("")
         body = prefix.get(kind, "") + text
@@ -583,6 +607,8 @@ def files() -> dict[str, bytes]:
     out["Scanned-CV.pdf"] = scanned_pdf_bytes()
     out[f"{BROWSER_NAME}.pdf"] = browser_pdf_bytes()
     out[f"{BROWSER_NAME}.md"] = browser_markdown().encode("ascii")
+    out[f"{FACTS_NAME}.pdf"] = browser_pdf_bytes(FACTS)
+    out[f"{FACTS_NAME}.md"] = browser_markdown(FACTS).encode("ascii")
     return out
 
 

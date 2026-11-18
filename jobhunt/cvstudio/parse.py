@@ -21,6 +21,11 @@ field. Design decisions, each with its reason:
 - Rows of the "Check what Hal read" report have a path that names one field
   (`contact/email`, `s:<section>/text`, `s:<section>/e:<entry>/<field>`, `.../b:<bullet>`), and
   `correct()` changes exactly that field.
+- A CV has one summary. Text above the first heading becomes the profile only when it reads as one; a line
+  of short facts set apart by "|" (places, right to work, notice) joins the headline instead. When a CV
+  still gives two summaries (a paragraph above a "Profile" heading, or the AI returning two), they are
+  merged into one in reading order, because two sections both titled "Profile" read as a mistake on the
+  page (seen on 2026-11-18 in CVs printed from Markdown).
 """
 from __future__ import annotations
 
@@ -54,6 +59,7 @@ LOW_CONFIDENCE = 0.6            # an AI confidence below this marks the field "C
 LARGE_TYPE = 1.15               # a line this much larger than the body text may be a heading
 HEADING_WORDS = 5               # headings are short
 HEADLINE_WORDS = 12             # a line under the name longer than this is a profile, not a headline
+FACT_WORDS = 8                  # each part of a "Leeds | UK citizen, no visa needed | Available now" line is this short
 PARAGRAPH_WORDS = 14            # a non-bullet line this long inside an entry is its paragraph, not a header
 
 PICTURE_WORDS = "This PDF is a picture of a CV, so Hal cannot read it. Upload the Word file, or paste the text."
@@ -68,6 +74,7 @@ BAD_PDF_WORDS = ("Hal could not open this PDF. It may be damaged or locked with 
                  "file, or paste the text.")
 BAD_DOCX_WORDS = "Hal could not open this Word file. Save it again as a .docx file, or paste the text."
 EMPTY_WORDS = "Paste the text of your CV first."
+UNTITLED_PROFILE = "Profile"    # the title of a profile written above the first heading with none of its own
 NOT_FOUND_WHY = "Hal could not find these words in your file."
 UNSURE_WHY = "Hal was not sure about this."
 TWO_DIGIT_WHY = "The year is written with two digits."
@@ -683,6 +690,24 @@ def _section(kind: str, title: str, sid: str, lines: list[Line], marks: dict[str
     return sec
 
 
+def _facts(text: str) -> bool:
+    """True when `text` is a row of short facts set apart by separators, not a sentence of a profile."""
+    parts = [p.strip(" ,") for p in SEPARATORS.split(text) if p.strip(" ,")]
+    return len(parts) > 1 and all(len(p.split()) <= FACT_WORDS for p in parts)
+
+
+def _one_summary(groups: list[tuple[str, str, list]], default_title: str) -> list[tuple[str, str, list]]:
+    """`groups` with every summary merged into the first one, its body in reading order; the merged one takes
+    the first title the CV wrote itself rather than `default_title`, Hal's own name for untitled text."""
+    summaries = [g for g in groups if g[0] == "summary"]
+    if len(summaries) < 2:
+        return groups
+    titles = [g[1] for g in summaries if g[1] != default_title] or [default_title]
+    merged = ("summary", titles[0], [part for g in summaries for part in g[2]])
+    later = {id(g) for g in summaries[1:]}
+    return [merged if g is summaries[0] else g for g in groups if id(g) not in later]
+
+
 def _contact(top: list[Line], body_size: float | None, marks: dict[str, str]) -> tuple[dict, str, list[Line]]:
     """The contact snapshot, the headline and any profile lines from the lines above the first heading."""
     contact: dict[str, Any] = {}
@@ -721,6 +746,8 @@ def _contact(top: list[Line], body_size: float | None, marks: dict[str, str]) ->
             continue
         if not headline and len(line.text.split()) <= HEADLINE_WORDS:
             headline = line.text.strip()
+        elif not leftover and _facts(line.text):
+            headline = " | ".join(x for x in (headline, line.text.strip()) if x)
         else:
             leftover.append(line)
     if places:
@@ -745,13 +772,13 @@ def read_rules(lines: list[Line]) -> Reading:
     counts: Counter = Counter()
     groups: list[tuple[str, str, list[Line]]] = []
     if leftover:
-        groups.append(("summary", "Profile", leftover))
+        groups.append(("summary", UNTITLED_PROFILE, leftover))
     for line, kind in zip(lines[first_heading:], kinds[first_heading:], strict=True):
         if kind:
             groups.append((kind, _title(line.text), []))
         else:
             groups[-1][2].append(line)
-    for kind, title, body in groups:
+    for kind, title, body in _one_summary(groups, UNTITLED_PROFILE):
         counts[kind] += 1
         n = counts[kind]
         sid = f"custom-{n}" if kind == "custom" else (kind if n == 1 else f"{kind}-{n}")
@@ -803,6 +830,30 @@ def _without_grade(heading: str, grade: str) -> str:
     return heading
 
 
+def _ai_kind(raw: dict) -> str:
+    """The section kind of one of the AI's sections, "custom" only when its title names no known kind."""
+    kind = _s(raw.get("kind")).lower()
+    kind = kind if kind in SECTION_KINDS else "custom"
+    if kind == "custom":
+        # Claude called "REFERENCES" custom in one reading and additional in the next (checked 2026-10-23)
+        kind = _known_kind(_s(raw.get("title"))) or "custom"
+    return kind
+
+
+def _one_ai_summary(sections: list[dict]) -> list[dict]:
+    """The AI's sections with every summary merged into the first, as `_one_summary` does for the rules."""
+    summaries = [s for s in sections if _ai_kind(s) == "summary"]
+    if len(summaries) < 2:
+        return sections
+    titles = [_s(s.get("title")) for s in summaries if _s(s.get("title")) not in ("", UNTITLED_PROFILE)]
+    merged = {"kind": "summary", "title": titles[0] if titles else UNTITLED_PROFILE,
+              "text": " ".join(_s(s.get("text")) for s in summaries if _s(s.get("text"))),
+              "confidence": {"text": min(_conf(s, "text") for s in summaries)},
+              "entries": [e for s in summaries for e in s.get("entries") or []]}
+    later = {id(s) for s in summaries[1:]}
+    return [merged if s is summaries[0] else s for s in sections if id(s) not in later]
+
+
 def from_ai(reply: dict) -> Reading | None:
     """Schema 2 from the AI's JSON, with its unsure fields marked; None when the reply holds no sections."""
     sections = reply.get("sections") if isinstance(reply.get("sections"), list) else []
@@ -823,14 +874,8 @@ def from_ai(reply: dict) -> Reading | None:
     doc = CVDoc(headline=_s(reply.get("headline")), contact_snapshot=contact)
     used: set[str] = set()
     counts: Counter = Counter()
-    for raw in sections:
-        if not isinstance(raw, dict):
-            continue
-        kind = _s(raw.get("kind")).lower()
-        kind = kind if kind in SECTION_KINDS else "custom"
-        if kind == "custom":
-            # Claude called "REFERENCES" custom in one reading and additional in the next (checked 2026-10-23)
-            kind = _known_kind(_s(raw.get("title"))) or "custom"
+    for raw in _one_ai_summary([s for s in sections if isinstance(s, dict)]):
+        kind = _ai_kind(raw)
         counts[kind] += 1
         n = counts[kind]
         sid = f"custom-{n}" if kind == "custom" else (kind if n == 1 else f"{kind}-{n}")

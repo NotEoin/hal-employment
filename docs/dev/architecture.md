@@ -538,6 +538,10 @@ runs: tests use `tests/support/fake_claude/`.
   when it is short, holds a date range or is split with `|` (each part becomes its own field); other lines
   are the entry's paragraph. A short bold line with a heading word ("Other projects") is a section only
   when it is as large as the file's other section titles (`_section_kinds`).
+- Above the first heading, `_contact` takes the name, the contact lines and a short headline. A row of
+  short facts split with `|` (places, right to work, notice: `_facts`) joins the headline; anything longer
+  is the profile. A reading has one summary section: `_one_summary` (rules) and `_one_ai_summary` (AI)
+  merge a later one into the first, text in reading order, under the title the CV wrote.
 
 ## CV types and checks (`cvstudio/types.py`, `cvstudio/checks.py`)
 

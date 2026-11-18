@@ -103,6 +103,11 @@ What changed in each version, in plain words.
   window, the form could be filled with a CV you never approved. Now Hal asks you to wait until it has
   finished, and a write that stops never saves files over the ones you approved.
 
+- **A CV shows its profile once.** When a CV had a line such as "Leeds | British citizen, no visa
+  sponsorship needed | Available to start immediately" under your contact details and then a "Profile"
+  heading, Hal read two profiles, so your CV showed "PROFILE" twice. Now that line goes under your name with
+  your contact details, and a CV always has one profile.
+
 ## 2.2.0 (2026-11-15)
 
 ### What's new
