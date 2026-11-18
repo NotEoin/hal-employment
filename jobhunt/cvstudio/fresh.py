@@ -8,7 +8,9 @@ same facts, through the suggestion guards, so it cannot add a number or qualific
 hold, or speak as I or we, and it is respelt to the person's spelling.
 
 `make` saves the result as a generated version, checks it against its type, and runs the reviewers, so a
-failing check arrives as a suggestion rather than as a silent edit.
+failing check arrives as a suggestion rather than as a silent edit. Before saving, Hal's own words (the profile
+line) are held to the CV's page limit on the printed page (`within_limit`); the person's answers are never
+cut, so when they alone run over, Hal keeps them and says how many pages it is.
 
 Not built yet: reading the record and old documents through `cv_extract` and `cv_compose` before the
 interview; today the answers are the only facts.
@@ -175,18 +177,63 @@ def _ai_profile(doc, type_, answers: dict) -> str | None:
     return gapped
 
 
+def _without_profile(doc) -> object:
+    """`doc` with no profile section: the last of Hal's own words it can drop."""
+    import dataclasses
+
+    return dataclasses.replace(doc, sections=[s for s in doc.sections if s.kind != "summary"])
+
+
+def within_limit(drafts: list, doc_id: str) -> tuple[object, str]:
+    """(the draft to save, a note): the first of `drafts` whose printed pages keep to CV `doc_id`'s limit.
+
+    `drafts` hold the same answers with less of Hal's own words each (its AI profile, its plain profile, no
+    profile), at most `len(drafts)` prints. With no limit or no count (no browser) the first is used. When
+    none fits, the first is kept, the person's answers whole, and the note gives the real numbers.
+    """
+    from jobhunt.cvstudio import pagelimit
+
+    limit = pagelimit.limit_of(doc_id)[0]
+    if not limit:
+        return drafts[0], ""
+    first = None
+    for i, draft in enumerate(drafts):
+        pages = pagelimit.count_doc(draft, doc_id)
+        if pages is None:
+            return drafts[0], ""
+        first = pages if first is None else first
+        if pages <= limit:
+            if i == 0:
+                return draft, ""
+            profiled = any(s.kind == "summary" for s in draft.sections)
+            note = pagelimit.FRESH_SHORTER if profiled else pagelimit.FRESH_NO_PROFILE
+            return draft, note.format(limit=pagelimit.pages_words(limit))
+    return drafts[0], pagelimit.FRESH_OVER.format(pages=first, limit=limit)
+
+
 def make(answers: dict, type_id: str, *, step=None, doc_id: str | None = None) -> dict:
     """Saves a fresh CV as a generated version of one CV (the lead CV by default), checks it and starts
-    suggestions for what fails."""
+    suggestions for what fails.
+
+    Hal's own words are held to the CV's page limit (`within_limit`): the AI's profile gives way to the plain
+    one, then to none, until the printed CV fits; `note` says what Hal did, or the real numbers when the
+    answers alone are longer.
+    """
     from jobhunt.cvstudio import checks, model, store, types
 
     type_ = types.load(type_id)
     if step:
         step("Writing your CV from your answers")
     doc = build(answers, type_)
+    drafts = [doc]
     text = _ai_profile(doc, type_, answers)
     if text:
-        doc = model.apply(doc, model.Change("replace", "s:summary/text", text))
+        drafts.insert(0, model.apply(doc, model.Change("replace", "s:summary/text", text)))
+    if any(s.kind == "summary" for s in doc.sections):
+        drafts.append(_without_profile(doc))
+    if step:
+        step("Counting the pages of your CV")
+    doc, note = within_limit(drafts, store.doc(doc_id=doc_id)["id"])
     problems = model.validate(doc, type_)
     if problems:
         raise ValueError("Hal could not build a CV from these answers: " + " ".join(problems))
@@ -201,4 +248,4 @@ def make(answers: dict, type_id: str, *, step=None, doc_id: str | None = None) -
     finally:
         con.close()
     return {"version_id": vid, "failing": [r["name"] for r in results if r["ok"] is False],
-            "checks": len(results), "suggestions": found["pending"]}
+            "checks": len(results), "suggestions": found["pending"], "note": note}

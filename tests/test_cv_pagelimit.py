@@ -19,13 +19,14 @@ from support import people
 from support.api import HalServer
 from support.fake_ai import fake_ai
 from support.world import World
+from test_cv_fresh import NO_MARKS
 from test_cv_printer import NoBrowsersHere
 from test_cv_render import made_up_cv, profile_of, type_for
 from test_cv_suggest import PROFILE, TABLE, CvCase
 from test_cv_tailor import JOB, NEW_PROFILE, NEW_TABLE, JobCase, tailoring_ai
 
 from jobhunt.apply import queries
-from jobhunt.cvstudio import checks, export, model, pagelimit, printer, store, suggest, tailor
+from jobhunt.cvstudio import checks, export, fresh, model, pagelimit, printer, store, suggest, tailor
 from jobhunt.cvstudio import types as cvtypes
 
 FILLER = "Filler line about a made-up archive"
@@ -270,6 +271,38 @@ class SuggestionsKeepToTheLimit(CvCase):
         with stand_in():
             suggest.accept(self.con, sid, text=self.long)
         self.assertEqual(self.text_at(PROFILE), self.long)
+
+
+class FreshCvKeepsToTheLimit(unittest.TestCase):
+    """Build me a fresh CV (`test_cv_fresh.NO_MARKS`) for a CV of one page, with the stand-in printer."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        store.set_page_limit(1, doc_id=store.doc()["id"])
+
+    def test_the_ais_long_profile_gives_way_to_the_plain_one_that_fits(self):
+        long_profile = "History graduate who catalogued parish letters." + f" {FILLER}." * FILLER_PER_PAGE
+        with fake_ai({"cv_compose": json.dumps({"summary": long_profile})}), stand_in() as p:
+            out = fresh.make(NO_MARKS, "humanities_grad")
+        self.assertEqual(out["note"], "Hal wrote a shorter profile, so this CV keeps to 1 page.")
+        self.assertEqual(store.current()[1].sections[0].text, fresh.profile_line(NO_MARKS))
+        self.assertEqual(p.calls, 2, "a print for each draft tried, no more")
+
+    def test_answers_that_alone_run_over_are_all_kept_and_the_real_numbers_said(self):
+        answers = {**NO_MARKS, "interests": "Lead a monthly local history walk." + f" {FILLER}." * FILLER_PER_PAGE}
+        with stand_in():
+            out = fresh.make(answers, "humanities_grad")
+        self.assertEqual(out["note"], "This CV is 2 pages, and you asked for 1. Your answers alone take more room "
+                                      "than that, so Hal kept them all.")
+        doc = store.current()[1]
+        self.assertEqual(doc.sections[-1].text, answers["interests"])
+        self.assertEqual(doc.sections[0].text, fresh.profile_line(NO_MARKS))
+
+    def test_with_no_limit_nothing_is_printed(self):
+        with stand_in() as p:
+            store.set_page_limit(0, doc_id=store.doc()["id"])
+            out = fresh.make(NO_MARKS, "humanities_grad")
+        self.assertEqual((out["note"], p.calls), ("", 0))
 
 
 if __name__ == "__main__":

@@ -48,6 +48,11 @@ KEPT_BASE = ("Your CV was already longer than {limit} before Hal changed anythin
 SUGGESTION_HELD = ("Hal's wording would make this CV {pages} pages, and you asked for {limit}, so Hal did not use "
                    "it. Edit the words to use them anyway.")
 SUGGESTION_SHORTER = "Hal used its shorter wording, so this CV keeps to {limit}."
+FRESH_SHORTER = "Hal wrote a shorter profile, so this CV keeps to {limit}."
+FRESH_NO_PROFILE = ("Hal left out the profile, so this CV keeps to {limit}. Add one on Edit your CV if you "
+                    "want it.")
+FRESH_OVER = ("This CV is {pages} pages, and you asked for {limit}. Your answers alone take more room than that, "
+              "so Hal kept them all.")
 
 # (html, out, expect_name, expect_text) -> pages; raises `printer.PrintError` when it cannot print. None: the
 # browser printer (`_browser`), the default.

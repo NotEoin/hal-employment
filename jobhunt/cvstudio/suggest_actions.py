@@ -107,5 +107,6 @@ def build_fresh(ctx, answers: dict, type_id: str, doc_id: str | None = None) -> 
     """Writes a CV from the interview answers as a new version of one CV (the lead CV by default), checks it and
     suggests fixes for what fails."""
     out = fresh.make(answers, type_id, step=ctx.step, doc_id=doc_id)
-    ctx.changed(f"Saved a fresh CV as a new version; {len(out['failing'])} checks to look at.")
+    said = f"Saved a fresh CV as a new version; {len(out['failing'])} checks to look at."
+    ctx.changed(f"{said} {out['note']}" if out["note"] else said)
     return out
