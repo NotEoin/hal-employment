@@ -149,6 +149,15 @@ class OutOfDate(Written):
         record.bump_revision()
         self.assertEqual(self.card()["out_of_date"], rewrite.BOTH_MOVED)
 
+    def test_only_a_change_to_the_cv_the_jobs_cv_was_made_from_counts(self):
+        made_from = store.current(self.con)[0]
+        other = store.create("Avery Quillon, another CV", store.current(self.con)[1], origin="edited",
+                             what="A made-up second CV", by="you", star=False, con=self.con)
+        store.new_version(store.current(self.con, doc_id=other)[1], origin="edited", what="A made-up change",
+                          by="you", doc_id=other, con=self.con)
+        self.assertNotEqual(store.current(self.con, doc_id=other)[0], made_from)
+        self.assertIsNone(self.page()["out_of_date"], "the job's CV was made from the first CV, which did not change")
+
     def test_documents_written_before_stamps_are_out_of_date_once_the_record_changes(self):
         self.con.execute("DELETE FROM meta WHERE k = ?", (documents.written_from_key(self.job["id"]),))
         self.con.commit()
