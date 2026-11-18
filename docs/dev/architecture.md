@@ -479,7 +479,10 @@ runs: tests use `tests/support/fake_claude/`.
   use). `PUT .../cv/base` `{doc_id}` checks it as a rewrite is checked (`rewrite.check`, 409) and that the CV
   is starred (400), then starts `docs.base_cv` (`actions.build_on`): `tailor.prepare` on `choose.by_you`,
   which keeps the person's edits that still fit, then the PDF; the letter, message and answers stay. An older
-  application gets its `job_cvs` row this way and drops its `undone_changes`.
+  application gets its `job_cvs` row this way and drops its `undone_changes`. The application page's
+  `docs.cv.base` is `choose.shown` (the lead CV, with no reason, for an older application); the CV tab
+  (`app/docs-step.js`) names it with the reason, and with more than one CV in use offers Change CV
+  (`dialogs/basecv.js`). `tailor.editor` gives `main_label`, so Copy to my main CV names the CV it copies into.
 - The bin keeps a version for 30 days. It is emptied lazily (`purge_bin`, whenever versions are listed),
   and never removes a version an application or job still points at.
 - Files are kept read-only as `cv/files/<sha256>.<ext>`; `file_bytes` checks the SHA-256 on every read and

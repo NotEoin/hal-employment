@@ -68,7 +68,8 @@ APPROVED = "You approved this CV already. Make the documents again to change it.
 ORIGINAL_WHY = ("Adjusting for each job is off while you send your original file. Employers get it exactly as "
                 "you uploaded it.")
 LEVEL_WORDS = {"little": "Adjusting a little", "more": "Adjusting more"}
-MIN_PICKS, MAX_PICKS = 3, 5        # "the three to five things the job cares about most" (`cvdocs.pick_first`)
+MAIN_LABEL = "your main CV"         # what Copy names the CV it copies into while only one CV is in use
+MIN_PICKS, MAX_PICKS = 3, 5       # "the three to five things the job cares about most" (`cvdocs.pick_first`)
 
 
 def _store():
@@ -504,7 +505,8 @@ def editor(job_id: str, con: sqlite3.Connection | None = None) -> dict:
     `marks` lists each part Hal changed (`by` "hal", with its change's id; only changes still on) and each part
     the person changed after them (`by` "you"). `version_id` is what a save sends back as `base`, and
     `main_version_id` the version in use of the CV this job's CV was built from (`main_doc_id`, called
-    `main_label` on the page), for Copy to my main CV, which copies into that CV.
+    `main_label` on the page, "your main CV" while only one CV is in use), for Copy to my main CV, which copies
+    into that CV.
     """
     from jobhunt.cvstudio import choose
 
@@ -522,7 +524,8 @@ def editor(job_id: str, con: sqlite3.Connection | None = None) -> dict:
     main = _store().version(row["base_version_id"], con=con)["doc_id"]
     return {**model.to_dict(doc), "version_id": _rev(row), "n": None, "job_id": job_id,
             "main_version_id": _store().current(con, main)[0], "main_doc_id": main,
-            "main_label": choose.your(_store().doc(con, main)["name"]), "approved": row["approved"],
+            "main_label": choose.your(_store().doc(con, main)["name"]) if len(_store().starred(con)) > 1
+            else MAIN_LABEL, "approved": row["approved"],
             "changes": shown(job_id, con)["changes"], "marks": marks}
 
 

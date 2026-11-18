@@ -382,7 +382,7 @@ def _cv_changes(job, docs: dict) -> list[dict]:
 
 
 def _cv_base(con, job_id: str) -> dict | None:
-    """The CV this application is built from, with why (`choose.shown`); None for one without a job's CV."""
+    """The CV this application is built from, with why (`choose.shown`); None when there is no CV at all."""
     from jobhunt.cvstudio import choose
 
     return choose.shown(con, job_id)

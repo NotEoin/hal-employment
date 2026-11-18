@@ -8,7 +8,8 @@
    With `job`, the same editor works on one application's CV (the documents step, app/docs-step.js):
    it reads and saves /applications/<id>/cv, lists Hal's changes for the job with Undo and Redo
    (cv/job-changes.js), marks the parts Hal and the person changed apart, and offers "Copy to my main CV"
-   on each entry. A save there makes the job's PDF again; the main CV changes only by Copy. */
+   on each entry, which copies into the CV the application was built from (`main_label`, "your Applied AI
+   CV"). A save there makes the job's PDF again; that CV changes only by Copy. */
 import { html, useState, useEffect } from "../core/html.js";
 import { api, post } from "../core/api.js";
 import { useApi, toast, invalidate } from "../core/store.js";
@@ -140,14 +141,14 @@ export function EditTab({ setT, job }) {
       const out = await post(job.path + "/copy", { base: base.main_version_id, target: target(s, e) });
       invalidate("/cv*");
       await reload();
-      toast("Copied " + (e.heading || "the entry") + " to your main CV, as version " + out.n + ".");
+      toast("Copied " + (e.heading || "the entry") + " to " + (base.main_label || "your main CV") + ", as version " + out.n + ".");
     } catch (err) { toast(err.message); }
   };
   const marks = job ? base.marks : null;
   return html`<div class="stack">
     <div class="card cv-edit-bar">${job
       ? html`<p class="small sub grow" style="margin:0">Change any line of your CV for this job. Nothing is saved until you press${" "}
-          <b>Save changes</b>. Your main CV stays as it is: press <b>Copy to my main CV</b> on an entry to keep its lines there too.</p>`
+          <b>Save changes</b>. ${base.main_label ? base.main_label[0].toUpperCase() + base.main_label.slice(1) : "Your main CV"} stays as it is: press <b>Copy to my main CV</b> on an entry to keep its lines there too.</p>`
       : html`<p class="small sub grow" style="margin:0">Change any line. Nothing is saved until you press${" "}
           <b>Save changes</b>, and each save is a new version. To undo a save, use an older version in${" "}
           <button type="button" class="btn quiet small" onClick=${() => setT("versions")}>Versions</button></p>`}

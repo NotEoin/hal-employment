@@ -21,7 +21,11 @@
    (`docs.out_of_date`) or the last write stopped (`docs.stopped`) it moves into a note above with the reason.
    With edits of the person's own (`docs.own_edits`) it asks first (dialogs/rewrite.js), and with changes not
    yet saved it asks for those first. When Hal made no documents (`docs.state` "failed") the step says why and
-   offers the same button. */
+   offers the same button.
+
+   The CV tab names the CV this application is built from (`docs.cv.base`, "Built from your Applied AI CV")
+   with Hal's reason; when more than one CV is in use, Change CV opens dialogs/basecv.js to build it on
+   another. With one CV in use only the name shows. */
 import { html, cx, useState } from "../core/html.js";
 import { post, put } from "../core/api.js";
 import { toast, openDialog, invalidate } from "../core/store.js";
@@ -127,6 +131,15 @@ function Picks({ a, offered }) {
       <span class="small sub" role="status">${ticked.length} ticked</span></div></section>`;
 }
 
+/** The line naming the CV this application is built from, why, and Change CV when there is a choice. */
+function BuiltFrom({ a, base, unsaved, reload }) {
+  const change = () => (unsaved ? toast("Save or discard your changes first, then change the CV.")
+    : openDialog("basecv", { app: a, then: reload }));
+  return html`<div class="row tight base-cv" style="margin-bottom:8px"><div class="grow small">
+      <b>Built from ${base.label}.</b>${base.several && base.reason ? " " + base.reason : ""}</div>
+    ${base.several && html`<button type="button" class="btn quiet small" onClick=${change}><${Icon} n="file" c="s" />Change CV</button>`}</div>`;
+}
+
 /** The Documents step. */
 export function DocsStep({ a, reload, onApproved }) {
   const d = a.docs;
@@ -178,6 +191,7 @@ export function DocsStep({ a, reload, onApproved }) {
     <${UncheckedNote} />
     <${Tabs} label="Documents" value=${tab} onChange=${setTab} tabs=${[["cv", "CV", plural(changes.filter(c => c.on).length, "change")],
       ["letter", "Cover letter", ""], ["answers", "Answers", answers.length || ""], ["message", "Message", ""]]} />
+    ${tab === "cv" && !pick.length && d.cv.base && html`<${BuiltFrom} a=${a} base=${d.cv.base} unsaved=${unsaved} reload=${reload} />`}
     ${editable && html`<div class="docs-split cv-job" hidden=${tab !== "cv"}><${EditTab} job=${{ path: appPath(a) + "/cv", appPath: appPath(a),
       onSaved: reload, onDirty: setCvDirty }} /><div class="docs-pdf"><${Pdf} url=${d.cv.preview_url} label="CV preview" /></div></div>`}
     ${tab === "cv" && pick.length > 0 && html`<${Picks} a=${a} offered=${pick} />`}

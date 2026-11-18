@@ -304,11 +304,16 @@ def by_you(con: sqlite3.Connection, job: dict, doc_id: str) -> Choice:
 
 def shown(con: sqlite3.Connection, job_id: str) -> dict | None:
     """The CV the application is built from, for the documents step: {doc_id, name, label, by, reason,
-    several}; `several` when more than one CV is in use, so the page offers to change it. None while the job
-    has no job's CV."""
+    several}; `several` when more than one CV is in use, so the page offers to change it. An application with
+    no job's CV yet (written before they were kept) was built from the lead CV, which is named with no reason;
+    None when there is no CV at all.
+    """
     found = kept(con, job_id)
     if found is None:
-        return None
+        lead = store.lead_id(con)
+        if lead is None:
+            return None
+        found = Choice(lead, "")
     try:
         name = store.doc(con, found.doc_id)["name"] or store.DEFAULT_NAME
     except store.NoSuchCV:

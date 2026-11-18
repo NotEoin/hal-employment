@@ -205,7 +205,16 @@ the advert. The CV, the cover letter, the message and the answers are all writte
 best. When two CVs fit about as well, Hal uses the one that comes first in your list. With one CV in use,
 Hal uses it and compares nothing.
 
-When Hal writes the documents again, it compares your CVs again, as they are now.
+The CV tab of the Documents step says which CV the application is built from, such as "Built from your
+Applied AI CV", and why Hal chose it. If Hal chose the wrong one, press **Change CV**. The list shows each
+of your CVs in use, how many of the advert's skills it covers, and which one Hal picked. Choose one and
+press **Use this CV**: Hal makes the CV for this job again from it, and your cover letter, message and
+answers stay as they are. Your own changes to the CV for this job are carried over where the new CV has
+the same lines. If some cannot be, Hal says how many before you confirm. You cannot change the CV of an
+application you have approved or sent.
+
+When Hal writes the documents again, it compares your CVs again, as they are now, unless you chose the CV
+yourself: then it keeps your choice.
 
 ### Writing the documents again
 

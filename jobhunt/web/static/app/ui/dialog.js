@@ -21,6 +21,7 @@ export const DIALOGS = {
   palette: () => import("../dialogs/palette.js"), critique: () => import("../dialogs/critique.js"),
   rewrite: () => import("../dialogs/rewrite.js"),
   cvpreview: () => import("../dialogs/cvpreview.js"),
+  basecv: () => import("../dialogs/basecv.js"),
 };
 const TITLE_ID = "dlg-title";
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), '

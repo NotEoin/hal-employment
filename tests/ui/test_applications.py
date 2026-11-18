@@ -184,6 +184,44 @@ class ApplicationsTest(unittest.TestCase):
         self.assertEqual(p.page.locator("[role=dialog]").count(), 0)
         self.assertEqual(p.errors, [])
 
+    def test_with_one_cv_in_use_the_cv_tab_only_names_it(self) -> None:
+        p = self.tab(self.serve(self.documents_step())).open(APP)
+        line = p.page.locator(".base-cv")
+        line.wait_for()
+        self.assertEqual(line.inner_text().strip(), "Built from your Museum CV.")
+        self.assertEqual(line.get_by_role("button").count(), 0)
+        self.assertEqual(p.errors, [])
+
+    def test_with_several_cvs_the_reason_shows_and_another_cv_can_be_chosen(self) -> None:
+        reason = "Covers 6 of the 7 skills this advert asks for; your Library CV covers 2."
+        state = self.documents_step()
+        state.pages[APP_PATH]["docs"]["cv"]["base"].update(reason=reason, several=True)
+        state.pages[APP_PATH + "/cv/bases"] = {"cvs": [
+            {"id": "main", "name": "Museum CV", "label": "your Museum CV", "chosen": True, "pick": True, "fit": 80,
+             "have": 6, "of": 7, "lost": 0},
+            {"id": "cv-2", "name": "Library CV", "label": "your Library CV", "chosen": False, "pick": False,
+             "fit": 40, "have": 2, "of": 7, "lost": 1}]}
+        p = self.tab(self.serve(state), "narrow").open(APP)
+        line = p.page.locator(".base-cv")
+        line.wait_for()
+        self.assertIn("Built from your Museum CV. " + reason, line.inner_text())
+        line.get_by_role("button", name="Change CV").click()
+        dialog = p.page.locator("[role=dialog]")
+        museum = dialog.get_by_role("radio", name="Museum CV")
+        museum.wait_for()
+        self.assertIn("Hal's pick", museum.inner_text())
+        self.assertIn("Covers 2 of the 7 skills", dialog.get_by_role("radio", name="Library CV").inner_text())
+        self.assertTrue(dialog.get_by_role("button", name="Use this CV").is_disabled(), "it is in use already")
+        dialog.get_by_role("radio", name="Library CV").click()
+        self.assertIn("1 edit of your own", dialog.locator("[role=status]").inner_text())
+        self.assertEqual(state.posts, [], "nothing changes before you confirm")
+        dialog.get_by_role("button", name="Use it and drop 1 edit").click()
+        p.page.wait_for_selector("text=Hal is making your CV for this job from your Library CV.")
+        self.assertEqual(state.posts, [("/api/v2/applications/demo%3A1/cv/base", {"doc_id": "cv-2"})])
+        self.assertEqual(p.sideways(), 0)
+        self.assertEqual(p.serious_axe(), [])
+        self.assertEqual(p.errors, [])
+
     def test_a_write_that_failed_says_why_on_the_documents_step(self) -> None:
         # a regression: the step showed empty tabs and "ready", and only the board said what went wrong (2026-11-18)
         state = self.documents_step(state="failed", stopped="Hal's AI did not answer")
