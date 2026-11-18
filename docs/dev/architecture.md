@@ -594,6 +594,8 @@ runs: tests use `tests/support/fake_claude/`.
   stored type, look, layout and contact details) with the browser printer only, never the simple PDF, and
   keeps the count in `cv_versions.pages` keyed by the printed page's hash (`pages_key`), so each version and
   look prints once; a print that fails keeps NULL with the key, so it is not retried until the page changes.
+  A draft counted before it is saved (`pagelimit.count_doc`, while Hal weighs a suggestion, Accept all or a
+  fresh CV) is remembered by its page's hash, and `pagelimit.keep` stores it with the version saved from it.
   `GET /api/v2/cv/pages` (`pagelimit.state`) prints when needed; the editor calls it after a save, and the
   Length card (`cv/page-limit.js`) when it opens. `PUT /api/v2/cv/pages` sets the limit. In a test run no
   browser prints for a count unless `HAL_TEST_REAL_PRINT=1`; tests set `pagelimit.PRINT` to a stand-in.

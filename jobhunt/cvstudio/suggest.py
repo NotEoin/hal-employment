@@ -970,6 +970,7 @@ def accept(con: sqlite3.Connection, sugg_id: str, *, alt: int | None = None, tex
         after = afters[alt]
     new_vid = _store().new_version(new_doc, origin="improved", what=f"You accepted: {row['title']}", by="you",
                                    parent=vid)
+    _keep_count(new_vid)
     edited = text is not None and after != afters[alt]
     if edited:
         from jobhunt.writing import edits
@@ -984,6 +985,13 @@ def accept(con: sqlite3.Connection, sugg_id: str, *, alt: int | None = None, tex
     events.publish("suggestions")
     return {"version_id": new_vid, "n": _version_n(con, new_vid), "note": note,
             "ask_send_copy": _store().doc(doc_id=row["doc_id"])["send"] == "original"}
+
+
+def _keep_count(version_id: str) -> None:
+    """Keeps with a version just saved the page count printed while weighing it (`pagelimit.keep`)."""
+    from jobhunt.cvstudio import pagelimit
+
+    pagelimit.keep(version_id)
 
 
 def _fixes_held_to_limit(start, doc, fixes: list, doc_id: str) -> tuple[object, list, str]:
@@ -1051,6 +1059,7 @@ def accept_kind(con: sqlite3.Connection, kind: str, doc_id: str | None = None) -
     words = f"{kind.lower()} fix" if len(done) == 1 else f"{kind.lower()} fixes"
     new_vid = store.new_version(doc, origin="improved", what=f"You accepted {len(done)} {words}", by="you",
                                 parent=vid)
+    _keep_count(new_vid)
     now = clock.iso()
     con.executemany("UPDATE cv_suggestions SET status = 'accepted', result_version_id = ?, decided = ? WHERE id = ?",
                     [(new_vid, now, i) for i in done])

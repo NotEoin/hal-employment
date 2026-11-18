@@ -219,7 +219,7 @@ def make(answers: dict, type_id: str, *, step=None, doc_id: str | None = None) -
     one, then to none, until the printed CV fits; `note` says what Hal did, or the real numbers when the
     answers alone are longer.
     """
-    from jobhunt.cvstudio import checks, model, store, types
+    from jobhunt.cvstudio import checks, model, pagelimit, store, types
 
     type_ = types.load(type_id)
     if step:
@@ -239,6 +239,7 @@ def make(answers: dict, type_id: str, *, step=None, doc_id: str | None = None) -
         raise ValueError("Hal could not build a CV from these answers: " + " ".join(problems))
     vid = store.new_version(doc, origin="generated", what=f"Hal built a fresh CV ({type_.name})", by="hal",
                             type_id=type_id, doc_id=doc_id)
+    pagelimit.keep(vid)            # the draft's count, printed in `within_limit`, so it is not printed again
     if step:
         step("Checking it against your CV type")
     results = checks.for_type(doc, type_)

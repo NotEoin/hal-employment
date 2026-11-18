@@ -334,6 +334,49 @@ class FreshCvKeepsToTheLimit(unittest.TestCase):
             out = fresh.make(NO_MARKS, "humanities_grad")
         self.assertEqual((out["note"], p.calls), ("", 0))
 
+    def test_the_draft_saved_keeps_its_count_and_is_not_printed_again(self):
+        long_profile = "History graduate who catalogued parish letters." + f" {FILLER}." * FILLER_PER_PAGE
+        with fake_ai({"cv_compose": json.dumps({"summary": long_profile})}), stand_in() as p:
+            out = fresh.make(NO_MARKS, "humanities_grad")
+            calls = p.calls
+            self.assertEqual(pagelimit.known(out["version_id"]), (1, True))
+            self.assertEqual(pagelimit.measure(out["version_id"]), 1)
+        self.assertEqual(p.calls, calls)
+
+
+class CountsKeptWithTheVersion(CvCase):
+    """A count printed while Hal weighs its wording is kept with the version it produced (`pagelimit.keep`)."""
+
+    suggestion = SuggestionsKeepToTheLimit.suggestion   # its helpers, not its tests
+    fixes = SuggestionsKeepToTheLimit.fixes
+
+    def setUp(self) -> None:
+        super().setUp()
+        store.set_page_limit(1)
+        self.long = "Catalogued parish letters." + "".join(f" {FILLER} {i}." for i in range(FILLER_PER_PAGE))
+
+    def test_an_accepted_suggestion_keeps_the_count_it_was_weighed_with(self):
+        sid = self.suggestion([self.long, "Catalogued parish letters for a records office."])
+        with stand_in() as p:
+            vid = suggest.accept(self.con, sid)["version_id"]
+            calls = p.calls
+            self.assertEqual(pagelimit.known(vid), (1, True))
+            self.assertEqual(pagelimit.state()["pages"], 1)
+        self.assertEqual(p.calls, calls, "no second print for the same page")
+
+    def test_accept_all_keeps_the_count_of_the_fixes_it_applied(self):
+        self.fixes(5, 6)
+        with stand_in() as p:
+            vid = suggest.accept_kind(self.con, "Dates")["version_id"]
+            calls = p.calls
+            pagelimit.measure(vid)
+        self.assertEqual((pagelimit.known(vid), p.calls), ((1, True), calls))
+
+    def test_a_version_with_no_count_made_keeps_none_and_prints_when_asked(self):
+        vid = store.current()[0]
+        self.assertIsNone(pagelimit.keep(vid))
+        self.assertEqual(pagelimit.known(vid), (None, False))
+
 
 if __name__ == "__main__":
     unittest.main()

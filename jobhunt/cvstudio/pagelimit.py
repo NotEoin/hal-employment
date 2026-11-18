@@ -9,8 +9,9 @@
   - My CV: the CV printed in its look by the browser printer, as Download PDF makes it (`measure`). Printing
     takes a second or more, so a version is printed once per printed page (`cv_versions.pages`, keyed by the
     page's hash in `pages_key`, so a new look or new contact details count again): after the editor saves,
-    when Hal weighs a suggestion, else the first time My CV asks. When no browser can print the count is not
-    known (None). Hal's simple PDF is not counted: its pages are its own layout's, not the look's.
+    when Hal weighs its own wording (kept with the version saved from it, `keep`), else the first time My CV
+    asks. When no browser can print the count is not known (None). Hal's simple PDF is not counted: its
+    pages are its own layout's, not the look's.
   - An application: the PDF employers get, Hal's application layout drawn without a browser (`cv.render`),
     so it is known and takes milliseconds (`job_pages`, kept in `job_cvs.pages` keyed by what it was drawn
     from). While the person sends their original file, that file's own page count (`cv_files.pages`).
@@ -28,6 +29,7 @@ import os
 import shutil
 import sqlite3
 import tempfile
+import threading
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
@@ -59,6 +61,12 @@ FRESH_OVER = ("This CV is {pages} pages, and you asked for {limit}. Your answers
 # (html, out, expect_name, expect_text) -> pages; raises `printer.PrintError` when it cannot print. None: the
 # browser printer (`_browser`), the default.
 PRINT: Callable[[str, Path, str, list[str]], int] | None = None
+
+# Counts of pages not saved yet, by printed page hash (`count_doc`, `keep`). A handful at a time: a suggestion
+# or a fresh CV counts at most a few drafts before one is saved.
+COUNTED_KEPT = 32
+_COUNTED: dict[str, int] = {}
+_COUNTED_LOCK = threading.Lock()
 
 
 @contextlib.contextmanager
@@ -169,10 +177,37 @@ def _print_count(html: str, look_id: str, name: str, first: str) -> int | None:
 
 
 def count_doc(doc: Any, doc_id: str, con: sqlite3.Connection | None = None) -> int | None:
-    """Pages of a document not saved yet, printed as a version of CV `doc_id` would be; None when not known."""
+    """Pages of a document not saved yet, printed as a version of CV `doc_id` would be; None when not known.
+
+    A count is remembered by its printed page's hash (`_COUNTED`), so the version saved from it keeps it
+    (`keep`) and is not printed again.
+    """
     with _conn(con) as c:
         html, look_id, name, first = _page(doc, doc_id, c)
-    return _print_count(html, look_id, name, first)
+    pages = _print_count(html, look_id, name, first)
+    if pages is not None:
+        with _COUNTED_LOCK:
+            _COUNTED[_key(html)] = pages
+            while len(_COUNTED) > COUNTED_KEPT:
+                _COUNTED.pop(next(iter(_COUNTED)))
+    return pages
+
+
+def keep(version_id: str, con: sqlite3.Connection | None = None) -> int | None:
+    """Keeps with a version just saved the count `count_doc` made of the same printed page; never prints.
+
+    Returns the count kept, None when no count of that page was made (it is printed when next asked for).
+    """
+    with _conn(con) as c:
+        v = store.version(version_id, con=c)
+        key = _key(_page(store.get(version_id, con=c), v["doc_id"], c)[0])
+        with _COUNTED_LOCK:
+            pages = _COUNTED.get(key)
+        if pages is None:
+            return None
+        with store.writing(c):
+            c.execute("UPDATE cv_versions SET pages = ?, pages_key = ? WHERE id = ?", (pages, key, version_id))
+    return pages
 
 
 def known(version_id: str, con: sqlite3.Connection | None = None) -> tuple[int | None, bool]:
