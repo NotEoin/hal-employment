@@ -77,6 +77,13 @@ class Links(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(plain(text), text)
         self.assertEqual(safe_link("JavaScript:alert(1)"), "")
+
+    def test_an_address_with_a_control_character_is_never_a_link(self):
+        # regression: "[x](https://a\x01b)" reached the Word file's relationships and Word refused the file
+        for url in ("https://example.org/a\x01b", "https://example.org/\x7f", "https://example.org/\x1f"):
+            with self.subTest(url=repr(url)):
+                self.assertEqual(safe_link(url), "")
+                self.assertEqual(runs(f"[x]({url})"), [Run(f"[x]({url})")])
         self.assertEqual(safe_link(" HTTPS://example.org "), "HTTPS://example.org")
 
     def test_bold_words_inside_a_link_and_a_bold_link(self) -> None:

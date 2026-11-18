@@ -103,6 +103,12 @@ class Exports(unittest.TestCase):
         self.assertEqual(sorted(titles, key=words.index), titles)
         self.assertEqual(export.to_docx(view), export.to_docx(view))   # the same CV gives the same bytes
 
+    def test_the_word_files_relationships_stay_valid_xml_whatever_the_address_holds(self):
+        links = export._Links()
+        links.id_of("https://example.org/a\x01b?c=1&d=\"2\"")
+        rels = ElementTree.fromstring(export._document_rels(links))
+        self.assertEqual([r.get("Target") for r in rels if r.get("TargetMode")], ['https://example.org/ab?c=1&d="2"'])
+
     def test_a_lines_bold_italic_and_links_are_word_runs_and_hyperlinks(self):
         person = people.HUMANITIES
         data = export.to_docx(render.view(formatted_cv(), type_for(person.key), profile_of(person)))

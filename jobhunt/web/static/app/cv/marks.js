@@ -12,10 +12,12 @@ const MAX_STARS = 3;          // bold and italic together, as `inline.MAX_STARS`
 const SCHEMES = /^(https?:\/\/|mailto:)/i;
 const WORD = /[\p{L}\p{N}]/u;
 const SPACE = /\s/;
+const CONTROL = /[\x00-\x1f\x7f]/;   // never in an address, as `inline.CONTROL`
 const GAP = /(\[[^\]]+\])/;     // Hal's gaps ("[how many?]"), as the cards have always marked them
 
-/** The address when it is an http, https or mailto link with no spaces, else "". */
+/** The address when it is an http, https or mailto link with no spaces or control characters, else "". */
 export function safeLink(url) {
+  if (CONTROL.test(url || "")) return "";
   const u = (url || "").trim();
   return u && !SPACE.test(u) && SCHEMES.test(u) ? u : "";
 }

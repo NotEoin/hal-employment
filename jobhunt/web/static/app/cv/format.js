@@ -9,6 +9,7 @@
    the focus in the text box when clicked, so the selection stays in view. */
 import { html, useState } from "../core/html.js";
 import { Icon } from "../ui/icons.js";
+import { safeLink } from "./marks.js";
 
 const MARKS = { bold: 2, italic: 1 };   // stars on each side
 const WORD = /[\p{L}\p{N}]/u;
@@ -49,12 +50,11 @@ export function toggleMark(text, start, end, kind) {
 }
 
 /** The address as a link the CV keeps: https:// added to a bare address, mailto: to an email; "" when it
-    cannot be one (it has spaces). */
+    cannot be one (it has spaces or control characters). */
 export function linkAddress(typed) {
   const url = (typed || "").trim();
   if (!url || SPACE.test(url)) return "";
-  if (SCHEME.test(url)) return url;
-  return EMAIL.test(url) ? "mailto:" + url : "https://" + url;
+  return safeLink(SCHEME.test(url) ? url : EMAIL.test(url) ? "mailto:" + url : "https://" + url);
 }
 
 /** The text with the words at [start, end] made a link to `url`: { text, start, end } as for toggleMark. */

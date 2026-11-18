@@ -81,6 +81,11 @@ def _t(text: str) -> str:
     return escape(_XML_BAD.sub("", text or ""))
 
 
+def _attr(text: str) -> str:
+    """`_t` for a value inside double quotes."""
+    return escape(_XML_BAD.sub("", text or ""), {'"': "&quot;"})
+
+
 class _Links:
     """The web addresses a Word file links to, each with its relationship id."""
 
@@ -205,8 +210,9 @@ def _document_rels(links: _Links) -> str:
             'styles" Target="styles.xml"/>',
             '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
             'numbering" Target="numbering.xml"/>']
-    rels += [f'<Relationship Id="{rid}" Type="{HYPERLINK}" Target="{escape(url, {chr(34): "&quot;"})}" '
-             'TargetMode="External"/>' for url, rid in links.ids.items()]
+    # `inline.safe_link` already refuses control characters; this keeps the part valid XML whatever comes in
+    rels += [f'<Relationship Id="{rid}" Type="{HYPERLINK}" Target="{_attr(url)}" TargetMode="External"/>'
+             for url, rid in links.ids.items()]
     return ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
             + "".join(rels) + "</Relationships>")

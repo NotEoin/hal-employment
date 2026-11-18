@@ -33,6 +33,7 @@ Design decisions, each with its reason:
 from __future__ import annotations
 
 import html as _html
+import re
 from dataclasses import dataclass, field, replace
 
 STAR = "*"
@@ -40,6 +41,8 @@ ESCAPABLE = "*[]"
 MAX_STARS = 3            # bold and italic together; a longer run ("*****" as a rating) is always text
 SCHEMES = ("http://", "https://", "mailto:")
 MARK_CHARS = frozenset("*[\\")
+# a control character in an address made the Word file's XML invalid, so Word refused it (review, 2026-11-18)
+CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
 
 @dataclass(frozen=True)
@@ -67,7 +70,9 @@ class _Tok:
 
 
 def safe_link(url: str) -> str:
-    """The address when it is an http, https or mailto link with no spaces, else ""."""
+    """The address when it is an http, https or mailto link with no spaces or control characters, else ""."""
+    if CONTROL.search(url or ""):
+        return ""
     url = (url or "").strip()
     if not url or any(ch.isspace() for ch in url) or not url.lower().startswith(SCHEMES):
         return ""
