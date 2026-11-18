@@ -10,6 +10,7 @@ import http.client
 import json
 import os
 import stat
+import threading
 import unittest
 import uuid
 from unittest import mock
@@ -439,6 +440,31 @@ class Upload(unittest.TestCase):
         self.assertEqual((status, dup["action_id"], dup["duplicate"]["id"]), (200, None, first["cv"]))
         self.assertEqual(self.client.get(f"/api/v2/cv/original?cv={first['cv']}").body,
                          fixture("technical", "docx")[1])
+
+    def test_a_second_upload_while_one_is_read_never_stops_the_first(self):
+        """Every upload shared one subject and replaced the reading before it, so that CV was never made
+        (2026-11-18); the same file uploaded again while it is read follows that reading."""
+        entered, release = threading.Event(), threading.Event()
+        rules = parse.read_rules
+
+        def held(lines):
+            entered.set()
+            release.wait(WAIT_S)
+            return rules(lines)
+
+        first, second = fixture("humanities", "pdf"), fixture("technical", "pdf")
+        with fake_ai(NO_AI), mock.patch.object(parse, "read_rules", held):
+            status, a = upload(self.hal, self.client, *first)
+            self.assertEqual(status, 200, a)
+            self.assertTrue(entered.wait(WAIT_S), "the first file is being read")
+            status, b = upload(self.hal, self.client, *second)
+            self.assertEqual(status, 200, b)
+            status, again = upload(self.hal, self.client, *first)
+            self.assertEqual((status, again["action_id"], again["duplicate"]), (200, a["action_id"], None))
+            release.set()
+            done = [runner.wait(x["action_id"], WAIT_S) for x in (a, b)]
+        self.assertEqual([d["state"] for d in done], ["done", "done"], [d["error"] for d in done])
+        self.assertEqual(len({d["result"]["cv"] for d in done}), 2, "each file made its own CV")
 
     def test_a_scanned_pdf_is_explained_when_it_is_uploaded(self):
         status, body = upload(self.hal, self.client, "Scanned-CV.pdf", (FOLDER / "Scanned-CV.pdf").read_bytes())

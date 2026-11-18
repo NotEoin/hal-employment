@@ -497,7 +497,10 @@ runs: tests use `tests/support/fake_claude/`.
 
 - `POST /cv/upload` does the cheap checks (10 MB, 6 pages, kind, a PDF with no text layer) and keeps the file
   with `store.add_file(..., role="baseline")`. When those bytes already made a CV it answers that CV as
-  `duplicate` and starts nothing; otherwise it starts `cv.parse`. The action reads the file with Hal's rules,
+  `duplicate` and starts nothing; otherwise it starts `cv.parse` (`parse_actions.start_read`, subject
+  `cv.parse:<file id>`). Two uploads of different files are read side by side; the same file asked for again
+  while it is read answers that reading's `action_id` (409 when it goes into another CV), so no upload stops
+  another and no file is read twice at once. The action reads the file with Hal's rules,
   then asks the AI (`cv_parse`), and keeps one reading, the AI's when there is one, as one version "Your file:
   <name> (never changed)" with the file as the CV's own. Without `?cv=` that version is version 1 of a new CV
   (`store.create`, named after the file); with `?cv=<id>` ("Upload a new version of this CV") it is that

@@ -5,8 +5,9 @@
   (size, kind, pages, a PDF that is only a picture) answer at once with words that say what to do; the file
   is then stored unchanged and `cv.parse` reads it in the background. A file whose bytes already made a CV
   starts nothing: the answer names that CV (`duplicate`), so the page selects it instead of making a copy.
-  A file also goes into Your record's CVs (once: the same file there already is left as it is), so the
-  record knows the CVs the person has.
+  A file being read already answers with that reading's `action_id` (`parse_actions.start_read`), and 409
+  when that reading goes into another CV. A file also goes into Your record's CVs (once: the same file there
+  already is left as it is), so the record knows the CVs the person has.
 - `GET /cv/parse-report` is the "Check what Hal read" dialog for one CV: the original on the left (page
   pictures of a PDF, the paragraphs of a Word file or pasted text) and Hal's reading of the CV's newest file
   on the right.
@@ -21,10 +22,10 @@ import json
 import sqlite3
 from urllib.parse import quote
 
-from jobhunt.core import runner, settings
+from jobhunt.core import settings
 from jobhunt.cvstudio import parse, pdfread, store
 from jobhunt.cvstudio.model import CVError
-from jobhunt.cvstudio.parse_actions import fill_empty_settings
+from jobhunt.cvstudio.parse_actions import fill_empty_settings, start_read
 from jobhunt.cvstudio.routes import cv_of
 from jobhunt.web.router import BadRequest, BytesResponse, Conflict, NotFound, route
 
@@ -62,9 +63,10 @@ def upload(req) -> dict:
         cv = store.doc(req.con, had)
         return {"action_id": None, "file_id": file_id,
                 "duplicate": {"id": had, "name": cv["name"], "archived": cv["archived"]}}
-    params = {"file_id": file_id, "file": name, **({"doc_id": into} if into else {})}
-    action_id = runner.start("cv.parse", subject="cv.parse", params=params,
-                             replace=True, session_id=req.session_id, remote=req.remote)
+    try:
+        action_id = start_read(file_id, name, doc_id=into, session_id=req.session_id, remote=req.remote)
+    except RuntimeError as e:
+        raise Conflict(str(e)) from e
     if req.files:
         _to_record(req, data, name)
     return {"action_id": action_id, "file_id": file_id, "duplicate": None}
