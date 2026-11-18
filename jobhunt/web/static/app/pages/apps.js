@@ -60,9 +60,9 @@ export function Apps() {
     ${view === "Board" ? html`<div class="board">${cols.map(c => html`<section class="colm" aria-label=${c.title}>
         <header><h3 class="h3">${c.title}</h3><span class="count">${c.items.length}</span></header>
         <p class="small sub" style="margin:0 4px">${c.help}</p>
-        ${approvable(c).length > 1 && html`<button type="button" class="btn primary small" style="margin:4px"
+        ${approvable(c).length > 1 && html`<button type="button" class="btn primary small colm-action"
           onClick=${() => approveAll(approvable(c))}>Approve all ${approvable(c).length}</button>`}
-        ${remakeable(c).length > 0 && html`<button type="button" class="btn small" style="margin:4px"
+        ${remakeable(c).length > 0 && html`<button type="button" class="btn small colm-action"
           onClick=${() => remakeAll(remakeable(c))}>Make the missing documents (${remakeable(c).length})</button>`}
         ${c.items.map(a => html`<${Card} a=${a} />`)}
         ${!c.items.length && html`<p class="small sub" style="margin:8px 4px">Nothing here yet.</p>`}</section>`)}</div>`

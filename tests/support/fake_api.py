@@ -99,7 +99,12 @@ MADE_UP_APP = {
 MADE_UP_BOARD = {"columns": [
     {"key": "ready", "title": "Getting ready", "help": "Waiting for you to approve them.", "items": [
         {"id": "demo:2", "number": 2, "org": "Hillside Library", "title": "Library Assistant",
-         "next": "Check and approve documents", "tone": "info", "note": "", "hal_busy": False}]},
+         "next": "Check and approve documents", "tone": "info", "note": "", "hal_busy": False,
+         "approvable": True, "remakeable": False},
+        # No documents yet, so the column offers "Make the missing documents" (`apply/queries.py` `remakeable`).
+        {"id": "demo:4", "number": 4, "org": "Fernvale Gallery", "title": "Gallery Guide",
+         "next": "Hal has no documents for this yet", "tone": "info", "note": "", "hal_busy": False,
+         "approvable": False, "remakeable": True}]},
     {"key": "form", "title": "Form filled", "help": "Check it and press Submit on the site yourself.", "items": [
         {"id": "demo:1", "number": 1, "org": "Riverside Trust", "title": "Museum Assistant",
          "next": "1 answer needs you", "tone": "warn", "note": "1 of 2 filled", "hal_busy": False}]},

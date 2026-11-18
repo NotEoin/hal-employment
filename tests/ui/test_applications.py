@@ -58,6 +58,18 @@ class ApplicationsTest(unittest.TestCase):
         p.page.wait_for_selector("h1:text('Museum Assistant')")
         self.assertEqual(p.errors, [])
 
+    def test_the_missing_documents_button_keeps_its_text_inside_its_pill_in_a_narrow_column(self) -> None:
+        p = self.tab(self.serve(), "narrow").open("apps")
+        ready = p.page.locator(".colm", has_text="Getting ready")
+        button = ready.get_by_role("button", name="Make the missing documents")
+        button.wait_for()
+        fit = button.evaluate("b => [b.scrollWidth, b.clientWidth]")
+        self.assertLessEqual(fit[0], fit[1])
+        box, column = button.bounding_box(), ready.bounding_box()
+        self.assertGreaterEqual(box["x"], column["x"])
+        self.assertLessEqual(box["x"] + box["width"], column["x"] + column["width"])
+        self.assertEqual(round(column["width"]), 230)
+
     def test_approving_shows_the_first_application_guide_then_the_form_step(self) -> None:
         state = apps_state()
         state.pages[APP_PATH].update(step=1, column="ready", form=None)

@@ -12,6 +12,11 @@ What changed in each version, in plain words.
   into your record gives the same time as the Record page. Work that is not counted in files or pages, such
   as writing a cover letter, shows no time.
 
+### Fixed
+
+- **The "Make the missing documents" button on the Applications board keeps its words inside it.** On a
+  narrow column the text ran past the button's edges; it now wraps onto two lines.
+
 ## 2.2.0 (2026-11-15)
 
 ### What's new

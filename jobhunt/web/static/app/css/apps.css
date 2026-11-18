@@ -9,3 +9,7 @@
 .pdfview { display: block; width: 100%; height: 78vh; min-height: 480px; border: 1px solid var(--line); border-radius: 10px;
   background: #fff; }
 .ba > div { white-space: pre-line; }
+
+/* A button in a board column wraps its text inside the pill: `.btn` never wraps, and a long label such as
+   "Make the missing documents (3)" spilled past a column at its 230px minimum (2026-11-18). */
+.colm .btn.colm-action { white-space: normal; text-align: center; line-height: 1.3; margin: 4px; padding: 7px 11px; }
