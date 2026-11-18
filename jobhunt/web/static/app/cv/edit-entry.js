@@ -3,7 +3,8 @@
    reader user hears "Delete line 2 of Ticket clerk", never a list of "Delete". `act(change)` hands each
    change to the editor (cv/edit-tab.js), which shows it at once and saves the list on "Save changes".
    On an application's CV, `marks` (from `tailor.editor`, by `model.diff`) say what Hal changed for the job
-   and what the person changed after it, in words beside the part, and `onCopy` adds "Copy to my main CV". */
+   and what the person changed after it, in words beside the part, and `onCopy` adds "Copy to my main CV" (named
+   for the CV the application was built from, `copyTo`, when several are in use). */
 import { html, useState } from "../core/html.js";
 import { Chip, Switch } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
@@ -16,6 +17,9 @@ const HEADING = { education: "Qualification", experience: "Job title", volunteer
   teaching: "Role", projects: "Project name", skills: "Kind of skill", certifications: "Certificate" };
 const ORG = { education: "School, college or university", experience: "Employer", volunteering: "Organisation" };
 const LISTED = ["skills", "languages", "interests"];
+
+/** The Copy button's words for the CV `label` ("your Museum CV"), as the person says it: "Copy to my Museum CV". */
+export const copyWords = label => "Copy to " + label.replace(/^your /, "my ");
 
 /** The fields an entry of a section of `kind` shows: [field, words]. */
 function fieldsFor(kind) {
@@ -83,7 +87,7 @@ function Line({ s, e, b, i, n, name, act, addId, marks }) {
 
 /** The card of one entry: `s` its section, `i` its place of `n`, `act` the editor's change handler; on an
     application's CV, `marks` and `onCopy(s, e)`. */
-export function EntryCard({ s, e, i, n, act, addId, marks, onCopy }) {
+export function EntryCard({ s, e, i, n, act, addId, marks, onCopy, copyTo = "your main CV" }) {
   const t = target(s, e);
   const here = marksAt(marks, t, true);
   const name = e.heading || "the new entry";
@@ -95,8 +99,8 @@ export function EntryCard({ s, e, i, n, act, addId, marks, onCopy }) {
       <span class="row tight"><${Switch} on=${!e.hidden} label=${"Show " + name} onChange=${v => act({ op: v ? "show" : "hide", target: t })} /><span class="small sub">Show</span></span>
       <span class="row tight"><${Switch} on=${!!e.locked} label=${"Lock " + name} onChange=${v => act({ op: "replace", target: t + "/locked", value: v })} /><${Icon} n="lock" c="s" /></span>
       <button type="button" class="iconbtn" aria-label=${"Delete " + name} onClick=${() => { act({ op: "delete", target: t }); focusSoon(addId); }}><${Icon} n="trash" c="s" /></button></div>
-    ${onCopy && html`<div class="row"><button type="button" class="btn quiet small" aria-label=${"Copy to my main CV: " + name}
-      onClick=${() => onCopy(s, e)}><${Icon} n="copy" c="s" />Copy to my main CV</button></div>`}
+    ${onCopy && html`<div class="row"><button type="button" class="btn quiet small" aria-label=${copyWords(copyTo) + ": " + name}
+      onClick=${() => onCopy(s, e)}><${Icon} n="copy" c="s" />${copyWords(copyTo)}</button></div>`}
     <div class="rec-form">${fieldsFor(s.kind).map(([f, words]) => html`<div class="rec-field" key=${f}>
       <label class="lab" for=${"f-" + t + "/" + f}>${words}</label><input class="input" id=${"f-" + t + "/" + f} value=${e[f] || ""}
         onInput=${ev => act({ op: "replace", target: t + "/" + f, value: ev.target.value })} /></div>`)}

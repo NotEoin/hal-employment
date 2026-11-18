@@ -36,6 +36,7 @@ import { copyText } from "../ui/clipboard.js";
 import { plural } from "../core/format.js";
 import { UncheckedNote } from "../ui/unchecked-note.js";
 import { EditTab } from "../cv/edit-tab.js";
+import { MAIN_CV } from "../cv/job-changes.js";
 
 const appPath = a => "/applications/" + encodeURIComponent(a.id);
 
@@ -131,6 +132,9 @@ function Picks({ a, offered }) {
       <span class="small sub" role="status">${ticked.length} ticked</span></div></section>`;
 }
 
+/** The CV the application was built from as the page names it: "your main CV" while only one CV is in use. */
+const usedCv = base => (base && base.several && base.label) || MAIN_CV;
+
 /** The line naming the CV this application is built from, why, and Change CV when there is a choice. */
 function BuiltFrom({ a, base, unsaved, reload }) {
   const change = () => (unsaved ? toast("Save or discard your changes first, then change the CV.")
@@ -196,7 +200,7 @@ export function DocsStep({ a, reload, onApproved }) {
       onSaved: reload, onDirty: setCvDirty }} /><div class="docs-pdf"><${Pdf} url=${d.cv.preview_url} label="CV preview" /></div></div>`}
     ${tab === "cv" && pick.length > 0 && html`<${Picks} a=${a} offered=${pick} />`}
     ${tab === "cv" && !editable && !pick.length && html`<div class="docs-split"><div class="stack s">
-      <p class="sub" style="margin:0">${original ? "Hal sends your own CV file, unchanged, as you chose on My CV." : changes.length ? "Hal changed " + plural(changes.length, "thing") + " from your CV for this job." : "Hal used your main CV as it is for this job."}</p>
+      <p class="sub" style="margin:0">${original ? "Hal sends your own CV file, unchanged, as you chose on My CV." : changes.length ? "Hal changed " + plural(changes.length, "thing") + " from your CV for this job." : "Hal used " + usedCv(d.cv.base) + " as it is for this job."}</p>
       ${changes.map(c => html`<article class=${cx("sugg", !c.on && "done")}><div class="row tight"><span class="chip info">${c.kind}</span><span class="small sub">${c.where}</span><span class="sp"></span>
         ${c.on ? html`<button type="button" class="btn quiet small" onClick=${() => toggle(c, false)}><${Icon} n="undo" c="s" />Undo</button>`
           : html`<span class="small sub">Undone: your CV's version is used</span><button type="button" class="btn quiet small" onClick=${() => toggle(c, true)}>Redo</button>`}</div>

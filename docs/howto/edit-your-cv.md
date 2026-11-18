@@ -37,7 +37,9 @@ CV Hal made for it in the same editor, with the PDF Hal will upload beside it. Y
 5. Press **Save changes**. Hal keeps your edits for this job and makes the PDF again, so the preview shows
    them.
 6. To keep an entry's lines on your main CV too, press **Copy to my main CV** on that entry. Hal copies its
-   lines into your main CV as one new version. Nothing else on your main CV changes.
+   lines into your main CV as one new version. Nothing else on your main CV changes. When you use several
+   CVs for applications, the button names the CV this application was built from, such as **Copy to my
+   Museum CV**, and the lines go there.
 7. Press **Approve and fill in the form**. Hal saves this job's CV as its own version and uploads that one.
 
 The CV for a job is made from the version of your main CV in use when Hal wrote the documents. A change you

@@ -222,6 +222,18 @@ class ApplicationsTest(unittest.TestCase):
         self.assertEqual(p.serious_axe(), [])
         self.assertEqual(p.errors, [])
 
+    def test_the_cv_tab_names_the_cv_hal_used_with_several_in_use_and_your_main_cv_with_one(self) -> None:
+        # review, 2026-11-18: the step said "your main CV" for an application built on another CV
+        for several, said in ((True, "Hal used your Museum CV as it is for this job."),
+                              (False, "Hal used your main CV as it is for this job.")):
+            with self.subTest(several=several):
+                state = self.documents_step()
+                state.pages[APP_PATH]["docs"]["cv"]["base"].update(several=several)
+                p = self.tab(self.serve(state)).open(APP)
+                p.page.wait_for_selector(".base-cv")
+                self.assertEqual(p.page.get_by_text(said).count(), 1)
+                self.assertEqual(p.errors, [])
+
     def test_a_write_that_failed_says_why_on_the_documents_step(self) -> None:
         # a regression: the step showed empty tabs and "ready", and only the board said what went wrong (2026-11-18)
         state = self.documents_step(state="failed", stopped="Hal's AI did not answer")

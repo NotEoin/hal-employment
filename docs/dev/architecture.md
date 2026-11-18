@@ -485,7 +485,9 @@ runs: tests use `tests/support/fake_claude/`.
   application gets its `job_cvs` row this way and drops its `undone_changes`. The application page's
   `docs.cv.base` is `choose.shown` (the lead CV, with no reason, for an older application); the CV tab
   (`app/docs-step.js`) names it with the reason, and with more than one CV in use offers Change CV
-  (`dialogs/basecv.js`). `tailor.editor` gives `main_label`, so Copy to my main CV names the CV it copies into.
+  (`dialogs/basecv.js`). `tailor.editor` gives `main_label` ("your main CV" with one CV in use), and the
+  Copy button (`cv/edit-entry.js` `copyWords`), its toast and "Hal used ... as it is" (`cv/job-changes.js`,
+  `app/docs-step.js`) all name the CV the application was built from with it.
 - The bin keeps a version for 30 days. It is emptied lazily (`purge_bin`, whenever versions are listed),
   and never removes a version an application or job still points at.
 - Files are kept read-only as `cv/files/<sha256>.<ext>`; `file_bytes` checks the SHA-256 on every read and

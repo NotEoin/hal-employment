@@ -6,10 +6,13 @@ import { html } from "../core/html.js";
 import { Icon } from "../ui/icons.js";
 import { withGaps } from "./sugg-card.js";
 
-/** The list, with the sentence above it; `why` replaces it when adjusting was off for this job. */
-export function JobChanges({ changes = [], onToggle, why }) {
+export const MAIN_CV = "your main CV";   // `tailor.MAIN_LABEL`: the CV's name while only one CV is in use
+
+/** The list, with the sentence above it; `why` replaces it when adjusting was off for this job. `cv` names the
+    CV the application was built from (`main_label`). */
+export function JobChanges({ changes = [], onToggle, why, cv = MAIN_CV }) {
   if (why) return html`<p class="sub" style="margin:0">${why}</p>`;
-  if (!changes.length) return html`<p class="sub" style="margin:0">Hal used your main CV as it is for this job.</p>`;
+  if (!changes.length) return html`<p class="sub" style="margin:0">Hal used ${cv} as it is for this job.</p>`;
   return html`<div class="stack s">
     <p class="sub" style="margin:0">Hal changed ${changes.length} things from your CV for this job. Each changed part is marked in your CV below.</p>
     ${changes.map(c => html`<article class=${c.on ? "sugg" : "sugg done"} data-change=${c.id}>

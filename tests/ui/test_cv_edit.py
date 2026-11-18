@@ -227,6 +227,25 @@ class EditJobCv(unittest.TestCase):
         self.assertEqual(p.page.locator(f"textarea[aria-label='Line 2 of {JOB}']").input_value(), MINE)
         self.assertEqual(p.errors, [])
 
+    def test_with_two_cvs_in_use_the_job_cv_names_the_one_it_was_built_from(self) -> None:
+        # review, 2026-11-18: the button said "Copy to my main CV" while it copied into the CV the application
+        # was built from, and "Hal used your main CV" named the wrong one
+        museum = store.create("Museum CV", store.current()[1], what="A copy", by="you")
+        con = db.connect()
+        try:
+            con.execute("UPDATE job_cvs SET base_version_id = ?, changes = '[]' WHERE job_id = ?",
+                        (store.current(None, museum)[0], APP_JOB))
+            con.commit()
+        finally:
+            con.close()
+        p = self.page()
+        p.shows(p.page.get_by_text("Hal used your Museum CV as it is for this job."), "the CV Hal used")
+        self.assertEqual(p.page.locator(f"[aria-label='Copy to my Museum CV: {JOB}']").count(), 1)
+        self.assertEqual(p.page.locator("text=Copy to my main CV").count(), 0)
+        self.assertIn("Your Museum CV stays as it is: press Copy to my Museum CV",
+                      p.page.locator(".cv-edit-bar").inner_text())
+        self.assertEqual(p.errors, [])
+
     def test_approve_waits_for_unsaved_changes_which_survive_a_tab_switch(self) -> None:
         p = self.page()
         p.page.locator(f"textarea[aria-label='Line 2 of {JOB}']").fill(MINE)

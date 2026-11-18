@@ -9,6 +9,7 @@
    it reads and saves /applications/<id>/cv, lists Hal's changes for the job with Undo and Redo
    (cv/job-changes.js), marks the parts Hal and the person changed apart, and offers "Copy to my main CV"
    on each entry, which copies into the CV the application was built from (`main_label`, "your Applied AI
+   CV"); with several CVs in use the button and the words around it name that CV ("Copy to my Applied AI
    CV"). A save there makes the job's PDF again; that CV changes only by Copy. */
 import { html, useState, useEffect } from "../core/html.js";
 import { api, post } from "../core/api.js";
@@ -17,8 +18,8 @@ import { guardLeave } from "../core/router.js";
 import { Note, Chip } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 import { ask } from "../ui/dialog.js";
-import { EntryCard, Marks, focusSoon, marksAt } from "./edit-entry.js";
-import { JobChanges } from "./job-changes.js";
+import { EntryCard, Marks, focusSoon, marksAt, copyWords } from "./edit-entry.js";
+import { JobChanges, MAIN_CV } from "./job-changes.js";
 import { applyChange, addChange, blankEntry, newId, target } from "./doc-changes.js";
 import { cvUrl } from "./chosen.js";
 
@@ -47,7 +48,7 @@ function FromRecord({ s, act, addId }) {
     <button type="button" class="btn small" aria-label=${"Add " + c.title} onClick=${() => add(c)}><${Icon} n="plus" c="s" />Add</button></div>`)}</div>`;
 }
 
-function SectionCard({ s, act, marks, onCopy }) {
+function SectionCard({ s, act, marks, onCopy, copyTo }) {
   const [picking, setPicking] = useState(false);
   const addId = "add-" + target(s);
   const style = (s.entries[0] && s.entries[0].style) || (s.kind === "additional" ? "paragraph" : "bullets");
@@ -60,7 +61,7 @@ function SectionCard({ s, act, marks, onCopy }) {
       <textarea class="input" rows="4" id=${"f-" + target(s) + "/text"} value=${s.text}
         onInput=${e => act({ op: "replace", target: target(s) + "/text", value: e.target.value })}></textarea></div>`}
     <div class="stack s" style="margin-top:12px">${s.entries.map((e, i) => html`<${EntryCard} key=${e.id} s=${s} e=${e} i=${i} n=${s.entries.length}
-      act=${act} addId=${addId} marks=${marks} onCopy=${onCopy} />`)}</div>
+      act=${act} addId=${addId} marks=${marks} onCopy=${onCopy} copyTo=${copyTo} />`)}</div>
     ${s.kind !== "summary" && html`<div class="row" style="margin-top:12px">
       <button type="button" class="btn quiet small" id=${addId} onClick=${addEntry}><${Icon} n="plus" c="s" />Add an entry</button>
       ${FROM_RECORD[s.kind] && html`<button type="button" class="btn quiet small" aria-expanded=${picking ? "true" : "false"}
@@ -141,14 +142,15 @@ export function EditTab({ setT, job }) {
       const out = await post(job.path + "/copy", { base: base.main_version_id, target: target(s, e) });
       invalidate("/cv*");
       await reload();
-      toast("Copied " + (e.heading || "the entry") + " to " + (base.main_label || "your main CV") + ", as version " + out.n + ".");
+      toast("Copied " + (e.heading || "the entry") + " to " + mainCv + ", as version " + out.n + ".");
     } catch (err) { toast(err.message); }
   };
   const marks = job ? base.marks : null;
+  const mainCv = (job && base.main_label) || MAIN_CV;
   return html`<div class="stack">
     <div class="card cv-edit-bar">${job
       ? html`<p class="small sub grow" style="margin:0">Change any line of your CV for this job. Nothing is saved until you press${" "}
-          <b>Save changes</b>. ${base.main_label ? base.main_label[0].toUpperCase() + base.main_label.slice(1) : "Your main CV"} stays as it is: press <b>Copy to my main CV</b> on an entry to keep its lines there too.</p>`
+          <b>Save changes</b>. ${mainCv[0].toUpperCase() + mainCv.slice(1)} stays as it is: press <b>${copyWords(mainCv)}</b> on an entry to keep its lines there too.</p>`
       : html`<p class="small sub grow" style="margin:0">Change any line. Nothing is saved until you press${" "}
           <b>Save changes</b>, and each save is a new version. To undo a save, use an older version in${" "}
           <button type="button" class="btn quiet small" onClick=${() => setT("versions")}>Versions</button></p>`}
@@ -159,6 +161,6 @@ export function EditTab({ setT, job }) {
       : "Your CV was changed somewhere else, for example by a suggestion you accepted."} Copy anything you want to keep, then start again from ${job ? "this job's CV" : "your CV"} as it is now.
       <div style="margin-top:8px"><button type="button" class="btn small" onClick=${restart}>${job ? "Start again from this job's CV now" : "Start again from your CV now"}</button></div><//>`}
     ${job && html`<section class="card" aria-labelledby="job-changes-head"><h2 class="h2" id="job-changes-head" style="margin:0 0 8px">What Hal changed for this job</h2>
-      <${JobChanges} changes=${base.changes} onToggle=${toggle} /></section>`}
-    ${doc.sections.map(s => html`<${SectionCard} key=${s.id} s=${s} act=${act} marks=${marks} onCopy=${job ? copy : null} />`)}</div>`;
+      <${JobChanges} changes=${base.changes} onToggle=${toggle} cv=${mainCv} /></section>`}
+    ${doc.sections.map(s => html`<${SectionCard} key=${s.id} s=${s} act=${act} marks=${marks} onCopy=${job ? copy : null} copyTo=${mainCv} />`)}</div>`;
 }
