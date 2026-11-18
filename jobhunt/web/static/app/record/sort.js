@@ -41,10 +41,9 @@ import { html, cx, useState, useRef, useEffect, useLayoutEffect } from "../core/
 import { go, route } from "../core/router.js";
 import { api, get, post, put, del } from "../core/api.js";
 import { useApi, toast, invalidate } from "../core/store.js";
-import { plural } from "../core/format.js";
+import { plural, etaWords } from "../core/format.js";
 import { isRemote } from "../core/remote.js";
 import { Bar, Note } from "../ui/controls.js";
-import { etaWords } from "./add.js";
 import { ask } from "../ui/dialog.js";
 import { Icon } from "../ui/icons.js";
 import { useSections } from "./sections.js";

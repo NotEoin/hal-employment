@@ -46,6 +46,19 @@ export function agoWords(iso) {
   return plural(Math.round(min / DAY_MIN), "day") + " ago";
 }
 
+const MINUTE_S = 60;
+const HOUR_S = 3600;
+
+/** Seconds left in plain words: "About 4 minutes left". */
+export function etaWords(s) {
+  if (s == null) return "";
+  if (s < MINUTE_S) return "Less than a minute left";
+  if (s < HOUR_S) return "About " + plural(Math.round(s / MINUTE_S), "minute") + " left";
+  const h = Math.floor(s / HOUR_S);
+  const m = Math.round((s % HOUR_S) / MINUTE_S);
+  return "About " + plural(h, "hour") + (m ? " and " + plural(m, "minute") : "") + " left";
+}
+
 /** Whole days from today to `d`, counted on the calendar (tomorrow is 1 even at 23:59). */
 export function daysFrom(d, now = new Date()) {
   const a = toDate(d), b = now;

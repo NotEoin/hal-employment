@@ -9,15 +9,13 @@
 import { html, useEffect } from "../core/html.js";
 import { post } from "../core/api.js";
 import { useApi, toast, invalidate } from "../core/store.js";
-import { plural } from "../core/format.js";
+import { plural, etaWords } from "../core/format.js";
 import { Bar, Chip, Note } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 
 const INGEST = "/record/ingest";
 const KIND = "record.ingest";
 const POLL_MS = 3000;       // a running read updates its counts more often than this
-const MINUTE_S = 60;
-const HOUR_S = 3600;
 const STAGE_WORDS = { discovered: "Found", converted: "Turned into text", understood: "Read by Hal",
   written: "Saved to your record" };
 const STATE_WORDS = { done: "read", duplicate: "copies of files already read", no_text: "with no text to read",
@@ -32,16 +30,6 @@ const LEFT_OUT_WORDS = { "junk folder": "hidden folders and folders of program f
   unreadable: "files Hal could not open" };
 const RUNNING = new Set(["queued", "running"]);
 let following = null;       // the ingest action on screen, whose steps reload the card
-
-/** Seconds left in plain words: "About 4 minutes left". */
-export function etaWords(s) {
-  if (s == null) return "";
-  if (s < MINUTE_S) return "Less than a minute left";
-  if (s < HOUR_S) return "About " + plural(Math.round(s / MINUTE_S), "minute") + " left";
-  const h = Math.floor(s / HOUR_S);
-  const m = Math.round((s % HOUR_S) / MINUTE_S);
-  return "About " + plural(h, "hour") + (m ? " and " + plural(m, "minute") : "") + " left";
-}
 
 function stopNow(id) {
   post("/actions/" + encodeURIComponent(id) + "/stop").then(
