@@ -112,11 +112,34 @@ class Reading(unittest.TestCase):
         pdfdraw.write_pdf(doc.finish())
         self.assertRegex(pdfread.text(out, layout=True), r"Compilers {6,}81")
 
+    def test_a_browsers_subset_bold_font_page_scale_and_list_markers_are_read(self):
+        # Chrome names its fonts "AAAAAA+Arimo-Bold", sets type in pixels on a page scaled by 0.75 and draws
+        # list markers as shapes; before 2026-11-18 no character read as bold and no marker was seen.
+        from support.make_cv_fixtures import BROWSER, BROWSER_NAME, FOLDER
+
+        pdf = FOLDER / f"{BROWSER_NAME}.pdf"
+        drawn = [c for c in pdfread.chars(pdf) if not c.char.isspace()]
+        name = [c for c in drawn if c.char in "AveryQuilon"][:len("AveryQuillon")]
+        self.assertTrue(all(c.bold for c in name))
+        self.assertEqual(round(name[0].points, 1), 20.0)
+        body = next(c for c in drawn if c.char == "S" and round(c.points, 1) == 9.9)
+        self.assertFalse(body.bold)
+        self.assertEqual(len(pdfread.markers(pdf)), sum(1 for kind, _ in BROWSER if kind == "li"))
+        self.assertEqual(pdfread.page_widths(pdf), [595.0])
+
+    def test_helvetica_bold_reads_as_bold(self):
+        from support.make_cv_fixtures import FOLDER, NAMES
+
+        drawn = [c for c in pdfread.chars(FOLDER / f"{NAMES['humanities']}.pdf") if not c.char.isspace()]
+        self.assertTrue(drawn[0].bold)          # the name, in Helvetica-Bold
+        self.assertFalse(drawn[-1].bold)        # the interests line, in Helvetica
+
     def test_a_file_that_is_not_a_pdf_reads_as_empty(self):
         broken = Path(tempfile.mkdtemp()) / "image.pdf"
         broken.write_bytes(b"%PDF-1.4\n%%EOF\n")
         self.assertEqual((pdfread.text(broken), pdfread.pages(broken), pdfread.body_size(broken),
                           pdfread.last_page_fill(broken)), ("", 0, None, 0.0))
+        self.assertEqual((pdfread.markers(broken), pdfread.page_widths(broken)), ([], []))
 
     def test_a_page_picture_is_a_png_of_the_page(self):
         pdf = draw(self, made_up_cvs()[1], PEOPLE[1])

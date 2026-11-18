@@ -11,6 +11,9 @@ field. Design decisions, each with its reason:
   ElementTree over `word/document.xml` (paragraph styles, Word numbering, bold runs, tables flattened a row
   per line), so no extra library is needed on Windows. Each line keeps its paragraph index
   and a hash of its text, for an in-place Word editor later.
+- A PDF printed by a browser marks little: list markers are shapes, not text, and long lines wrap with no
+  sign. `pdf_lines` therefore finds bold from font names, list items from marker shapes or indents, and
+  joins a row to the one above when its first word would not have fitted there (see the constants below).
 - A PDF with no text layer is refused with words that say what to do instead; there is no OCR for CVs.
 - Headings are the common ones (`HEADINGS`) plus every built-in CV type's own section titles, so a CV
   written to a type's outline is read back into the same sections.
@@ -22,10 +25,12 @@ field. Design decisions, each with its reason:
 """
 from __future__ import annotations
 
+import bisect
 import copy
 import functools
 import hashlib
 import io
+import itertools
 import logging
 import re
 import statistics
@@ -53,6 +58,21 @@ PARAGRAPH_WORDS = 14            # a non-bullet line this long inside an entry is
 LINE_TOLERANCE = 0.45           # share of the type size two baselines may differ by on one line (as pdfread)
 WORD_GAP = 0.25                 # a gap wider than this share of the type size parts two words (as pdfread)
 COLUMN_GAP = 2.0                # a gap wider than this many type sizes is a tab (dates on the right)
+# Joining wrapped rows and finding list items, in shares of the type size (checked on CVs printed by Chrome
+# from HTML and on the made-up fixtures, 2026-11-18):
+ALIGN_SLACK = 0.2               # two rows start in the same place when their pens are this close
+SIZE_SLACK = 0.05               # the same type: a bold entry heading (9.6 pt) beside body text (9.2 pt) is not
+WRAP_STEP = 1.6                 # a wrapped row sits at most one line below; 1.5 line spacing is the widest common
+PITCH_SLACK = 0.1               # Chrome puts baselines on whole pixels (0.75 pt), so a paragraph's line steps vary
+                                # by one pixel; the 2 pt between paragraphs is more than this over the usual step
+MARKER_REACH = 2.5              # a list marker sits within this many type sizes left of its text
+MARKER_DROP = 0.2               # ... its middle no lower than this below the baseline
+MARKER_RISE = 0.8               # ... and no higher than this above it (about the height of a capital)
+SPACE_WIDTH = 0.25              # a space is about a quarter of the type size in Arial, Helvetica and Calibri
+WRAP_SLACK = 0.3                # ink stops short of the advance a wrapping browser measures, by under a third
+INDENT_MIN = 0.5                # an indent under half the type size is ink overhang ("f", "T"), not a list
+INDENT_MAX = 5.0                # a list indents about 1.5 type sizes (CSS 13 pt at 9.2 pt, Word 0.25 in at
+                                # 11 pt); five allows deep ones while a centred line is usually further in
 
 PICTURE_WORDS = "This PDF is a picture of a CV, so Hal cannot read it. Upload the Word file, or paste the text."
 TOO_BIG_WORDS = ("This file is bigger than 10 MB, so Hal cannot read it. Save a smaller PDF or Word file, "
@@ -142,6 +162,8 @@ MONTH = r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?"
 POINT = rf"(?:{MONTH}\s+(?:\d{{4}}|'?\d{{2}})|\d{{1,2}}/\d{{4}}|(?:19|20)\d{{2}})"
 OPEN_END = r"(?:Present|Current|Now|Today|Ongoing|date)"
 RANGE = re.compile(rf"(?P<start>{POINT})\s*(?:[{DASHES}]|to|until)\s*(?P<end>{POINT}|{OPEN_END})", re.I)
+# "Mar - May 2025": the year is written once, after the second month
+SHORT_RANGE = re.compile(rf"\b(?P<start>{MONTH})\s*[{DASHES}]\s*(?P<end>{MONTH}\s+(?:19|20)\d{{2}})", re.I)
 SINGLE = re.compile(rf"(?P<start>{MONTH}\s+(?:19|20)\d{{2}}|(?:19|20)\d{{2}})\s*$", re.I)
 TWO_DIGIT = re.compile(rf"{MONTH}\s+'?\d{{2}}\b(?!\d)", re.I)
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
@@ -176,6 +198,9 @@ class Line:
     page: int = 1
     index: int = 0          # the paragraph's place in a Word file, or the line's place in the text
     hash: str = ""          # sha1 of the text, for finding the paragraph again
+    left: float = 0.0       # a PDF line's left edge in points
+    lead: str = ""          # the bold words the line starts with ("Security:"), or all of it when it is bold
+    italic: bool = False
 
 
 @dataclass
@@ -247,35 +272,168 @@ def _bulleted(text: str) -> tuple[str, bool]:
     return text.strip(), False
 
 
+@dataclass
+class _Row:
+    """One printed row of a PDF page before wrapped rows are joined."""
+
+    text: str
+    page: int
+    y: float
+    size: float
+    left: float             # pen position of the first character after any bullet glyph
+    right: float            # right edge of the last character's ink
+    first_word: float       # width of the first word, to tell whether it would have fitted on the row above
+    bold: bool
+    lead: str
+    italic: bool
+    bullet: bool
+    tab: bool
+
+
+def _spacer(chars: list[pdfread.Char]):
+    """A test of whether a space separates two characters on one row.
+
+    PDFium's text order holds the PDF's own spaces and the ones PDFium works out from the gaps, so when the
+    file has any, a space is there exactly when one lies between the two characters in that order. Sorting
+    by position instead misplaced them: a space drawn 0.01 pt right of the "2" in "27" read as "2 7" (a CV
+    printed by Chrome, 2026-11-18). A PDF with no spaces at all falls back to the gap rule.
+    """
+    spaces: dict[int, list[int]] = {}
+    for c in chars:
+        if c.char.isspace():
+            spaces.setdefault(c.page, []).append(c.index)
+    if not spaces:
+        return lambda a, b: b.left - a.right > WORD_GAP * max(b.points, 1.0)
+
+    def spaced(a: pdfread.Char, b: pdfread.Char) -> bool:
+        if b.index <= a.index:      # drawn out of order: only the gap can tell
+            return b.left - a.right > WORD_GAP * max(b.points, 1.0)
+        found = spaces.get(a.page, [])
+        k = bisect.bisect_right(found, a.index)
+        return k < len(found) and found[k] < b.index
+    return spaced
+
+
+def _row(row: list[pdfread.Char], spaced) -> _Row | None:
+    """A row of characters as text, with its geometry and how much of it is bold."""
+    glyphs = sorted((c for c in row if not c.char.isspace()), key=lambda c: c.x)
+    if not glyphs:
+        return None
+    text, lead, tab, starts = "", None, False, []
+    for i, c in enumerate(glyphs):
+        if i:
+            prev = glyphs[i - 1]
+            if c.left - prev.right > COLUMN_GAP * max(c.points, 1.0):
+                text, tab = text + "\t", True
+            elif spaced(prev, c):
+                text += " "
+        if lead is None and not c.bold and i:
+            lead = text
+        starts.append(len(text))
+        text += c.char
+    body, bullet = _bulleted(text)
+    skip = 1 if bullet and len(glyphs) > 1 and glyphs[0].char not in body[:1] else 0
+    rest = glyphs[skip:]
+    first_word = rest
+    for i in range(1, len(rest)):
+        if starts[skip + i] > starts[skip + i - 1] + 1:     # a space or tab came before this character
+            first_word = rest[:i]
+            break
+    bold = all(c.bold for c in rest)
+    lead_text = "" if bold or not rest[0].bold else _bulleted((lead or "").rstrip())[0]
+    return _Row(body, row[0].page, row[0].y, max(c.points for c in glyphs), rest[0].x, max(c.right for c in glyphs),
+                first_word[-1].right - first_word[0].x, bold, body if bold else lead_text,
+                all(c.italic for c in rest), bullet, tab)
+
+
+def _pitches(rows: list[_Row]) -> dict[float, float]:
+    """The usual distance between baselines for each type size: the step most rows of that size take."""
+    steps: dict[float, Counter] = {}
+    for a, b in itertools.pairwise(rows):
+        if a.page == b.page and abs(a.size - b.size) <= SIZE_SLACK * a.size and a.y > b.y:
+            steps.setdefault(round(a.size, 1), Counter())[round(a.y - b.y, 2)] += 1
+    return {size: counts.most_common(1)[0][0] for size, counts in steps.items()}
+
+
+def _continues(a: _Row, b: _Row, right_edge: float, pitch: float | None, marked: bool) -> bool:
+    """True when `b` is the wrapped rest of `a`: same column and type, one line below, and `a` was full.
+
+    With list markers drawn as shapes (`marked`), an unmarked row under a list item is its continuation
+    whatever its length; elsewhere only a full row above says the text ran on.
+    """
+    if a.page != b.page or a.tab or b.tab or b.bullet:
+        return False
+    size = max(a.size, b.size)
+    if abs(a.left - b.left) > ALIGN_SLACK * size or abs(a.size - b.size) > SIZE_SLACK * size:
+        return False
+    step = a.y - b.y
+    if not 0 < step <= WRAP_STEP * size or (pitch is not None and step > pitch + PITCH_SLACK * size):
+        return False
+    if marked and a.bullet:
+        return True
+    return a.right + SPACE_WIDTH * size + b.first_word >= right_edge - WRAP_SLACK * size
+
+
+def _has_marker(r: _Row, shapes: list[pdfread.Shape]) -> bool:
+    """True when a list marker shape sits just left of the row, level with its letters."""
+    return any(s.page == r.page and s.right <= r.left and r.left - s.right <= MARKER_REACH * r.size
+               and r.y - MARKER_DROP * r.size <= (s.bottom + s.top) / 2 <= r.y + MARKER_RISE * r.size
+               for s in shapes)
+
+
+def _join(a: _Row, b: _Row) -> _Row:
+    """`a` with its wrapped continuation `b` added."""
+    glue = "" if len(a.text) > 1 and a.text[-1] in "-/" and a.text[-2].isalnum() and b.text[:1].isalnum() else " "
+    lead = (a.text + glue + b.lead).rstrip() if a.bold else a.lead
+    return _Row(a.text + glue + b.text, a.page, b.y, a.size, a.left, b.right, a.first_word, a.bold and b.bold,
+                a.text + glue + b.text if a.bold and b.bold else lead, a.italic and b.italic, a.bullet, False)
+
+
 def pdf_lines(data: bytes) -> list[Line]:
-    """The PDF's lines in reading order, with the type size each is set in."""
-    rows: list[list[pdfread.Char]] = []
-    for c in sorted(pdfread.chars(data), key=lambda c: (c.page, -c.y, c.x)):
-        if rows and rows[-1][0].page == c.page and abs(rows[-1][0].y - c.y) <= LINE_TOLERANCE * max(c.size, 1.0):
-            rows[-1].append(c)
+    """The PDF's lines in reading order: wrapped rows joined, with type size, left edge, bold and list items.
+
+    A browser draws list markers as shapes, not text, so when no line has a bullet glyph a line indented a
+    little from the page's text is a list item. A row is joined to the one above when it starts in the same
+    place in the same type and its first word would not have fitted at the end of the row above, which is
+    how a browser or word processor wraps text.
+    """
+    chars = pdfread.chars(data)
+    widths = pdfread.page_widths(data)
+    spaced = _spacer(chars)
+    grouped: list[list[pdfread.Char]] = []
+    for c in sorted(chars, key=lambda c: (c.page, -c.y, c.x)):
+        if grouped and grouped[-1][0].page == c.page and \
+                abs(grouped[-1][0].y - c.y) <= LINE_TOLERANCE * max(c.points, 1.0):
+            grouped[-1].append(c)
         else:
-            rows.append([c])
-    out = []
-    for row in rows:
-        text, prev, gap_pending = "", None, False
-        for c in sorted(row, key=lambda c: c.x):
-            if c.char.isspace():
-                gap_pending = True
-                continue
-            if prev is not None:
-                gap = c.left - prev.right
-                if gap > COLUMN_GAP * max(c.size, 1.0):
-                    text += "\t"
-                elif gap_pending or gap > WORD_GAP * max(c.size, 1.0):
-                    text += " "
-            text += c.char
-            prev, gap_pending = c, False
-        sizes = [c.size for c in row if not c.char.isspace()]
-        body, bullet = _bulleted(text)
-        if body:
-            out.append(Line(body, size=max(sizes) if sizes else 0.0, bullet=bullet, page=row[0].page,
-                            index=len(out), hash=_hash(body)))
-    return out
+            grouped.append([c])
+    rows = [r for r in (_row(g, spaced) for g in grouped) if r is not None and r.text]
+    edges: dict[int, float] = {}
+    for r in rows:
+        width = widths[r.page - 1] if r.page <= len(widths) else float("inf")
+        if r.right <= width:
+            edges[r.page] = max(edges.get(r.page, r.right), r.right)
+    marked = False
+    if not any(r.bullet for r in rows):
+        shapes = pdfread.markers(data)
+        for r in rows:
+            r.bullet = _has_marker(r, shapes)
+        marked = any(r.bullet for r in rows)
+    pitches = _pitches(rows)
+    joined: list[_Row] = []
+    for r in rows:
+        if joined and _continues(joined[-1], r, edges.get(r.page, r.right), pitches.get(round(r.size, 1)), marked):
+            joined[-1] = _join(joined[-1], r)
+        else:
+            joined.append(r)
+    if not any(r.bullet for r in joined):
+        margins: dict[int, float] = {}
+        for r in joined:
+            margins[r.page] = min(margins.get(r.page, r.left), r.left)
+        for r in joined:
+            r.bullet = INDENT_MIN * r.size <= r.left - margins[r.page] <= INDENT_MAX * r.size
+    return [Line(r.text, size=r.size, bold=r.bold, bullet=r.bullet, page=r.page, index=n, hash=_hash(r.text),
+                 left=r.left, lead=r.lead, italic=r.italic) for n, r in enumerate(joined)]
 
 
 def _docx_styles(z: zipfile.ZipFile) -> dict[str, str]:
@@ -422,18 +580,18 @@ def source_text(lines: list[Line]) -> str:
     return _norm(" ".join(line.text for line in lines))
 
 
-def heading_kind(line: Line, body_size: float | None) -> str | None:
-    """The section kind when `line` is a heading, else None."""
+def _heading(line: Line, body_size: float | None) -> tuple[str | None, bool]:
+    """(section kind or None, whether only a short bold line with a heading word made it one)."""
     if line.bullet:
-        return None
+        return None, False
     text = line.text.strip().rstrip(":").strip()
     words = text.split()
     if not words or len(words) > HEADING_WORDS or "\t" in text or any(ch.isdigit() for ch in text):
-        return None
+        return None, False
     key = _key(text)
     known = headings()
     if key in known:
-        return known[key]
+        return known[key], False
     letters = [ch for ch in text if ch.isalpha()]
     caps = bool(letters) and all(ch.isupper() for ch in letters) and len(letters) > 2
     styled = line.style.startswith("heading")
@@ -441,9 +599,27 @@ def heading_kind(line: Line, body_size: float | None) -> str | None:
     if caps or styled or large or (line.bold and len(words) <= 3):
         for word, kind in KEYWORDS:
             if word in key:
-                return kind
-        return "custom" if (caps or styled) else None
-    return None
+                return kind, not (caps or styled or large)
+        return ("custom" if (caps or styled) else None), False
+    return None, False
+
+
+def heading_kind(line: Line, body_size: float | None) -> str | None:
+    """The section kind when `line` is a heading, else None."""
+    return _heading(line, body_size)[0]
+
+
+def _section_kinds(lines: list[Line], body_size: float | None) -> list[str | None]:
+    """Each line's section kind when it is a section heading, else None.
+
+    A short bold line with a heading word ("Other projects") is a heading only when it is set as large as
+    the file's other headings: in a CV whose section titles are larger, it is an entry's heading.
+    """
+    found = [_heading(ln, body_size) for ln in lines]
+    strong = [ln.size for ln, (kind, weak) in zip(lines, found, strict=True) if kind and not weak and ln.size > 0]
+    floor = statistics.median(strong) * (1 - SIZE_SLACK) if strong else 0.0
+    return [kind if kind and (not weak or ln.size >= floor) else None
+            for ln, (kind, weak) in zip(lines, found, strict=True)]
 
 
 def _title(text: str) -> str:
@@ -461,6 +637,10 @@ def _items(text: str) -> list[str]:
 def _dates(text: str) -> tuple[str, str, str]:
     """(text without its dates, start, end) for the date range or single date in `text`."""
     m = RANGE.search(text)
+    if m:
+        rest = (text[:m.start()] + text[m.end():]).strip()
+        return rest, m.group("start").strip(), m.group("end").strip()
+    m = SHORT_RANGE.search(text)
     if m:
         rest = (text[:m.start()] + text[m.end():]).strip()
         return rest, m.group("start").strip(), m.group("end").strip()
@@ -509,7 +689,62 @@ def _modules(rest: str) -> list[Module]:
     return out
 
 
+def _compact(line: Line) -> _Draft | None:
+    """A whole entry on one line ("GCSEs, A School, 2019: ten subjects" with "GCSEs" in bold), or None.
+
+    The bold words are the heading. A lead-in ending in a colon ("Also:") labels a line instead.
+    """
+    text = line.text.strip()
+    lead = line.lead.strip()
+    if line.bullet or line.bold or not lead or lead.endswith(":") or not text.startswith(lead):
+        return None
+    rest = text[len(lead):]
+    if not rest.lstrip().startswith(","):
+        return None
+    head, _, tail = rest.lstrip(" ,").partition(": ")
+    return _Draft(header=[lead, head.strip()] if head.strip() else [lead], text=[tail.strip()] if tail.strip() else [])
+
+
+def _starts_entry(line: Line) -> bool:
+    """True when the file marks `line` as an entry's heading: a bold line, or a bold heading with details."""
+    return not line.bullet and (line.bold or _compact(line) is not None)
+
+
+def _marked_drafts(lines: list[Line]) -> list[_Draft]:
+    """Entries of a section whose file marks each heading: every other line stays with the entry above.
+
+    The line just under a heading is its details line (employer, place, dates) when it is short, holds a
+    date range or is split with "|"; any other line is the entry's paragraph, so the wrapped end of a
+    sentence or a "Label: text" line is never taken for a new entry.
+    """
+    drafts: list[_Draft] = []
+    for line in lines:
+        text = line.text.strip()
+        m = MODULES.match(text)
+        if m and drafts:
+            drafts[-1].modules += _modules(m.group("rest"))
+            continue
+        compact = _compact(line)
+        if compact is not None:
+            drafts.append(compact)
+            continue
+        if _starts_entry(line) or not drafts:
+            drafts.append(_Draft(header=[text]))
+            continue
+        cur = drafts[-1]
+        if line.bullet:
+            cur.bullets.append(text)
+        elif (not cur.bullets and not cur.text and len(cur.header) == 1
+              and (" | " in text or RANGE.search(text) or len(text.split()) < PARAGRAPH_WORDS)):
+            cur.header.append(text)
+        else:
+            cur.text.append(text)
+    return drafts
+
+
 def _drafts(lines: list[Line]) -> list[_Draft]:
+    if any(_starts_entry(ln) for ln in lines):
+        return _marked_drafts(lines)
     drafts: list[_Draft] = []
     for line in lines:
         text = line.text.strip()
@@ -543,7 +778,8 @@ def _entry(kind: str, draft: _Draft, used: set[str], bullets_used: set[str]) -> 
     """One entry from its header lines and bullets, with the fields the rules were unsure of."""
     unsure: dict[str, str] = {}
     first = draft.header[0] if draft.header else ""
-    rest_lines = draft.header[1:]
+    # a details line split with "|" ("University | 2023 - 2026 | Accredited") gives each part its own field
+    rest_lines = [part for h in draft.header[1:] for part in h.split(" | ")]
     first, start, end = _dates(first)
     if not (start or end):
         for i, h in enumerate(rest_lines):
@@ -562,6 +798,8 @@ def _entry(kind: str, draft: _Draft, used: set[str], bullets_used: set[str]) -> 
         parts = [_clean(p) for p in first.split(" | ")]
     elif " at " in first and kind in ORG_KINDS:
         parts = [_clean(p) for p in first.split(" at ", 1)]
+    elif kind == "projects" and rest_lines:
+        parts = [_clean(first)]     # the details have their own line, so a comma is part of the project's name
     else:
         parts = [_clean(p) for p in first.split(", ")]
         if len(parts) > 3:
@@ -586,7 +824,7 @@ def _entry(kind: str, draft: _Draft, used: set[str], bullets_used: set[str]) -> 
         if kind in ORG_KINDS and not org:
             org = extra
         else:
-            meta = f"{meta}; {extra}" if meta else extra
+            meta = f"{meta} | {extra}" if meta else extra
     eid = _entry_id(kind, heading, used)
     entry = Entry(id=eid, heading=heading, org=org, location=location, start=start, end=end, grade=grade,
                   meta=meta, modules=list(draft.modules))
@@ -708,7 +946,8 @@ def read_rules(lines: list[Line]) -> Reading:
     sizes = [round(ln.size, 1) for ln in lines if ln.size > 0]
     body_size = Counter(sizes).most_common(1)[0][0] if sizes else None
     marks: dict[str, str] = {}
-    first_heading = next((i for i, ln in enumerate(lines) if heading_kind(ln, body_size)), len(lines))
+    kinds = _section_kinds(lines, body_size)
+    first_heading = next((i for i, kind in enumerate(kinds) if kind), len(lines))
     contact, headline, leftover = _contact(lines[:first_heading], body_size, marks)
     doc = CVDoc(headline=headline, contact_snapshot=contact)
     used: set[str] = set()
@@ -716,8 +955,7 @@ def read_rules(lines: list[Line]) -> Reading:
     groups: list[tuple[str, str, list[Line]]] = []
     if leftover:
         groups.append(("summary", "Profile", leftover))
-    for line in lines[first_heading:]:
-        kind = heading_kind(line, body_size)
+    for line, kind in zip(lines[first_heading:], kinds[first_heading:], strict=True):
         if kind:
             groups.append((kind, _title(line.text), []))
         else:
@@ -739,8 +977,8 @@ def _blocks(lines: list[Line]) -> str:
     sizes = [round(ln.size, 1) for ln in lines if ln.size > 0]
     body_size = statistics.mode(sizes) if sizes else None
     out = []
-    for line in lines:
-        tag = "H" if heading_kind(line, body_size) else "B" if line.bullet else "T"
+    for line, kind in zip(lines, _section_kinds(lines, body_size), strict=True):
+        tag = "H" if kind else "B" if line.bullet else "T"
         out.append(f"{tag}| {line.text.replace(chr(9), '    ')}")
     return "\n".join(out)
 

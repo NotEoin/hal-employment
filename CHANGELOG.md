@@ -17,6 +17,11 @@ What changed in each version, in plain words.
 - **The "Make the missing documents" button on the Applications board keeps its words inside it.** On a
   narrow column the text ran past the button's edges; it now wraps onto two lines.
 
+- **CVs printed to PDF from a web browser are read properly.** Hal now sees which lines are bold and which
+  are list items in a PDF saved from Chrome or Edge, joins lines that ran onto the next one, and no longer
+  splits words such as "Design" into "D esign". Before, the end of a long line, such as "by default.",
+  could show up as a job of its own.
+
 ## 2.2.0 (2026-11-15)
 
 ### What's new

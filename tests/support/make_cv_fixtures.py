@@ -14,12 +14,16 @@ list of lines that both writers draw, so the PDF and the Word file say the same 
 - the Word file uses the "Title", "Heading 1" and "List Paragraph" styles, Word numbering for bullets, a
   tab before the dates, bold runs for entry headings, and a table for the technical graduate's skills.
 
+A fourth person, Avery Quillon, has a CV printed the way a web browser prints one (see `BROWSER`), with
+`BROWSER_EXPECTED` for it.
+
 `EXPECTED` lists what a reader must find in each CV; `tests/test_cv_parse.py` checks against it.
 """
 from __future__ import annotations
 
 import argparse
 import io
+import re
 import sys
 import zipfile
 from dataclasses import dataclass
@@ -231,6 +235,193 @@ def pdf_bytes(lines: list[Line], *, pages: int | None = None) -> bytes:
     return _pdf(objects)
 
 
+# ----------------------------------------------------------------------------- a CV printed by a browser
+
+# A fourth made-up person, written as Markdown and printed the way Chrome prints a web page (Producer
+# "Skia/PDF"): type set in CSS pixels on a page scaled by 0.75, subset font names, no space characters
+# (each word is placed by a TJ offset, so PDFium has to work the spaces out), kerning inside words, list
+# markers drawn as small filled squares instead of bullet characters, and long lines wrapped. Blocks are
+# (kind, text); `**...**` at the start of a text is a bold lead-in, `[text](url)` a link, `\*` an escape.
+BROWSER = (
+    ("h1", "Avery Quillon"),
+    ("contact", "Lowmere | avery.quillon@example.org | 07700 900464 | "
+                "[github.com/example-quillon](https://github.com/example-quillon)"),
+    ("h2", "Profile"),
+    ("p", "Software Studies graduate who builds careful tools for small teams. I write tested Python services, "
+          "keep their releases tidy and explain the trade-offs to the people who use them every day."),
+    ("h2", "Education"),
+    ("h3", "BSc (Hons) Software Studies, First"),
+    ("meta", "Made-up Institute of Technology | Sep 2023 - Jun 2026 | Accredited by an invented society"),
+    ("li", "**Dissertation:** reading tide tables from scanned harbour notices with a small vision model, "
+           "scored against 400 hand-checked tables from 12 harbours along a made-up coast."),
+    ("p", "**Foundation Diploma: Computing**, Lowmere College, 2022 - 2023: Distinction in every unit."),
+    ("h2", "Projects"),
+    ("h3", "Tide Tables - weekly tides for small harbours"),
+    ("meta", "Python, Flask, SQLite | [github.com/example-quillon/tides](https://github.com/example-quillon/tides)"),
+    ("li", "Built a web app that shows the week's tides for 14 harbours and warns harbour masters about "
+           "storm surges by default."),
+    ("li", "**Testing:** wrote 120 tests that run in under 2 seconds on every change, with a nightly run that "
+           "checks each harbour's feed against its published API"),
+    ("li", "**Speed:** cut a nightly report from 27 minutes to 6 by rewriting its queries with A\\* search and "
+           "caching the parsed tables in RAM"),
+    ("p", "**Also:** a seat finder for the campus library, used by 300 students in a pilot."),
+    ("h3", "Other projects"),
+    ("li", "**[Bus Board](https://example.org/bus-board)** (TypeScript): live departures for two bus stops on "
+           "a small screen by the door of a made-up student house."),
+    ("h2", "Experience"),
+    ("h3", "Junior Developer Intern"),
+    ("meta", "Brackwater Analytics | Jun 2025 - Sep 2025"),
+    ("li", "Wrote the end-to-end tests for a reporting service and reviewed code with two senior developers "
+           "every week of the summer placement."),
+    ("p", "**Shop Assistant**, Corner and Crate Grocers, Mar - May 2024: served customers and kept the stock "
+          "room in order through a busy spring."),
+    ("h2", "Skills"),
+    ("li", "**Languages:** Python, TypeScript, SQL, Java"),
+    ("li", "**Tools:** Git, Docker, Linux, PostgreSQL"),
+    ("h2", "Interests"),
+    ("p", "Sea kayaking, choir singing and restoring old maps."),
+)
+BROWSER_NAME = "Avery-Quillon-CV"
+BROWSER_EXPECTED = {
+    "name": "Avery Quillon", "email": "avery.quillon@example.org", "phone": "07700 900464", "city": "Lowmere",
+    "kinds": ["summary", "education", "projects", "experience", "skills", "interests"],
+    "headings": ["BSc (Hons) Software Studies", "Foundation Diploma: Computing",
+                 "Tide Tables - weekly tides for small harbours", "Other projects", "Junior Developer Intern",
+                 "Shop Assistant"],
+    "bullets": [1, 0, 3, 1, 1, 0], "texts": [0, 1, 1, 0, 0, 1], "skills": 8,
+    "dates": [("Sep 2023", "Jun 2026"), ("2022", "2023"), ("", ""), ("", ""), ("Jun 2025", "Sep 2025"),
+              ("Mar", "May 2024")],
+}
+
+PX = 0.75                          # Chrome sets type in CSS pixels and scales the page by 0.75 into points
+PAGE_PX_W, PAGE_PX_H = PAGE_W / PX, PAGE_H / PX
+BROWSER_MARGIN = 56.0              # about 15 mm in pixels, as the real CVs' print style sheet sets
+LIST_INDENT = 17.33                # CSS padding-left of 13 pt, in pixels
+MARKER = 4.0                       # the side of a list marker square, in pixels
+MARKER_GAP = 6.0                   # from the marker's right edge to the item's text, in pixels
+LINE_HEIGHT = 1.34                 # CSS line-height of the real CVs
+BROWSER_SIZES = {"h1": 26.66, "contact": 11.6, "h2": 14.66, "h3": 13.33, "meta": 12.13, "li": 13.2, "p": 13.2}
+BROWSER_ABOVE = {"h1": 0.0, "contact": 2.0, "h2": 14.66, "h3": 8.0, "meta": 0.0, "li": 2.0, "p": 2.67}
+LETTER_SPACING = 0.04              # the section titles' CSS letter-spacing, in ems
+KERNS = {"T": 70, "W": 50, "Y": 50, "V": 50}   # thousandths of an em a capital tucks the next lower-case letter in
+# The standard Helvetica and Helvetica-Bold widths of " " to "~" in thousandths of an em (Adobe's AFM files, as
+# PDFium's built-in fonts report them), so lines wrap where a browser with these fonts would wrap them.
+HELVETICA_WIDTHS = (
+    278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556,
+    556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667,
+    556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, 333, 556,
+    556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722,
+    500, 500, 500, 334, 260, 334, 584)
+HELVETICA_BOLD_WIDTHS = (
+    278, 333, 474, 556, 556, 889, 722, 238, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556,
+    556, 556, 556, 556, 333, 333, 584, 584, 584, 611, 1072, 722, 722, 722, 722, 667, 611, 778, 722, 278, 556, 722,
+    611, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 333, 278, 333, 584, 556, 333, 556,
+    611, 556, 611, 556, 333, 611, 611, 278, 278, 556, 278, 889, 611, 611, 611, 611, 389, 556, 333, 611, 556, 778,
+    556, 556, 500, 389, 280, 389, 584)
+FIRST_CHAR = 32
+
+
+def _plain(text: str) -> str:
+    """Markdown inline text as a browser shows it: no bold markers, links as their text, escapes undone."""
+    text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)
+    return text.replace("**", "").replace("\\*", "*")
+
+
+def _runs(kind: str, text: str) -> list[tuple[str, bool, bool]]:
+    """The words of a block: (word, bold, glued), where `glued` means no space before it (the "," after a
+    bold lead-in)."""
+    whole = kind in ("h1", "h2", "h3")
+    m = re.match(r"\*\*(.+?)\*\*(.*)$", text)
+    parts = [(m.group(1), True), (m.group(2), False)] if m else [(text, False)]
+    out: list[tuple[str, bool, bool]] = []
+    for part, bold in parts:
+        plain = _plain(part)
+        if kind == "h2":
+            plain = plain.upper()
+        for i, word in enumerate(plain.split(" ")):
+            if word:
+                out.append((word, bold or whole, i == 0 and bool(out)))
+    return out
+
+
+def _width(word: str, bold: bool, size: float) -> float:
+    widths = HELVETICA_BOLD_WIDTHS if bold else HELVETICA_WIDTHS
+    return sum(widths[ord(ch) - FIRST_CHAR] for ch in word) * size / 1000
+
+
+def _tj(word: str) -> bytes:
+    """A word as a TJ array body, with capitals kerned into the letter after them."""
+    out, piece = [], ""
+    for i, ch in enumerate(word):
+        piece += ch
+        if ch in KERNS and i + 1 < len(word) and word[i + 1].islower():
+            out.append(_pdf_string(piece) + b" %d" % KERNS[ch])
+            piece = ""
+    if piece:
+        out.append(_pdf_string(piece))
+    return b" ".join(out)
+
+
+def _browser_pages() -> list[bytes]:
+    """Each page's content stream for `BROWSER`, laid out the way the print style sheet lays it out."""
+    pages, ops = [], [b"q %.2f 0 0 %.2f 0 0 cm\n" % (PX, PX)]
+    top = BROWSER_MARGIN
+    for kind, text in BROWSER:
+        size = BROWSER_SIZES[kind]
+        left = BROWSER_MARGIN + (LIST_INDENT if kind == "li" else 0.0)
+        width = PAGE_PX_W - BROWSER_MARGIN - left
+        spacing = LETTER_SPACING * size if kind == "h2" else 0.0
+        lines: list[list[tuple[str, bool, bool]]] = [[]]
+        used = 0.0
+        for word, bold, glued in _runs(kind, text):
+            w = _width(word, bold, size) + spacing * len(word)
+            gap = 0.0 if glued or not lines[-1] else _width(" ", bold, size)
+            if lines[-1] and used + gap + w > width and not glued:
+                lines.append([])
+                used, gap = 0.0, 0.0
+            lines[-1].append((word, bold, glued))
+            used += gap + w
+        top += BROWSER_ABOVE[kind]
+        for n, line in enumerate(lines):
+            top += size * LINE_HEIGHT
+            baseline = PAGE_PX_H - top + size * (LINE_HEIGHT - 1) / 2
+            if kind == "li" and n == 0:
+                mid = baseline + size * 0.3
+                ops.append(b"%.2f %.2f %.2f %.2f re f\n" % (left - MARKER_GAP - MARKER, mid - MARKER / 2,
+                                                            MARKER, MARKER))
+            x = left
+            for i, (word, bold, glued) in enumerate(line):
+                if i and not glued:
+                    x += _width(" ", bold, size)
+                ops.append(b"BT /%s %.2f Tf %.2f Tc %.2f %.2f Td [%s] TJ ET\n" % (
+                    b"F2" if bold else b"F1", size, spacing, x, baseline, _tj(word)))
+                x += _width(word, bold, size) + spacing * len(word)
+    ops.append(b"Q\n")
+    pages.append(b"".join(ops))
+    return pages
+
+
+def browser_pdf_bytes() -> bytes:
+    """`BROWSER` printed as Chrome prints a page: see the note above `BROWSER`."""
+    streams = _browser_pages()
+    first_page = 5
+    kids = b" ".join(b"%d 0 R" % (first_page + 2 * i) for i in range(len(streams)))
+
+    def font(name: bytes, widths: tuple[int, ...]) -> bytes:
+        listed = b" ".join(b"%d" % w for w in widths)
+        return (b"<< /Type /Font /Subtype /Type1 /BaseFont /%s /Encoding /WinAnsiEncoding /FirstChar %d "
+                b"/LastChar %d /Widths [%s] >>" % (name, FIRST_CHAR, FIRST_CHAR + len(widths) - 1, listed))
+
+    objects = [b"<< /Type /Catalog /Pages 2 0 R >>",
+               b"<< /Type /Pages /Kids [%s] /Count %d >>" % (kids, len(streams)),
+               font(b"BAAAAA+Helvetica", HELVETICA_WIDTHS), font(b"AAAAAA+Helvetica-Bold", HELVETICA_BOLD_WIDTHS)]
+    for i, content in enumerate(streams):
+        objects.append(b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %d %d] /Resources << /Font << /F1 3 0 R "
+                       b"/F2 4 0 R >> >> /Contents %d 0 R >>" % (PAGE_W, PAGE_H, first_page + 2 * i + 1))
+        objects.append(_stream(content))
+    return _pdf(objects)
+
+
 def scanned_pdf_bytes() -> bytes:
     """A one-page PDF that is only a picture (grey stripes like lines of text), with no text at all."""
     width, height = 60, 80
@@ -371,6 +562,7 @@ def files() -> dict[str, bytes]:
         out[f"{NAMES[key]}.docx"] = docx_bytes(lines, skills_table=key == "technical")
         out[f"{NAMES[key]}.txt"] = ascii_text_of(lines).encode("ascii")
     out["Scanned-CV.pdf"] = scanned_pdf_bytes()
+    out[f"{BROWSER_NAME}.pdf"] = browser_pdf_bytes()
     return out
 
 

@@ -12,15 +12,16 @@ import os
 import stat
 import unittest
 import uuid
+from unittest import mock
 
 from support.api import TIMEOUT_S, HalServer
 from support.fake_ai import fake_ai
-from support.make_cv_fixtures import EXPECTED, FOLDER, NAMES, PEOPLE, main, pdf_bytes
+from support.make_cv_fixtures import BROWSER_EXPECTED, BROWSER_NAME, EXPECTED, FOLDER, NAMES, PEOPLE, main, pdf_bytes
 
 from jobhunt import db
 from jobhunt.ai.base import LLMUnavailable
 from jobhunt.core import paths, runner, settings
-from jobhunt.cvstudio import parse, store
+from jobhunt.cvstudio import parse, pdfread, store
 from jobhunt.cvstudio.model import KINDS, to_json
 
 WAIT_S = 20
@@ -192,6 +193,60 @@ class Rules(unittest.TestCase):
                     self.assertTrue(e.start)
                     self.assertEqual(e.end, "")
 
+
+def browser_doc(ext: str):
+    """The rules' reading of the made-up CV printed by a browser ("pdf") or of its Markdown ("md")."""
+    name = f"{BROWSER_NAME}.{ext}"
+    data = (FOLDER / name).read_bytes()
+    return parse.read_rules(parse.lines_of(data, parse.check(data, name)[0])).doc
+
+
+class BrowserPrinted(unittest.TestCase):
+    """A CV printed to PDF by Chrome (subset fonts, no spaces, list markers drawn as shapes, wrapped lines)
+    and the Markdown it came from. Before 2026-11-18 the PDF read no bold and no bullets, and every wrapped
+    tail ("default.", "tables in RAM") became an entry of its own."""
+
+    def test_a_cv_printed_by_a_browser_reads_its_entries_bullets_and_wrapped_lines(self):
+        want = BROWSER_EXPECTED
+        for ext in ("pdf",):
+            with self.subTest(file=ext):
+                doc = browser_doc(ext)
+                self.assertEqual([s.kind for s in doc.sections], want["kinds"])
+                entries = [e for s in doc.sections if s.kind in parse.ENTRY_KINDS for e in s.entries]
+                self.assertEqual([e.heading for e in entries], want["headings"])
+                self.assertEqual([len(e.bullets) for e in entries], want["bullets"])
+                self.assertEqual([1 if e.text else 0 for e in entries], want["texts"])
+                self.assertEqual([(e.start, e.end) for e in entries], want["dates"])
+                skills = sum(len(e.items) for s in doc.sections if s.kind == "skills" for e in s.entries)
+                self.assertEqual(skills, want["skills"])
+                for field in ("name", "email", "phone", "city"):
+                    self.assertEqual(doc.contact_snapshot.get(field), want[field], field)
+                tide = entries[2]
+                self.assertTrue(tide.bullets[0].text.endswith("storm surges by default."))
+                self.assertIn("A* search", tide.bullets[2].text)
+                self.assertTrue(tide.text.startswith("Also: a seat finder"))
+
+    def test_bold_entry_headings_and_bold_lead_ins_are_seen_in_the_pdf(self):
+        lines = parse.lines_of((FOLDER / f"{BROWSER_NAME}.pdf").read_bytes(), "pdf")
+        by_text = {ln.text: ln for ln in lines}
+        self.assertTrue(by_text["Junior Developer Intern"].bold)
+        self.assertFalse(by_text["Brackwater Analytics | Jun 2025 - Sep 2025"].bold)
+        testing = next(ln for ln in lines if ln.text.startswith("Testing:"))
+        self.assertEqual((testing.bullet, testing.bold, testing.lead), (True, False, "Testing:"))
+        self.assertEqual(sum(ln.bullet for ln in lines), 8)
+
+    def test_a_space_drawn_just_right_of_a_digit_does_not_split_the_number(self):
+        # Chrome's "from 27 minutes": PDFium put the space it worked out 0.01 pt right of the "2"'s pen, and
+        # sorting by position read "from 2 7 minutes" (2026-11-18).
+        def char(ch: str, x: float, index: int, width: float = 4.5) -> pdfread.Char:
+            return pdfread.Char(ch, 1, x, 700.0, x + (0 if ch == " " else width), 709.0, 13.2, x, 700.0,
+                                index=index, scale=0.75)
+
+        drawn = [char("f", 200.0, 0), char("r", 204.0, 1), char("o", 207.0, 2), char("m", 211.4, 3),
+                 char(" ", 222.40, 4), char("2", 222.39, 5), char("7", 227.89, 6), char(" ", 235.23, 7),
+                 char("m", 236.14, 8)]
+        with mock.patch.object(pdfread, "chars", return_value=drawn):
+            self.assertEqual([ln.text for ln in parse.pdf_lines(b"")], ["from 27 m"])
 
 class Upload(unittest.TestCase):
     def setUp(self) -> None:

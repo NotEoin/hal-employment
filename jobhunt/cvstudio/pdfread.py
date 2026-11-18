@@ -11,12 +11,18 @@ the record's scans work wherever Hal installs. Poppler stays a developer referen
 - A file PDFium cannot open reads as empty (no text, 0 pages), as poppler's failure did, so a broken PDF is
   marked down instead of stopping the checks.
 - `page_png` encodes the picture with a few lines of `zlib`, so no imaging library is needed.
+- Each character says whether its font is bold or italic, from the font's name first (a browser's subset fonts
+  are named like `AAAAAA+Arimo-Bold` and report no useful weight: Chrome's Arimo-Bold reads as weight 380,
+  checked 2026-11-18), then its flags and weight. Its `index` is its place in PDFium's text order, which
+  includes the spaces PDFium works out from the gaps, so a reader can ask whether a space lies between two
+  characters instead of guessing from their gap.
 """
 from __future__ import annotations
 
 import ctypes
 import itertools
 import logging
+import math
 import statistics
 import struct
 import threading
@@ -36,12 +42,29 @@ LINE_TOLERANCE = 0.45   # share of the type size two baselines may differ by and
 SPACE_GAP = 0.6         # a gap up to this share of the type size is an ordinary space between words
 WORD_GAP = 0.25         # a gap wider than this share of the type size parts two words, as pdftotext treats it
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+FONT_NAME_BYTES = 256   # longer than any PostScript font name (the PDF spec caps names at 127 bytes)
+BOLD_WEIGHT = 600       # CSS "semibold" and heavier count as bold
+FLAG_ITALIC = 1 << 6    # the font descriptor's Italic flag (PDF 32000-1:2008, table 123, bit 7)
+FLAG_FORCE_BOLD = 1 << 18   # the font descriptor's ForceBold flag (same table, bit 19)
+# PDFium reports a hyphen drawn at the end of a line as character 2, guessing it may be a soft hyphen; Chrome
+# draws the real hyphen of "end-to-end" there when it wraps after it (checked 2026-11-18)
+PDFIUM_LINE_END_HYPHEN = 2
+MARKER_MIN = 1.0        # points: smaller shapes are hairlines and specks, not list markers
+MARKER_MAX = 8.0        # points: a marker is under a type size across; a bigger shape is an icon or a box
+MARKER_RATIO = 2.0      # a marker is about as tall as it is wide; a rule under a heading is not
+MARKER_DEPTH = 5        # how deep into nested form objects to look for markers
+BOLD_NAMES = ("bold", "black", "heavy", "demi", "semibold")
+ITALIC_NAMES = ("italic", "oblique")
 
 
 @dataclass(frozen=True)
 class Char:
     """One character as drawn: page (1-based), its box in points from the bottom left, its pen position on
-    the baseline (`x`, `y`) and its type size."""
+    the baseline (`x`, `y`), its type size, its font's style and its place in PDFium's text order.
+
+    `size` is the size the PDF sets the font in; `scale` is how much the page's transform shrinks or grows
+    it (Chrome sets type in CSS pixels and scales the page by 0.75), so `points` is the size as printed.
+    """
 
     char: str
     page: int
@@ -52,6 +75,15 @@ class Char:
     size: float
     x: float = 0.0
     y: float = 0.0
+    bold: bool = False
+    italic: bool = False
+    index: int = -1
+    scale: float = 1.0
+
+    @property
+    def points(self) -> float:
+        """The type size as printed on the page, in points."""
+        return self.size * self.scale
 
 
 class Unreadable(Exception):
@@ -115,19 +147,49 @@ def first_pages_text(pdf: Path | bytes, limit: int) -> str:
             doc.close()
 
 
+def _style(textpage: pdfium.PdfTextPage, i: int, styles: dict[tuple[str, int, int], tuple[bool, bool]]
+           ) -> tuple[bool, bool]:
+    """(bold, italic) for character `i`, from its font's name, flags and weight."""
+    name = ctypes.create_string_buffer(FONT_NAME_BYTES)
+    flags = ctypes.c_int()
+    pdfium_c.FPDFText_GetFontInfo(textpage.raw, i, name, FONT_NAME_BYTES, ctypes.byref(flags))
+    weight = pdfium_c.FPDFText_GetFontWeight(textpage.raw, i)
+    key = (name.value.decode("latin-1"), flags.value, weight)
+    if key not in styles:
+        # the part after "+" is the real name; the six letters before it only mark a subset
+        base = key[0].rsplit("+", 1)[-1].lower()
+        bold = any(w in base for w in BOLD_NAMES) or bool(flags.value & FLAG_FORCE_BOLD) or weight >= BOLD_WEIGHT
+        italic = any(w in base for w in ITALIC_NAMES) or bool(flags.value & FLAG_ITALIC)
+        styles[key] = (bold, italic)
+    return styles[key]
+
+
+def _scale(textpage: pdfium.PdfTextPage, i: int) -> float:
+    """How much the character's transform scales its type size; 1 when PDFium cannot say."""
+    m = pdfium_c.FS_MATRIX()
+    if not pdfium_c.FPDFText_GetMatrix(textpage.raw, i, ctypes.byref(m)):
+        return 1.0
+    return math.sqrt(abs(m.a * m.d - m.b * m.c)) or 1.0
+
+
 def _page_chars(page: pdfium.PdfPage, number: int) -> list[Char]:
     textpage = page.get_textpage()
+    styles: dict[tuple[str, int, int], tuple[bool, bool]] = {}
     try:
         out = []
         for i in range(textpage.count_chars()):
             code = pdfium_c.FPDFText_GetUnicode(textpage.raw, i)
             if code in (0, 0xFFFE, 0xFFFF):
                 continue
+            if code == PDFIUM_LINE_END_HYPHEN:
+                code = ord("-")
             left, bottom, right, top = textpage.get_charbox(i)
             x, y = ctypes.c_double(), ctypes.c_double()
             pdfium_c.FPDFText_GetCharOrigin(textpage.raw, i, ctypes.byref(x), ctypes.byref(y))
+            bold, italic = _style(textpage, i, styles)
             out.append(Char(chr(code), number, left, bottom, right, top,
-                            float(pdfium_c.FPDFText_GetFontSize(textpage.raw, i)), x.value, y.value))
+                            float(pdfium_c.FPDFText_GetFontSize(textpage.raw, i)), x.value, y.value,
+                            bold, italic, i, _scale(textpage, i)))
         return out
     finally:
         textpage.close()
@@ -142,6 +204,58 @@ def chars(pdf: Path | bytes) -> list[Char]:
             return []
         try:
             return [c for n in range(len(doc)) for c in _page_chars(doc[n], n + 1)]
+        finally:
+            doc.close()
+
+
+def page_widths(pdf: Path | bytes) -> list[float]:
+    """Each page's width in points, in order; [] when the PDF cannot be read."""
+    with _LOCK:
+        try:
+            doc = _open(pdf)
+        except Unreadable:
+            return []
+        try:
+            return [float(doc[n].get_width()) for n in range(len(doc))]
+        finally:
+            doc.close()
+
+
+@dataclass(frozen=True)
+class Shape:
+    """A small drawn shape, such as a list marker a browser draws instead of a bullet character."""
+
+    page: int
+    left: float
+    bottom: float
+    right: float
+    top: float
+
+
+def markers(pdf: Path | bytes) -> list[Shape]:
+    """Every small, roughly square drawn shape (a disc, circle or square list marker); [] when unreadable.
+
+    Chrome draws a list's discs as paths of 3 pt at 9 pt type (checked 2026-11-18), so a shape from
+    `MARKER_MIN` to `MARKER_MAX` points across, no more than twice as tall as wide, is taken as a marker.
+    """
+    with _LOCK:
+        try:
+            doc = _open(pdf)
+        except Unreadable:
+            return []
+        try:
+            out = []
+            for n in range(len(doc)):
+                for obj in doc[n].get_objects(max_depth=MARKER_DEPTH):
+                    if obj.type != pdfium_c.FPDF_PAGEOBJ_PATH:
+                        continue
+                    left, bottom, right, top = obj.get_bounds()
+                    w, h = right - left, top - bottom
+                    if MARKER_MIN <= min(w, h) and max(w, h) <= MARKER_MAX and max(w, h) <= MARKER_RATIO * min(w, h):
+                        out.append(Shape(n + 1, left, bottom, right, top))
+            return out
+        except pdfium.PdfiumError:
+            return []
         finally:
             doc.close()
 

@@ -364,6 +364,20 @@ runs: tests use `tests/support/fake_claude/`.
   `PrivateLeak` or an empty reply, Hal's own reading is kept and a step says why.
 - Report rows name one field each (`contact/<key>`, `s:<section>/e:<entry>/<field>`, `.../b:<bullet>`). A
   correction makes "You corrected N things Hal misread".
+- Every reader gives `Line`s with text, size, bold, a bold lead-in (`lead`), bullet and style. `pdf_lines`
+  works from `pdfread.chars`, which carry bold and italic from the font name (a subset font such as
+  `AAAAAA+Arimo-Bold`), then its flags and weight, the printed size (`points`, after the page's scale) and
+  PDFium's text order. A space goes between two characters when PDFium's text has one between them; only a
+  PDF with no spaces at all falls back to the gap rule. A row is joined to the one above when it starts at
+  the same place in the same type, sits one usual line step below, and either continues a list item (when
+  the PDF draws list markers as shapes, `pdfread.markers`) or its first word would not have fitted on the
+  row above. Without bullet glyphs or marker shapes, a small indent marks a list item. The thresholds are
+  named constants in `parse.py`, each with its reason.
+- In an entry section where the file marks headings (a bold line, or a line that starts with a bold heading
+  followed by ", details: text"), `_marked_drafts` starts entries only there. The line under a heading is
+  its details line when it is short, holds a date range or is split with `|` (each part becomes its own
+  field); other lines are the entry's paragraph. A short bold line with a heading word ("Other projects") is a section only
+  when it is as large as the file's other section titles (`_section_kinds`).
 
 ## CV types and checks (`cvstudio/types.py`, `cvstudio/checks.py`)
 
