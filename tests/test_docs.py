@@ -287,6 +287,12 @@ class Ci(unittest.TestCase):
                     loose.append(f"{workflow.name}: {line.strip()}")
         self.assertEqual(loose, [])
 
+    # Regression (run 44372137723): on a slow runner apt took 6 of a Linux job's 11 minutes
+    def test_no_test_job_waits_on_apt(self):
+        self.assertNotIn("apt-get", self.body)
+        self.assertNotIn("install --with-deps", self.body)
+        self.assertIn("playwright install-deps chromium", self.body)   # only when Chromium cannot start
+
     # Regression (windows-2025 runner): a font load failed with net::ERR_NO_BUFFER_SPACE late in the suite.
     def test_the_windows_job_has_room_for_the_browser_tests_connections(self):
         self.assertIn("netsh int ipv4 set dynamicport tcp start=32768 num=32768", self.body)

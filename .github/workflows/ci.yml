@@ -5,6 +5,8 @@
 # in shares, one job each, spread over the runner's CPUs (scripts/dev/run_tests.py). Windows, the slowest, gets
 # the most shares; with WSL2's three, the 19 jobs stay under the 20 a free account runs at once. Run 43400046701
 # took 7 min with 7 Windows, 4 Linux 3.11 and 2 WSL2 shares: Windows tests 165 to 279 s, Linux 3.11 under 200 s.
+# No step waits on apt: Chromium comes from Playwright's download (cached by Playwright's version) and installs
+# its system libraries only when it cannot start.
 # The Windows-only checks must pass, not skip, in whichever share holds them: Windows is the one place they
 # can run. They are: the install file's PowerShell parses under Windows PowerShell 5.1, CVs print with
 # Microsoft Edge, and the platform layer finds browsers and opens Hal in the default browser.
@@ -48,13 +50,26 @@ jobs:
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
       # magika and onnxruntime, under the documents extra, need the Microsoft C++ runtime: Linux only
       - run: uv sync --frozen --extra browser ${{ runner.os == 'Linux' && '--extra documents' || '' }} --python ${{ matrix.python }}
-      # poppler is only the reference the PDF reader is compared with (tests/test_pdfread.py); Hal never needs it
-      - if: runner.os == 'Linux'
-        run: sudo apt-get update -q && sudo apt-get install -y -q poppler-utils
-      - if: runner.os == 'Linux'
-        run: uv run python -m playwright install --with-deps chromium
-      - if: runner.os == 'Windows'
-        run: uv run python -m playwright install chromium
+      # No apt: on a slow runner apt took 6 min of an 11-minute job (run 44372137723). poppler is only the
+      # reference tests/test_pdfread.py compares the PDF reader with, and that test skips without it. The image
+      # already has every library Chromium needs; --with-deps only added fonts Hal's pages do not use.
+      - id: playwright
+        shell: bash
+        run: echo "version=$(uv run python -c 'from importlib.metadata import version; print(version("playwright"))')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ runner.os == 'Windows' && '~/AppData/Local/ms-playwright' || '~/.cache/ms-playwright' }}
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Chromium, with system libraries only if it cannot start without them
+        shell: bash
+        env:
+          LAUNCH: "from playwright.sync_api import sync_playwright as s; p = s().start(); p.chromium.launch(timeout=60000).close(); p.stop()"
+        run: |
+          uv run python -m playwright install chromium
+          if ! uv run python -c "$LAUNCH"; then
+            if [ "$RUNNER_OS" = Linux ]; then uv run python -m playwright install-deps chromium; fi
+            uv run python -c "$LAUNCH"
+          fi
       # the root commit has no parent, so only the whole-tree ASCII check below applies to it
       - name: ASCII and ruff on the lines this commit adds
         shell: bash

@@ -41,7 +41,10 @@ denied".
 
 CI (`.github/workflows/ci.yml`) runs every test, browser tests on, on Linux with Python 3.11 and 3.13 and on
 Windows with Python 3.13, in shares of the suite, one job each (eight on Windows, the slowest), and
-`scripts/dev/run_tests.py` spreads a share over the runner's CPUs in processes of a few tests. To run the
+`scripts/dev/run_tests.py` spreads a share over the runner's CPUs in processes of a few tests. CI installs
+nothing with apt, so a slow package mirror cannot hold a job up. Chromium's system libraries are installed only
+when it cannot start without them, and poppler is not installed. The one test that compares the PDF reader
+with poppler (`tests/test_pdfread.py`) skips there and runs on a computer that has `pdftotext`. To run the
 whole suite that way here, one process per CPU, slowest chunks first from the last run's times
 (`--share 2/5` runs one share):
 
