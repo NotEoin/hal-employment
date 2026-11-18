@@ -368,7 +368,7 @@ def _cv_changes(job, docs: dict) -> list[dict]:
     from jobhunt.cvstudio import cv, tailor
 
     if tailor.kept(job["id"]):
-        return [{k: c[k] for k in ("id", "kind", "where", "before", "after", "why", "ev", "on")}
+        return [{k: c[k] for k in ("id", "kind", "where", "before", "after", "why", "ev", "on", "held")}
                 for c in tailor.shown(job["id"])["changes"]]
     try:
         found = cv.changes(cv.load(), documents.proposed_cv(job, docs))
@@ -389,13 +389,15 @@ def _cv_base(con, job_id: str) -> dict | None:
 
 
 def _cv_kept(con, job_id: str) -> dict:
-    """`schema` 2 when the application's CV can be edited line by line (`tailor.kept`), else 1, and the number
-    of the version it was approved as."""
-    from jobhunt.cvstudio import store, tailor
+    """`schema` 2 when the application's CV can be edited line by line (`tailor.kept`), else 1, the number
+    of the version it was approved as, and `pages`: the CV employers get against its page limit
+    (`pagelimit.job_state`, None for an older application), which the step shows before Approve."""
+    from jobhunt.cvstudio import pagelimit, store, tailor
 
     vid = tailor.version_of(job_id, con)
-    return {"schema": 2 if tailor.kept(job_id, con) else 1,
-            "version_n": store.version(vid, con=con)["n"] if vid else None}
+    kept = tailor.kept(job_id, con)
+    return {"schema": 2 if kept else 1, "version_n": store.version(vid, con=con)["n"] if vid else None,
+            "pages": pagelimit.job_state(job_id, con) if kept else None}
 
 
 def _fields(form: dict | None) -> list[dict]:

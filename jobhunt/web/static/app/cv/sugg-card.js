@@ -50,7 +50,7 @@ export function SuggCard({ x, onChange }) {
   };
   const accept = () => act(() => post(path(x, "accept"), { alt }), out => {
     if (out && out.ask_send_copy) openDialog("sendcopy");
-    else toast("Accepted. Saved as a new version; Undo is always there.");
+    else toast((out && out.note ? out.note + " " : "") + "Accepted. Saved as a new version; Undo is always there.");
   });
   const saveEdit = () => act(() => post(path(x, "accept"), { alt, text: txt }), () => toast("Saved your edited version"));
   const leave = () => act(() => post(path(x, "leave"), { reason: why, remember }), () =>

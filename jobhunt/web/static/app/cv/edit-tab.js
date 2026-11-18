@@ -12,7 +12,9 @@
    (cv/job-changes.js), marks the parts Hal and the person changed apart, and offers "Copy to my main CV"
    on each entry, which copies into the CV the application was built from (`main_label`, "your Applied AI
    CV"); with several CVs in use the button and the words around it name that CV ("Copy to my Applied AI
-   CV"). A save there makes the job's PDF again; that CV changes only by Copy. */
+   CV"). A save there makes the job's PDF again; that CV changes only by Copy. Above Hal's changes it says,
+   in the server's words (`pages`), when the PDF employers get runs over the CV's page limit and which of its
+   own changes Hal undid to keep to it. */
 import { html, useState, useEffect } from "../core/html.js";
 import { api, post } from "../core/api.js";
 import { useApi, toast, invalidate } from "../core/store.js";
@@ -167,6 +169,8 @@ export function EditTab({ setT, job }) {
     ${stale && html`<${Note} icon="warn" tone="warn"><b>${stale}</b> ${job ? "This job's CV was changed somewhere else, for example in another window."
       : "Your CV was changed somewhere else, for example by a suggestion you accepted."} Copy anything you want to keep, then start again from ${job ? "this job's CV" : "your CV"} as it is now.
       <div style="margin-top:8px"><button type="button" class="btn small" onClick=${restart}>${job ? "Start again from this job's CV now" : "Start again from your CV now"}</button></div><//>`}
+    ${job && base.pages && (base.pages.words || base.pages.note) && html`<div class="cv-length" role="status"><${Note} icon="warn" tone="warn">
+      ${base.pages.words}${base.pages.words && base.pages.note ? " " : ""}${base.pages.note}<//></div>`}
     ${job && html`<section class="card" aria-labelledby="job-changes-head"><h2 class="h2" id="job-changes-head" style="margin:0 0 8px">What Hal changed for this job</h2>
       <${JobChanges} changes=${base.changes} onToggle=${toggle} cv=${mainCv} /></section>`}
     ${doc.sections.map(s => html`<${SectionCard} key=${s.id} s=${s} act=${act} marks=${marks} onCopy=${job ? copy : null} copyTo=${mainCv} />`)}</div>`;

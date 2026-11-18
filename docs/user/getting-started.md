@@ -334,6 +334,19 @@ and never stops a save: what to shorten is your choice. The length check on **Ch
 To count the pages Hal prints the CV with a browser, which takes a second or so, once for each version. On a
 computer where no browser can print, Hal says it cannot count the pages, rather than guess.
 
+Hal keeps its own changes inside the length you chose:
+
+- **For a job.** When Hal adjusts your CV for an application and its changes would make the CV longer than
+  you asked, Hal undoes its own changes that add words, newest first, until it fits. Each one says **Undone
+  by Hal to keep to your page limit**, and **Redo** puts it back if you want it anyway. If your CV is already
+  longer before Hal changes anything, Hal uses it as it is for that job and says so on the CV tab.
+- **Suggestions.** When you accept Hal's wording on **Suggestions** and it would make the CV longer than you
+  asked, Hal uses a shorter wording of the same suggestion that fits, or leaves the line as it is and tells
+  you why. Words you edit yourself are always used.
+
+An application's CV tab and its **Documents** step count the pages of the PDF employers get for that job and
+warn you before you approve, for example "This CV is 3 pages. You asked for 2." You can still approve it.
+
 ## Sorting a big folder into your record
 
 If you have a folder of everything from your studies and jobs (an old laptop's Documents, a university

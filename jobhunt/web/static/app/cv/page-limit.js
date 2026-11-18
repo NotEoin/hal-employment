@@ -30,7 +30,7 @@ export function PageLimit() {
     } catch (err) { toast(err.message); }
   };
   return html`<section class="card">${head}
-    <p class="small sub">Hal counts the pages of this CV as it prints, and warns you when it runs longer. Nothing is cut.</p>
+    <p class="small sub">Hal counts the pages of this CV as it prints and keeps its own changes inside the limit. When your CV runs longer, Hal tells you; it never cuts your lines.</p>
     <div class="setting"><div><div class="lab">Keep this CV to</div>${!data.chosen && html`<div class="small sub">Until you choose, this follows your CV type.</div>`}</div>
       <div class="ctl"><${Seg} label="Keep this CV to" value=${data.limit} options=${choices} onChange=${save} /></div></div>
     ${data.over ? html`<${Note} icon="warn" tone="warn">${data.words}<//>`

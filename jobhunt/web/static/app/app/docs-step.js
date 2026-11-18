@@ -25,7 +25,10 @@
 
    The CV tab names the CV this application is built from (`docs.cv.base`, "Built from your Applied AI CV")
    with Hal's reason; when more than one CV is in use, Change CV opens dialogs/basecv.js to build it on
-   another. With one CV in use only the name shows. */
+   another. With one CV in use only the name shows.
+
+   When the CV employers get runs over its page limit (`docs.cv.pages`, the real pages of that PDF), the
+   approve box says so with the numbers. Approve is never held back for it. */
 import { html, cx, useState } from "../core/html.js";
 import { post, put } from "../core/api.js";
 import { toast, openDialog, invalidate } from "../core/store.js";
@@ -185,6 +188,7 @@ export function DocsStep({ a, reload, onApproved }) {
   const original = d.cv.sent_as === "original";
   const pick = d.cv.pick || [];
   const editable = d.cv.schema === 2 && !original && !pick.length;
+  const length = d.cv.pages && d.cv.pages.over ? d.cv.pages.words : "";
   const unsaved = cvDirty || letter !== d.letter.text || message !== d.message.text
     || JSON.stringify(answers) !== JSON.stringify(d.answers);
   const again = () => writeAgain(a, unsaved, reload, setRewriteBusy);
@@ -198,6 +202,7 @@ export function DocsStep({ a, reload, onApproved }) {
     <div class="approve"><div class="ic info"><${Icon} n="file" /></div><div class="grow"><b>Check what Hal made for this job, then approve it.</b>
       <div class="small">After you approve, Hal opens the employer's form and fills it in. It never presses Submit.</div>
       ${cvDirty && html`<div class="small" role="status">Save or discard your changes to the CV before you approve.</div>`}
+      ${length && html`<div class="small cv-length" role="status"><${Icon} n="warn" c="s" /> ${length} You can still approve it.</div>`}
       ${pick.length > 0 && html`<div class="small" role="status">Tick what this job cares about most on the CV tab before you approve.</div>`}</div>
       <button type="button" class="btn primary" disabled=${cvDirty || pick.length > 0} onClick=${onApprove}>Approve and fill in the form</button>
       <button type="button" class="btn" onClick=${() => openDialog("askchange", { app: a })}>Ask for changes</button>

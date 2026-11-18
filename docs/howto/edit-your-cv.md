@@ -55,6 +55,8 @@ Hal's on a line you also changed, your words stay.
 | "Your main CV already has these lines." (or "Your Museum CV ...") | Nothing to copy: the entry reads the same on both. |
 | The CV tab shows only Hal's changes, with no editor | Hal wrote this application's documents before CVs could be edited line by line. Use **Undo** on Hal's changes, or change your main CV on **My CV**. |
 | "Save or discard your changes first." after **Undo** or **Copy to my main CV** | Save or discard your edits, then press it again. |
+| A change says **Undone by Hal to keep to your page limit** | Hal's change made the job's CV longer than your **Keep this CV to**. Press **Redo** to use it anyway; the CV tab then says how many pages the CV is. |
+| "This CV is 3 pages. You asked for 2." on the CV tab or above **Approve and fill in the form** | You can still approve it. To shorten it, change or hide lines for this job and press **Save changes**. |
 | **Adjust my CV for these** cannot be pressed | Tick three to five of the requirements, not fewer or more. |
 | **Approve and fill in the form** cannot be pressed, and the step says to tick what this job cares about most | Tick three to five requirements on the CV tab and press **Adjust my CV for these** first, or turn off **Ask me what the job cares about first** in **Settings**. |
 

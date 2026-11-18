@@ -20,6 +20,11 @@ asks for the picks before anything else on that CV. The picks make the job's CV 
 are asked only while the person has not edited it, and they are kept in `job_cvs.priorities`, so Make the
 documents again uses them too.
 
+Page limit: Hal's changes keep the job's CV to the page limit of the CV it is built from (`pagelimit.limit_of`),
+counted on the PDF employers get (`fit`, in `prepare`). Over it, Hal undoes its own changes that add words,
+newest first, and marks them `held`, so the CV tab says why and Redo puts one back; when the CV was over before
+Hal changed anything, Hal keeps it as it was. The person's edits are never undone, only warned about.
+
 Design decision: a change list entry stores the model change that makes it (`op`, `target`, `value`), and
 the job's CV is always rebuilt from the base version plus the changes still on. Undo and Redo are then order
 free and can never drift from what the list shows.
@@ -70,6 +75,12 @@ ORIGINAL_WHY = ("Adjusting for each job is off while you send your original file
 LEVEL_WORDS = {"little": "Adjusting a little", "more": "Adjusting more"}
 MAIN_LABEL = "your main CV"         # what Copy names the CV it copies into while only one CV is in use
 MIN_PICKS, MAX_PICKS = 3, 5       # "the three to five things the job cares about most" (`cvdocs.pick_first`)
+# `held` on a change of Hal's it undid to keep the job's CV to its page limit (`fit`): to fit, or because the CV
+# was over before Hal changed anything. Redo clears it.
+HELD_FIT, HELD_BASE = "fit", "base"
+# Counts `fit` makes at most: Hal's changes for one job are a title line, a few reorders, the profile line and
+# up to `MAX_BULLETS` lines, and each count draws the CV once (milliseconds).
+FIT_TRIES = 8
 
 
 def _store():
@@ -232,6 +243,50 @@ def build(base, changes: list[dict]):
     return doc
 
 
+def _longer(change: dict) -> bool:
+    """True when a change of Hal's adds words: its wording is longer than the words it replaced."""
+    return len(str(change.get("after") or "").split()) > len(str(change.get("before") or "").split())
+
+
+def _counted(base, changes: list[dict], count) -> int | None:
+    """The pages of the base with `changes` still on, by `count`; None when it cannot be counted."""
+    try:
+        return count(build(base, changes))
+    except _model().CVError as e:
+        log.info("could not count the pages of a job's CV: %s", e)
+        return None
+
+
+def fit(base, changes: list[dict], limit: int, count) -> list[dict]:
+    """Holds Hal's changes for a job to the page limit; `changes` with some marked undone and `held`.
+
+    `count(doc)` gives a document's pages as employers get it, None when not known. When the CV is over the
+    limit, Hal undoes its own changes that add words, newest first, then its other changes, and counts again
+    after each, at most `FIT_TRIES` times. When the CV is over with none of Hal's changes on, Hal keeps the CV
+    as it was (`HELD_BASE`). The person's own edits are never undone. No limit, or no count: nothing changes.
+    """
+    hal, yours = _split(changes)
+    on = [c for c in hal if not c.get("undone")]
+    if not limit or not on:
+        return changes
+    pages = _counted(base, changes, count)
+    if pages is None or pages <= limit:
+        return changes
+    alone = _counted(base, yours, count)
+    if alone is not None and alone > limit:
+        for c in on:
+            c.update(undone=True, held=HELD_BASE)
+        log.info("a job's CV is %s pages before Hal's changes, over its %s: kept as it was", alone, limit)
+        return changes
+    order = [c for c in reversed(on) if _longer(c)] + [c for c in reversed(on) if not _longer(c)]
+    for c in order[:FIT_TRIES]:
+        c.update(undone=True, held=HELD_FIT)
+        pages = _counted(base, changes, count)
+        if pages is None or pages <= limit:
+            break
+    return changes
+
+
 def _split(changes: list[dict]) -> tuple[list[dict], list[dict]]:
     """(Hal's changes, the person's own edits), each in the order they were made."""
     return [c for c in changes if c.get("by") != YOU], [c for c in changes if c.get("by") == YOU]
@@ -261,8 +316,13 @@ def prepare(job: dict, *, level: str | None = None, priorities: list[str] | None
     if base is None:
         with _conn(con) as c:
             base = choose.for_writing(c, job, again=False)
+    from jobhunt.cvstudio import cv, pagelimit
+
     used, why = level_for(level, base.doc_id)
     doc, changes = for_job(job, level=level, priorities=priorities, base=base)
+    with _conn(con) as c:
+        limit = pagelimit.limit_of(base.doc_id, c)[0]
+        start = _store().get(base.version_id, con=c)
     with _conn(con) as c, _store().writing(c):
         old = c.execute("SELECT changes, approved FROM job_cvs WHERE job_id = ?", (job["id"],)).fetchone()
         if old is not None and old["approved"]:
@@ -277,6 +337,7 @@ def prepare(job: dict, *, level: str | None = None, priorities: list[str] | None
                 continue
             kept_n += 1
             changes.append(edit | {"id": f"y{kept_n}"})
+        fit(start, changes, limit, lambda d: pagelimit.drawn_pages(cv.v1_of(d)))
         c.execute("INSERT OR REPLACE INTO job_cvs (job_id, base_version_id, version_id, level, priorities, changes, "
                   "approved, base_choice) VALUES (?, ?, NULL, ?, ?, ?, NULL, ?)",
                   (job["id"], base.version_id, used, json.dumps(priorities) if priorities else None,
@@ -352,7 +413,8 @@ def shown(job_id: str, con: sqlite3.Connection | None = None) -> dict:
     hal, yours = _split(json.loads(row["changes"]))
     return {"job_id": job_id, "level": row["level"], "base_version_id": row["base_version_id"],
             "version_id": row["version_id"], "approved": row["approved"], "edits": len(yours), "rev": _rev(row),
-            "changes": [{k: c.get(k, "") for k in ("id", "kind", "where", "target", "before", "after", "why", "ev")}
+            "changes": [{k: c.get(k, "") for k in ("id", "kind", "where", "target", "before", "after", "why", "ev",
+                                                    "held")}
                         | {"on": not c.get("undone")} for c in hal]}
 
 
@@ -367,6 +429,7 @@ def set_change(job_id: str, change_id: str, on: bool, con: sqlite3.Connection | 
         if found is None:
             raise LookupError("That change is not in this job's CV.")
         found["undone"] = not on
+        found.pop("held", None)          # the person's choice now, whatever the page limit says
         c.execute("UPDATE job_cvs SET changes = ? WHERE job_id = ?", (json.dumps(changes), job_id))
         c.commit()
     events.publish("application", id=job_id)
@@ -521,7 +584,7 @@ def editor(job_id: str, con: sqlite3.Connection | None = None) -> dict:
     the person changed after them (`by` "you"). `version_id` is what a save sends back as `base`, and
     `main_version_id` the version in use of the CV this job's CV was built from (`main_doc_id`, called
     `main_label` on the page, "your main CV" while only one CV is in use), for Copy to my main CV, which copies
-    into that CV.
+    into that CV. `pages` is the job's CV against its page limit (`pagelimit.job_state`).
     """
     model = _model()
     row, base, made = _made(job_id, con)
@@ -534,11 +597,13 @@ def editor(job_id: str, con: sqlite3.Connection | None = None) -> dict:
                       for d in model.diff(base, one)]
     doc = document(job_id, con)
     marks += [{"target": d["target"], "kind": d["kind"], "by": YOU} for d in model.diff(made, doc)]
+    from jobhunt.cvstudio import pagelimit
+
     main = _store().version(row["base_version_id"], con=con)["doc_id"]
     return {**model.to_dict(doc), "version_id": _rev(row), "n": None, "job_id": job_id,
             "main_version_id": _store().current(con, main)[0], "main_doc_id": main,
             "main_label": _main_label(con, main), "approved": row["approved"],
-            "changes": shown(job_id, con)["changes"], "marks": marks}
+            "changes": shown(job_id, con)["changes"], "marks": marks, "pages": pagelimit.job_state(job_id, con)}
 
 
 def copy_to_main(job_id: str, target: str, base: str, con: sqlite3.Connection, job: dict | None = None) -> str:

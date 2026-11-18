@@ -427,7 +427,7 @@ class Api(unittest.TestCase):
             dates = next(s for s in shown["pending"] if s["kind"] == "Dates")
             out = hal_client.post(f"/api/v2/cv/suggestions/{dates['id']}/accept", {"alt": 0})
             self.assertEqual(out.status, 200, out.text)
-            self.assertEqual(set(out.json()), {"version_id", "n", "ask_send_copy"})
+            self.assertEqual(set(out.json()), {"version_id", "n", "note", "ask_send_copy"})
             runner.flush()
             only = hal_client.get("/api/v2/cv/suggestions?kind=Symbols").json()["pending"]
             self.assertEqual({s["kind"] for s in only}, {"Symbols"})

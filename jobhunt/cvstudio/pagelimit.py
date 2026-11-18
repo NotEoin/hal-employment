@@ -1,15 +1,19 @@
 """A CV's page limit ("Keep this CV to": no limit, one page, two pages) and the real page counts held to it.
 
 - One source of truth for the limit: the CV's own `cv_documents.page_limit` once the person chooses one, else
-  its CV type's `pages` rule (`limit_of`). Every reader goes through `limit_of`: the Checks tab's length check
-  and the warning on My CV. The type's rule is only the default, so a change of type moves the limit until the
+  its CV type's `pages` rule (`limit_of`). Every reader goes through `limit_of`: the Checks tab's length check,
+  the warnings on My CV and on an application, and Hal's own changes for a job (`tailor`) or from a suggestion
+  (`suggest.accept`). The type's rule is only the default, so a change of type moves the limit until the
   person chooses one.
-- A count is the number of pages of a real PDF, never a word estimate: the CV printed in its look by the
-  browser printer, as Download PDF makes it (`measure`). Printing takes a second or more, so a version is
-  printed once per printed page (`cv_versions.pages`, keyed by the page's hash in `pages_key`, so a new look or
-  new contact details count again): after the editor saves, else the first time My CV asks. When no browser
-  can print the count is not known (None). Hal's simple PDF is not counted: its pages are its own layout's,
-  not the look's.
+- A count is the number of pages of a real PDF, never a word estimate:
+  - My CV: the CV printed in its look by the browser printer, as Download PDF makes it (`measure`). Printing
+    takes a second or more, so a version is printed once per printed page (`cv_versions.pages`, keyed by the
+    page's hash in `pages_key`, so a new look or new contact details count again): after the editor saves,
+    when Hal weighs a suggestion, else the first time My CV asks. When no browser can print the count is not
+    known (None). Hal's simple PDF is not counted: its pages are its own layout's, not the look's.
+  - An application: the PDF employers get, Hal's application layout drawn without a browser (`cv.render`),
+    so it is known and takes milliseconds (`job_pages`, kept in `job_cvs.pages` keyed by what it was drawn
+    from). While the person sends their original file, that file's own page count (`cv_files.pages`).
 - The person is only warned (`words`); nothing they do is refused for its length.
 - A test run (`HAL_TEST_MODE=1`) prints for a count only with `HAL_TEST_REAL_PRINT=1`; tests give a stand-in
   printer through `PRINT`, so saving a CV in a test never starts a browser.
@@ -18,6 +22,7 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import json
 import logging
 import os
 import shutil
@@ -27,7 +32,7 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
-from jobhunt.cvstudio import store
+from jobhunt.cvstudio import pdfread, store
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +41,13 @@ TEST_ENV, REAL_PRINT_ENV = "HAL_TEST_MODE", "HAL_TEST_REAL_PRINT"
 CHOICE_WORDS = {0: "No limit", 1: "One page", 2: "Two pages"}
 OVER = "This CV is {now}{pages} pages. You asked for {limit}."
 UNKNOWN = "Hal cannot count this CV's pages: no browser on this computer can print it."
+UNKNOWN_JOB = "Hal could not count the pages of this CV."
+HELD = "Hal undid {n} of its own changes to keep this CV to {limit}. Press Redo to use one anyway."
+KEPT_BASE = ("Your CV was already longer than {limit} before Hal changed anything, so Hal kept it as it is "
+             "for this job.")
+SUGGESTION_HELD = ("Hal's wording would make this CV {pages} pages, and you asked for {limit}, so Hal did not use "
+                   "it. Edit the words to use them anyway.")
+SUGGESTION_SHORTER = "Hal used its shorter wording, so this CV keeps to {limit}."
 
 # (html, out, expect_name, expect_text) -> pages; raises `printer.PrintError` when it cannot print. None: the
 # browser printer (`_browser`), the default.
@@ -77,15 +89,15 @@ def limit_of(doc_id: str | None = None, con: sqlite3.Connection | None = None) -
             return 0, False
 
 
-def words(pages: int | None, limit: int, *, now: bool = False) -> str:
+def words(pages: int | None, limit: int, *, now: bool = False, job: bool = False) -> str:
     """The warning in plain words, "" when the CV keeps to its limit or has none.
 
-    `now` after a save ("This CV is now 3 pages. You asked for 2.").
+    `now` after a save ("This CV is now 3 pages. You asked for 2."); `job` for an application's CV.
     """
     if not limit:
         return ""
     if pages is None:
-        return UNKNOWN
+        return UNKNOWN_JOB if job else UNKNOWN
     if pages <= limit:
         return ""
     return OVER.format(now="now " if now else "", pages=pages, limit=limit)
@@ -201,4 +213,83 @@ def state(doc_id: str | None = None, con: sqlite3.Connection | None = None, *, c
     return {"limit": limit, "chosen": chosen, "choices": [[k, v] for k, v in CHOICE_WORDS.items()],
             "pages": pages, "counted": pages is not None,
             "over": pages is not None and bool(limit) and pages > limit, "words": words(pages, limit, now=now)}
+
+
+# ------------------------------------------------------------------------------------------ a job's CV
+
+def pages_words(n: int) -> str:
+    """"1 page", "2 pages"."""
+    return "1 page" if n == 1 else f"{n} pages"
+
+
+def drawn_pages(v1: dict) -> int | None:
+    """Pages of a job's CV (`cv.v1_of` shape) drawn as employers get it (`cv.render`); None when it fails."""
+    from jobhunt.cvstudio import cv
+
+    with tempfile.TemporaryDirectory(prefix="hal-count-", ignore_cleanup_errors=True) as tmp:
+        try:
+            pages = pdfread.pages(cv.render(v1, Path(tmp)))
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            log.warning("could not draw a job's CV to count its pages: %s", e)
+            return None
+    return pages or None
+
+
+def _original_pages(con: sqlite3.Connection, doc_id: str) -> int | None:
+    """The pages of the CV's own file while employers get that file; None otherwise."""
+    d = store.doc(con, doc_id)
+    if d["send"] != "original" or not d["baseline_file_id"]:
+        return None
+    row = con.execute("SELECT pages FROM cv_files WHERE id = ?", (d["baseline_file_id"],)).fetchone()
+    return row["pages"] if row and row["pages"] else None
+
+
+def job_pages(job_id: str, con: sqlite3.Connection | None = None) -> int | None:
+    """Pages of the PDF employers get for this job: its CV as drawn, kept in `job_cvs.pages` until the CV
+    changes; the original file's pages while the person sends it. None when there is no job's CV."""
+    from jobhunt.cvstudio import tailor
+
+    with _conn(con) as c:
+        row = c.execute("SELECT base_version_id, pages, pages_key FROM job_cvs WHERE job_id = ?",
+                        (job_id,)).fetchone()
+        if row is None:
+            return None
+        original = _original_pages(c, store.version(row["base_version_id"], con=c)["doc_id"])
+        if original is not None:
+            return original
+        v1 = tailor.v1(job_id, c)
+        key = _key(json.dumps(v1, sort_keys=True, default=str))
+        if row["pages_key"] == key:
+            return row["pages"]
+        pages = drawn_pages(v1)
+        with store.writing(c):
+            c.execute("UPDATE job_cvs SET pages = ?, pages_key = ? WHERE job_id = ?", (pages, key, job_id))
+    return pages
+
+
+def job_state(job_id: str, con: sqlite3.Connection | None = None) -> dict | None:
+    """A job's CV against the limit of the CV it was built from: {limit, pages, over, words, held, kept_base,
+    note}; None when there is no job's CV.
+
+    `held` counts Hal's changes it undid to keep to the limit, `kept_base` is True when the CV was over before
+    Hal changed anything, so Hal kept it as it was, and `note` says either in plain words.
+    """
+    from jobhunt.cvstudio import tailor
+
+    with _conn(con) as c:
+        row = c.execute("SELECT base_version_id, changes FROM job_cvs WHERE job_id = ?", (job_id,)).fetchone()
+        if row is None:
+            return None
+        limit, _ = limit_of(store.version(row["base_version_id"], con=c)["doc_id"], c)
+        pages = job_pages(job_id, c)
+    changes = [x for x in json.loads(row["changes"]) if x.get("undone")]
+    held = sum(1 for x in changes if x.get("held") == tailor.HELD_FIT)
+    kept_base = any(x.get("held") == tailor.HELD_BASE for x in changes)
+    note = ""
+    if kept_base:
+        note = KEPT_BASE.format(limit=pages_words(limit))
+    elif held:
+        note = HELD.format(n=held, limit=pages_words(limit))
+    return {"limit": limit, "pages": pages, "over": pages is not None and bool(limit) and pages > limit,
+            "words": words(pages, limit, job=True), "held": held, "kept_base": kept_base, "note": note}
 

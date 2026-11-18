@@ -16,6 +16,12 @@ What changed in each version, in plain words.
   for example "This CV is now 3 pages. You asked for 2." Your save always stands, and the length check on
   **Checks** uses the same count. Where no browser can print, Hal says it cannot count the pages.
 
+- **Hal keeps its own changes inside your length.** When Hal adjusts a CV for a job, it undoes its own
+  changes that would make the CV longer than you asked, newest first, and says so beside each one; **Redo**
+  puts one back. When you accept a suggestion, Hal uses a shorter wording that fits, or leaves the line and
+  says why. Your own lines are never cut. An application's CV tab and its Documents step say how many pages
+  the CV employers get is before you approve.
+
 ### Fixed
 
 - **A long CV prints whole.** A CV more than a page longer than its CV type's length could not be printed

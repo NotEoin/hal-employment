@@ -7,6 +7,7 @@ browser starts, and a printer that fails stands for a computer with no browser. 
 from __future__ import annotations
 
 import contextlib
+import json
 import tempfile
 import unittest
 from collections.abc import Iterator
@@ -16,11 +17,15 @@ from unittest import mock
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support import people
 from support.api import HalServer
+from support.fake_ai import fake_ai
 from support.world import World
 from test_cv_printer import NoBrowsersHere
 from test_cv_render import made_up_cv, profile_of, type_for
+from test_cv_suggest import PROFILE, TABLE, CvCase
+from test_cv_tailor import JOB, NEW_PROFILE, NEW_TABLE, JobCase, tailoring_ai
 
-from jobhunt.cvstudio import checks, export, model, pagelimit, printer, store
+from jobhunt.apply import queries
+from jobhunt.cvstudio import checks, export, model, pagelimit, printer, store, suggest, tailor
 from jobhunt.cvstudio import types as cvtypes
 
 FILLER = "Filler line about a made-up archive"
@@ -159,6 +164,112 @@ class Routes(unittest.TestCase):
             self.assertIn("You asked for 1", client.get(f"/api/v2/cv/pages?cv={doc_id}&saved=1").json()["words"])
             self.assertFalse(client.get(f"/api/v2/cv/pages?cv={other}").json()["chosen"], "each CV has its own")
             self.assertEqual(client.request("PUT", f"/api/v2/cv/pages?cv={doc_id}", {"pages": 4}).status, 400)
+
+
+def job_pages(base: int):
+    """A stand-in for drawing a job's CV: `base` pages, and one more for each of Hal's two rewordings on it."""
+    def count(v1: dict) -> int:
+        text = json.dumps(v1)
+        return base + (NEW_PROFILE in text) + (NEW_TABLE in text)
+    return mock.patch.object(pagelimit, "drawn_pages", count)
+
+
+class HalKeepsAJobsCvToTheLimit(JobCase):
+    """Adjusting more for a job with the stand-in AI (`test_cv_tailor.tailoring_ai`): it rewords the profile
+    and a line of the bookshop job, and each rewording adds a page by the stand-in count."""
+
+    def changes(self) -> dict:
+        return {c["target"]: c for c in tailor.shown(JOB["id"])["changes"]}
+
+    def test_hals_rewordings_that_run_over_are_undone_newest_first_and_said(self):
+        store.set_page_limit(2)
+        with fake_ai({"cv_suggest": tailoring_ai}), job_pages(2):
+            tailor.prepare(JOB, level="more")
+            got = self.changes()
+            self.assertEqual((got[TABLE]["on"], got[TABLE]["held"]), (False, tailor.HELD_FIT), "the newest first")
+            self.assertEqual((got[PROFILE]["on"], got[PROFILE]["held"]), (False, tailor.HELD_FIT))
+            self.assertTrue(all(c["on"] for c in got.values() if c["kind"] == "Moved"), "a reorder adds nothing")
+            state = pagelimit.job_state(JOB["id"])
+            self.assertEqual((state["pages"], state["words"]), (2, ""))
+            self.assertEqual(state["note"], "Hal undid 2 of its own changes to keep this CV to 2 pages. "
+                                            "Press Redo to use one anyway.")
+            tailor.set_change(JOB["id"], got[TABLE]["id"], True)
+            state = pagelimit.job_state(JOB["id"])
+            self.assertEqual(state["words"], "This CV is 3 pages. You asked for 2.", "Redo is the person's choice")
+            self.assertEqual(self.changes()[TABLE]["held"], "")
+
+    def test_a_cv_over_the_limit_before_hal_changed_anything_is_kept_as_it_was(self):
+        store.set_page_limit(2)
+        with fake_ai({"cv_suggest": tailoring_ai}), job_pages(3):
+            tailor.prepare(JOB, level="more")
+            self.assertTrue(all(not c["on"] and c["held"] == tailor.HELD_BASE for c in self.changes().values()))
+            state = pagelimit.job_state(JOB["id"])
+            self.assertTrue(state["kept_base"])
+            self.assertEqual(state["words"], "This CV is 3 pages. You asked for 2.")
+            self.assertIn("kept it as it is for this job", state["note"])
+
+    def test_with_no_limit_hal_keeps_every_change(self):
+        store.set_page_limit(0)
+        with fake_ai({"cv_suggest": tailoring_ai}), job_pages(2):
+            tailor.prepare(JOB, level="more")
+        self.assertTrue(all(c["on"] for c in self.changes().values()))
+
+    def test_the_persons_own_edits_are_never_undone_only_warned_about(self):
+        changes = [{"id": "c1", "kind": "Reworded", "op": "replace", "target": PROFILE, "value": NEW_PROFILE,
+                    "before": "Short", "after": NEW_PROFILE},
+                   {"id": "y1", "by": tailor.YOU, "op": "replace", "target": TABLE, "value": NEW_TABLE}]
+        pages = iter([4, 3])                 # all on, then the person's edit alone: over before Hal
+        tailor.fit(store.current()[1], changes, 2, lambda doc: next(pages))
+        self.assertEqual((changes[0].get("undone"), changes[0].get("held")), (True, tailor.HELD_BASE))
+        self.assertNotIn("undone", changes[1])
+
+    def test_the_documents_step_shows_the_count_before_approve(self):
+        store.set_page_limit(1)
+        with fake_ai({"cv_suggest": tailoring_ai}), job_pages(2):
+            tailor.prepare(JOB, level="little")
+            got = queries.application(self.con, JOB["id"])["docs"]["cv"]["pages"]
+        self.assertEqual((got["over"], got["words"]), (True, "This CV is 2 pages. You asked for 1."))
+
+
+class SuggestionsKeepToTheLimit(CvCase):
+    """Accepting Hal's wording on My CV with the stand-in printer counting `FILLER` sentences."""
+
+    def suggestion(self, afters: list[str]) -> str:
+        vid, doc = store.current()
+        draft = suggest.Draft(target=PROFILE, op="replace", kind="Wording", title="Say more", why="Made up.",
+                              trigger={"id": "made-up"}, before=suggest.shown_at(doc, "replace", PROFILE),
+                              afters=afters, section_id="summary")
+        sid = suggest._insert(self.con, draft, vid)
+        self.con.commit()
+        return sid
+
+    def setUp(self) -> None:
+        super().setUp()
+        store.set_page_limit(1)
+        self.long = "Catalogued parish letters." + "".join(f" {FILLER} {i}." for i in range(FILLER_PER_PAGE))
+
+    def test_a_wording_that_runs_over_gives_way_to_a_shorter_one_that_fits(self):
+        sid = self.suggestion([self.long, "Catalogued parish letters for a records office."])
+        with stand_in():
+            out = suggest.accept(self.con, sid)
+        self.assertEqual(out["note"], "Hal used its shorter wording, so this CV keeps to 1 page.")
+        self.assertEqual(self.text_at(PROFILE), "Catalogued parish letters for a records office.")
+
+    def test_a_wording_that_runs_over_with_nothing_shorter_is_not_used(self):
+        sid = self.suggestion([self.long])
+        first = store.current()[0]
+        with stand_in(), self.assertRaises(ValueError) as held:
+            suggest.accept(self.con, sid)
+        self.assertEqual(str(held.exception), "Hal's wording would make this CV 2 pages, and you asked for 1, so Hal "
+                                              "did not use it. Edit the words to use them anyway.")
+        self.assertEqual(store.current()[0], first)
+        self.assertEqual(suggest._row(self.con, sid)["status"], "pending")
+
+    def test_your_own_edit_of_a_wording_is_used_however_long(self):
+        sid = self.suggestion([self.long])
+        with stand_in():
+            suggest.accept(self.con, sid, text=self.long)
+        self.assertEqual(self.text_at(PROFILE), self.long)
 
 
 if __name__ == "__main__":

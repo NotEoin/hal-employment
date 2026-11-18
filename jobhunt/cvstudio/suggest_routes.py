@@ -64,7 +64,7 @@ def accept_kind(req: Request) -> dict:
     return out
 
 
-@route("POST", PREFIX + "/suggestions/{sugg_id}/accept")
+@route("POST", PREFIX + "/suggestions/{sugg_id}/accept", slow=True)   # may print to count pages
 def accept(req: Request) -> dict:
     """Accept, optionally with the person's own wording."""
     body = json_body(req)

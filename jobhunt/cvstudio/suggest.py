@@ -28,6 +28,9 @@ Design decisions:
   run one at a time per CV (subject `REVIEW_SUBJECT`), so one CV's review never waits for or stops
   another's, and the list says "looking" only while its own CV is reviewed (2026-11-18: one review across
   every CV answered 409 to "Look again" on a second CV).
+- Accepting Hal's own wording keeps the CV to its page limit (`_held_to_limit`, counted on the printed PDF):
+  a longer wording that would run over is swapped for a shorter one of the suggestion's that fits, else not
+  applied, and the person is told why. Their own edited words are never held back, only warned about.
 - A skills list never gives a skill only studied in a course as one the person has (`_studied`, sections plan,
   2026-11-09): a skill whose every source in the record is lecture material
   (`profile.writing.studied_skills`) in a list that is not already labelled as knowledge gets one suggestion,
@@ -894,9 +897,43 @@ def _fresh_pending(con: sqlite3.Connection, sugg_id: str):
     return row, vid, doc
 
 
+def _words_in(text: str) -> int:
+    return len(str(text or "").split())
+
+
+def _held_to_limit(row: sqlite3.Row, doc, new_doc, afters: list[str], alt: int) -> tuple[object, int, str]:
+    """(the document, the wording used, a note): Hal's wording held to the CV's page limit (`pagelimit`).
+
+    Only a wording longer than the words it replaces is counted, and only when the CV has a limit. Over it,
+    Hal tries its other, shorter wordings that fit (saying so in the note); when none fits, ValueError says
+    why and nothing is applied. With no count (no browser can print) the wording is used as before.
+    """
+    from jobhunt.cvstudio import pagelimit
+
+    after = afters[alt]
+    if row["op"] in ("reorder", "hide", "delete") or _words_in(after) <= _words_in(row["before"]):
+        return new_doc, alt, ""
+    limit = pagelimit.limit_of(row["doc_id"])[0]
+    pages = pagelimit.count_doc(new_doc, row["doc_id"]) if limit else None
+    if pages is None or pages <= limit:
+        return new_doc, alt, ""
+    model = _model()
+    shorter = sorted((i for i, a in enumerate(afters) if _words_in(a) < _words_in(after) and not GAP.search(a)),
+                     key=lambda i: _words_in(afters[i]))
+    for i in shorter:
+        tried = model.apply(doc, change_for(doc, row["op"], row["target"], afters[i]))
+        got = pagelimit.count_doc(tried, row["doc_id"])
+        if got is not None and got <= limit:
+            return tried, i, pagelimit.SUGGESTION_SHORTER.format(limit=pagelimit.pages_words(limit))
+    raise ValueError(pagelimit.SUGGESTION_HELD.format(pages=pages, limit=limit))
+
+
 def accept(con: sqlite3.Connection, sugg_id: str, *, alt: int | None = None, text: str | None = None) -> dict:
-    """Applies a suggestion (or the person's edit of it) as a new version; returns it and whether to ask
-    about sending Hal's copy."""
+    """Applies a suggestion (or the person's edit of it) as a new version; returns it, whether to ask about
+    sending Hal's copy and a `note` when Hal used a shorter wording to keep to the page limit.
+
+    Hal's own wording is held to the CV's page limit (`_held_to_limit`); the person's edited words are not.
+    """
     row, vid, doc = _fresh_pending(con, sugg_id)
     afters = json.loads(row["afters"])
     alt = row["alt"] if alt is None else int(alt)
@@ -909,6 +946,10 @@ def accept(con: sqlite3.Connection, sugg_id: str, *, alt: int | None = None, tex
     if row["op"] == "replace" and not after:
         raise ValueError("Type the words to use, or leave it as it is.")
     new_doc = _model().apply(doc, change_for(doc, row["op"], row["target"], after))
+    note = ""
+    if text is None:
+        new_doc, alt, note = _held_to_limit(row, doc, new_doc, afters, alt)
+        after = afters[alt]
     new_vid = _store().new_version(new_doc, origin="improved", what=f"You accepted: {row['title']}", by="you",
                                    parent=vid)
     edited = text is not None and after != afters[alt]
@@ -922,7 +963,7 @@ def accept(con: sqlite3.Connection, sugg_id: str, *, alt: int | None = None, tex
     con.commit()
     recheck(con, new_vid, new_doc)
     events.publish("suggestions")
-    return {"version_id": new_vid, "n": _version_n(con, new_vid),
+    return {"version_id": new_vid, "n": _version_n(con, new_vid), "note": note,
             "ask_send_copy": _store().doc(doc_id=row["doc_id"])["send"] == "original"}
 
 

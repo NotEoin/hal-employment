@@ -564,6 +564,17 @@ runs: tests use `tests/support/fake_claude/`.
   `GET /api/v2/cv/pages` (`pagelimit.state`) prints when needed; the editor calls it after a save, and the
   Length card (`cv/page-limit.js`) when it opens. `PUT /api/v2/cv/pages` sets the limit. In a test run no
   browser prints for a count unless `HAL_TEST_REAL_PRINT=1`; tests set `pagelimit.PRINT` to a stand-in.
+- A job's CV is counted on the PDF employers get, Hal's application layout drawn without a browser
+  (`pagelimit.drawn_pages` through `cv.render`, which now draws one at a time as `pdfdraw` keeps its output
+  file in a global), kept in `job_cvs.pages` keyed by the hash of `tailor.v1`; with the original file sent,
+  `cv_files.pages`. `pagelimit.job_state` is `pages` on `tailor.editor` and `docs.cv.pages` on the
+  application, which the CV tab and the approve box show.
+- Hal's changes keep to the limit. `tailor.fit` runs in `tailor.prepare`: over the limit, it undoes Hal's
+  changes that add words newest first, then the others, counting after each (`FIT_TRIES`), and marks them
+  `held: "fit"`; when the base with the person's edits is over by itself, every change of Hal's is undone with
+  `held: "base"`. The person's edits are never undone; `set_change` drops `held` on Redo. `suggest.accept`
+  holds Hal's own wording (`_held_to_limit`): a longer wording that prints over is swapped for a shorter
+  alternative that fits (`note`), else ValueError (409) and nothing is applied; edited text is not held.
 
 ## Looks and printing (`cvstudio/render.py`, `printer.py`, `export.py`)
 
