@@ -5,6 +5,8 @@
 name: print-compare
 on:
   push:
+    # GitHub ignores `paths` for a tag push, so without `branches` every release tag ran this too
+    branches: ["**"]
     paths: ["jobhunt/cvstudio/**", ".github/workflows/print-compare.yml"]
   workflow_dispatch:
 jobs:

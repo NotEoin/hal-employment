@@ -1,4 +1,4 @@
-# Tests on Linux (two Pythons) and Windows for every push.
+# Tests on Linux (two Pythons) and Windows for every branch push and pull request; never for a tag.
 # Ruff and the ASCII check run on lines added since the push's parent, because older code still has
 # findings that are fixed line by line as it is edited.
 # Run one test at a time, the suite took 27 minutes on Linux and 38 on Windows (run 43266048071): it now runs
@@ -11,7 +11,12 @@
 # can run. They are: the install file's PowerShell parses under Windows PowerShell 5.1, CVs print with
 # Microsoft Edge, and the platform layer finds browsers and opens Hal in the default browser.
 name: ci
-on: [push, pull_request]
+# Branch pushes only: a release tag points at a commit its branch push already tested, and running the
+# workflow for both took 38 jobs against the 20 that run at once (runs 44372137723 and 44372141290).
+on:
+  push:
+    branches: ["**"]
+  pull_request:
 env:
   WINDOWS_MUST_PASS: >-
     --must-pass test_the_powershell_part_parses test_accented_names_print_in_every_look

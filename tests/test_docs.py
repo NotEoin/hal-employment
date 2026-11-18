@@ -287,6 +287,14 @@ class Ci(unittest.TestCase):
                     loose.append(f"{workflow.name}: {line.strip()}")
         self.assertEqual(loose, [])
 
+    # Regression (runs 44372137723 and 44372141290): a release tag ran every workflow again beside its branch
+    def test_no_workflow_runs_for_a_tag(self):
+        for workflow in sorted(CI.glob("*.yml")):
+            pushes = re.search(r"(?m)^  push:\n((?:    .*\n)+)", text(workflow))
+            self.assertIsNotNone(pushes, f"{workflow.name} names no branches for its pushes")
+            self.assertIn('branches: ["**"]', pushes.group(1), workflow.name)
+            self.assertNotIn("tags", pushes.group(1), workflow.name)
+
     # Regression (run 44372137723): on a slow runner apt took 6 of a Linux job's 11 minutes
     def test_no_test_job_waits_on_apt(self):
         self.assertNotIn("apt-get", self.body)

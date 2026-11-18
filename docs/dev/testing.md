@@ -39,7 +39,8 @@ Run it from a normal sign-in (a desktop session or a scheduled task with a passw
 in with a key cannot use Windows' data protection (DPAPI), so the secrets tests fail there with "Access is
 denied".
 
-CI (`.github/workflows/ci.yml`) runs every test, browser tests on, on Linux with Python 3.11 and 3.13 and on
+CI (`.github/workflows/ci.yml`) runs for every branch push and pull request, never for a tag, since a release
+tag's commit was already tested when its branch was pushed. It runs every test, browser tests on, on Linux with Python 3.11 and 3.13 and on
 Windows with Python 3.13, in shares of the suite, one job each (eight on Windows, the slowest), and
 `scripts/dev/run_tests.py` spreads a share over the runner's CPUs in processes of a few tests. CI installs
 nothing with apt, so a slow package mirror cannot hold a job up. Chromium's system libraries are installed only
