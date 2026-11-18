@@ -9,7 +9,8 @@ the experiences in the profile are sorted into tiers (`profile.actions.sort`), s
 can show the best ones first. The result then says how many skills the person can stand behind and how many
 are only mentioned in their files (`profile.check.skill_counts`), which the Overview shows.
 
-Background work (priority 2), one at a time (`exclusive="kind"`), and resumable: after a restart the runner
+The person starts it, so it runs at priority 1 on the runner's record pool, never behind scheduled jobs in
+the background pool; one at a time (`exclusive="kind"`), and resumable: after a restart the runner
 starts it again with the same params, and the batch's `ingest_items` rows say what is left. `queue` is how
 the routes for an older record start one. `origins` is kept only for the folders the person
 said were their own work or course material, so a params row from before reads as a mix. With `allow`, the
@@ -52,7 +53,7 @@ def _example(world) -> dict:
 
 
 @runner.action("record.ingest", area="documents", label="Reading files into your record",
-               why="You gave Hal files to read into your record", priority=2, exclusive="kind", resumable=True,
+               why="You gave Hal files to read into your record", priority=1, exclusive="kind", resumable=True,
                example=_example)
 def ingest(ctx, batch: str, folders: list | None = None, uploads: list | None = None, drop: bool = False,
            urls: list | None = None, again: bool = False, allow: list | None = None, tidy: bool = False,

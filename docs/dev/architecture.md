@@ -174,8 +174,10 @@ processes, once a second. Payloads carry ids, never private data.
 - `progress` counts items (files read, pages fetched) in `actions.done_n` and `done_total`, beside the
   steps and without adding one, so a long action shows a bar. The Action shape carries `done_n`,
   `done_total` and `eta_s`: the time per item since the action started, times the items left.
-- Two pools: user (4 threads, priorities 0 and 1) and background (2, priority 2). One running action per
-  subject unless `replace=True`.
+- Four pools (`runner._pool`): now (6 threads, priority 0 and on-screen work at priority 1), record (2, the
+  record updates the person started, at priority 0 or 1), user (4, the rest of priority 1, such as
+  `docs.prepare`) and background (2, priority 2, which keeps the scheduled `record.sync` and the project
+  refresh). One running action per subject unless `replace=True`.
 - Each kind has a work class (`core/work.py`, `ActionKind.work_class`) that orders its AI calls: 0 on screen
   (what the person waits for), 1 record updates, 2 document writes, 3 everything else. The default is on
   screen at priority 0; else a `record.*` kind is a record update; else a background kind is other work;
@@ -1058,7 +1060,7 @@ does. The Overview card that took files, folders and links is gone. The `record.
 `engine.run` stay for a record an older Hal built (`again`, `tidy`, `allow`) and for moving it to sections;
 the rest of this part says how they work, and its inputs are those an older Hal took.
 
-One `record.ingest` action (area documents, priority 2, `exclusive="kind"`, resumable) reads folders, zips,
+One `record.ingest` action (area documents, priority 1 on the record pool, `exclusive="kind"`, resumable) reads folders, zips,
 the drop folder and web links into the record folder as Obsidian notes. Each item is a row of
 `ingest_items` (migration 0019) with the stage it reached, committed as it ends, so after a restart the
 runner starts the action again with the same batch and only pending items are read.

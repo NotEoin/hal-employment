@@ -1,12 +1,13 @@
 """Persisted actions: anything slow Hal does runs here, with its steps, its Activity row and Stop.
 
 An action kind is registered with `@action(kind, area=, label=, why=)`; `start(kind, ...)` writes an
-`actions` row and its Activity row (`running = 1`) and runs `fn(ctx, **params)` on one of two pools: the
-user pool for priorities 0 and 1, the background pool for 2. `run(kind, ...)` does the same in the calling
-thread, for the command line and scheduled children. Each kind also has a work class (`core.work`, the kind's
-`work_class`), entered while it runs, which orders its AI calls in the AI's queue. Steps go to
-`action_steps`; the server's `DbPoller` turns those rows into `step` events, so the runner itself publishes
-only `action` and `status`.
+`actions` row and its Activity row (`running = 1`) and runs `fn(ctx, **params)` on a thread pool (`_pool`):
+the now pool for priority 0 and for on-screen work at priority 1, the record pool for record updates the person
+started (priorities 0 and 1), the user pool for the rest of priority 1 and the background pool for 2.
+`run(kind, ...)` does the same in the calling thread, for the command line and scheduled children. Each kind
+also has a work class (`core.work`, the kind's `work_class`), entered while it runs, which orders its AI calls
+in the AI's queue. Steps go to `action_steps`; the server's `DbPoller` turns those rows into `step` events, so
+the runner itself publishes only `action` and `status`.
 
 Design decisions, each with its reason:
 
@@ -59,6 +60,10 @@ CARRY_ON_FROM = ("interrupted", "stopped", "error")
 NOW_THREADS = 6              # priority 0, what the person just asked for
 USER_THREADS = 4             # priority 1
 BACKGROUND_THREADS = 2       # priority 2
+# Record updates the person started have threads of their own: a file added to the record waited behind every
+# queued application's documents in the user pool, and a bulk read behind scheduled jobs in the background pool
+# (2026-11-18). Two, as two quick uploads are read side by side and the bulk read runs one at a time.
+RECORD_THREADS = 2
 JOB_THREADS = 6              # the driver's actions mostly wait on the browser or the model
 IDLE_POLL_S = 0.5            # `idle()` looks again this often even unwoken, so a missed wake-up costs little
 STOP_POLL_S = 1.0            # how often a checkpoint asks the database whether another process said stop
@@ -108,6 +113,8 @@ POOL = ThreadPoolExecutor(max_workers=JOB_THREADS, thread_name_prefix="action")
 _NOW = ThreadPoolExecutor(max_workers=NOW_THREADS, thread_name_prefix="action-now")
 _USER = ThreadPoolExecutor(max_workers=USER_THREADS, thread_name_prefix="action-user")
 _BACKGROUND = ThreadPoolExecutor(max_workers=BACKGROUND_THREADS, thread_name_prefix="action-bg")
+_RECORD = ThreadPoolExecutor(max_workers=RECORD_THREADS, thread_name_prefix="action-record")
+BACKGROUND = 2                 # the priority of background work
 _PRIORITY: contextvars.ContextVar[int] = contextvars.ContextVar("hal_action_priority", default=0)
 _CURRENT: contextvars.ContextVar[Ctx | None] = contextvars.ContextVar("hal_action", default=None)
 _lock = threading.RLock()
@@ -755,6 +762,17 @@ def _bound(kind: ActionKind, params: dict) -> Callable[[Ctx], Any]:
     return lambda ctx: fn(ctx, **clean)
 
 
+def _pool(live: _Live) -> ThreadPoolExecutor:
+    """The pool an action of `start` runs on: by its priority, except that the person's record updates have
+    their own and on-screen work at priority 1 joins priority 0's. Background work (the scheduled record sync)
+    stays in the background pool."""
+    if live.priority < BACKGROUND and live.kind.work_class == work.RECORD:
+        return _RECORD
+    if live.priority < BACKGROUND and live.kind.work_class == work.ON_SCREEN:
+        return _NOW
+    return (_NOW, _USER, _BACKGROUND)[live.priority]
+
+
 def start(kind: str, *, subject: str | None = None, job_id: str | None = None, params: dict | None = None,
           why: str | None = None, priority: int | None = None, replace: bool = False,
           session_id: str | None = None, helper_id: str | None = None, remote: bool = False) -> str:
@@ -768,7 +786,7 @@ def start(kind: str, *, subject: str | None = None, job_id: str | None = None, p
     subject = subject if subject is not None else job_id
     live = _begin(k, subject=subject, job_id=job_id, params=params, why=why, priority=priority, replace=replace,
                   session_id=session_id, helper_id=helper_id, remote=remote)
-    pool = (_NOW, _USER, _BACKGROUND)[live.priority]
+    pool = _pool(live)
     pool.submit(_execute, live, _bound(k, params), params.get("_carry_on_from"))
     return live.id
 

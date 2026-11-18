@@ -232,6 +232,30 @@ class Runner(unittest.TestCase):
         self.assertEqual(seen, [work.RECORD, work.RECORD, work.DOCUMENTS, work.DOCUMENTS])
         self.assertIsNone(work.current())
 
+    def test_a_record_update_the_person_started_never_waits_behind_documents_or_scheduled_jobs(self):
+        """Regression (2026-11-18): a file added to the record waited behind every queued application's
+        documents, and the bulk read behind scheduled jobs."""
+        release, done = threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+        self.kinds.add("test.document", lambda ctx: release.wait(WAIT_S) and "done", priority=1)
+        self.kinds.add("test.scheduled", lambda ctx: release.wait(WAIT_S) and "done", priority=2)
+        self.kinds.add("record.test_read", lambda ctx: done.set() or "done", priority=1, exclusive="none")
+        for n in range(runner.USER_THREADS + 2):
+            runner.start("test.document", subject=f"job-{n}")
+        for n in range(runner.BACKGROUND_THREADS + 2):
+            runner.start("test.scheduled", subject=f"check-{n}")
+        runner.start("record.test_read")
+        self.assertTrue(done.wait(WAIT_S), "the record update waited for the queue")
+        release.set()
+
+    def test_a_scheduled_record_sync_stays_in_the_background_pool(self):
+        self.kinds.add("record.test_sync", lambda ctx: "done", priority=2, exclusive="none")
+        live = runner._begin(runner.kind_of("record.test_sync"), subject=None, job_id=None, params={}, why=None,
+                             priority=None, replace=False, session_id=None, helper_id=None)
+        self.addCleanup(runner._finish, live, "done")
+        self.assertIs(runner._pool(live), runner._BACKGROUND)
+        self.assertEqual(live.kind.work_class, work.RECORD)
+
     def test_a_kind_with_an_unknown_work_class_is_refused(self):
         with self.assertRaises(ValueError):
             self.kinds.add("test.nowhere", lambda ctx: "ok", work_class=9)

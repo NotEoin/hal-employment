@@ -16,7 +16,8 @@ What changed in each version, in plain words.
   the page (such as a recruiter's read of your CV, or a change to a letter), then updates to your record,
   then application documents, then everything else (job searches, email, upkeep). Before, everything waited
   in one line, so adding to your record or asking for a critique could wait behind a long run of
-  applications being written.
+  applications being written. Reading files into your record also no longer waits for Hal's scheduled
+  checks to finish.
 
 - **Add your CV as a Markdown file.** Hal now reads CVs written in Markdown (.md): the top heading is your
   name, `##` headings are sections and `###` headings are jobs, qualifications or projects. Bold, italic
