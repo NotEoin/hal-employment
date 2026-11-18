@@ -8,6 +8,7 @@ CV's evidence for each, keeping only quotes that really are in the text.
 import re
 
 from jobhunt import ai, record
+from jobhunt.cvstudio import inline
 
 # Section names parsers know; a heading outside these may not be recognised as a section at all.
 STANDARD_HEADINGS = {"education", "experience", "work experience", "employment", "projects", "skills",
@@ -33,7 +34,7 @@ ODD_CHAR = re.compile("[\ufb00-\ufb06\ue000-\uf8ff\ufffd]|\\(cid:\\d+\\)")
 
 def lines_of(text: str) -> list[str]:
     """An entry's lines: its bullets when written as "- " lines, else its sentences."""
-    text = re.sub(r"\*\*", "", text or "")
+    text = inline.plain(text or "")
     rows = [r.strip() for r in text.splitlines() if r.strip()]
     if rows and all(r.startswith("- ") for r in rows):
         return [r[2:].strip() for r in rows]

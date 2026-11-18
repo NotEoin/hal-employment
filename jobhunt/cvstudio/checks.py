@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from jobhunt.cvstudio import pdfread
+from jobhunt.cvstudio import inline, pdfread
 from jobhunt.cvstudio import score as cvscore
 from jobhunt.cvstudio import types as cvtypes
 
@@ -122,7 +122,7 @@ def _entries(section: Any) -> list:
 def entry_lines(entry: Any) -> list[str]:
     """An entry's lines: its bullets, else the sentences of its paragraph."""
     if entry.bullets:
-        return [b.text.strip() for b in entry.bullets if b.text.strip()]
+        return [inline.plain(b.text).strip() for b in entry.bullets if inline.plain(b.text).strip()]
     return cvscore.lines_of(entry.text)
 
 
@@ -139,7 +139,7 @@ def doc_lines(doc: Any, profile: dict) -> list[str]:
     contact = [profile.get(k, "") for k in ("email", "phone", "city")] + list((profile.get("links") or {}).values())
     out = [profile.get("name", ""), " | ".join(c for c in contact if c), doc.headline]
     for s in _sections(doc):
-        out += [s.title.upper(), s.text]
+        out += [s.title.upper(), inline.plain(s.text)]
         for e in _entries(s):
             out += [" | ".join(x for x in (e.heading, e.org, e.location, _dates(e)) if x), e.grade, e.meta, e.link]
             out += [*entry_lines(e), ", ".join(e.items)]
@@ -240,7 +240,7 @@ class _In:
 
 
 def _summary(c: _In) -> str:
-    return " ".join(s.text for s in _sections(c.doc) if s.kind == "summary").strip()
+    return " ".join(inline.plain(s.text) for s in _sections(c.doc) if s.kind == "summary").strip()
 
 
 def _profile_evidence(c: _In) -> tuple[bool, str]:

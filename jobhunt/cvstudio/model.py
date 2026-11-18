@@ -17,10 +17,11 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-import re
 import secrets
 from dataclasses import asdict, dataclass, field, fields
 from typing import Any, Literal, TypedDict, get_args
+
+from jobhunt.cvstudio import inline
 
 SCHEMA = 2
 SectionKind = Literal["summary", "education", "experience", "volunteering", "projects", "research", "skills",
@@ -581,7 +582,7 @@ def plain_text(doc: CVDoc, profile: dict) -> str:
             lines.append(s.also)
     if profile.get("status"):
         lines.append(profile["status"])
-    return re.sub(r"\*\*", "", "\n".join(x for x in lines if x))
+    return inline.plain("\n".join(x for x in lines if x))
 
 
 # ------------------------------------------------------------------------------- today's cv.json shape

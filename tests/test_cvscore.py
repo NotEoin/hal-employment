@@ -36,6 +36,19 @@ class ReadBack(unittest.TestCase):
         self.assertRegex(text, r"Selected modules \(out of 100\): [^\n]*\d")
 
 
+class LinesOf(unittest.TestCase):
+    def test_an_entrys_lines_are_its_words_without_marks(self):
+        text = "- Sold **400** tickets\n- Kept the [rota](https://example.org) for *A* and C*"
+        self.assertEqual(cvscore.lines_of(text), ["Sold 400 tickets", "Kept the rota for A and C*"])
+
+    def test_the_facts_hal_writes_from_have_no_marks(self):
+        facts = cv.facts_text_of({"summary": "**Archive** volunteer, see [site](https://example.org).",
+                                  "experience": [{"role": "Guide", "org": "Made-up Hall", "dates": "2024",
+                                                  "body": "- Led *Saturday* tours"}]})
+        self.assertIn("Archive volunteer, see site.", facts)
+        self.assertIn("Led Saturday tours", facts)
+
+
 class Requirements(unittest.TestCase):
     """The advert's requirements, and the CV's evidence for each, checked against the text."""
 

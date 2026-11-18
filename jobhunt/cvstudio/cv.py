@@ -22,6 +22,8 @@ import threading
 from collections.abc import Iterator
 from pathlib import Path
 
+from jobhunt.cvstudio import inline
+
 # Title lines per kind of role, chosen by the advert's words. None are built in, so the CV's own title
 # stands; the CV types choose titles instead.
 TRACKS: dict[str, tuple[str, str]] = {}
@@ -319,4 +321,4 @@ def facts_text_of(d: dict) -> str:
     parts += [f"{a[0]}: {a[1]}" for a in d.get("additional") or []]
     parts.append(status_line())
     text = "\n".join(p for p in parts if p)
-    return re.sub(r"\*\*", "", text)
+    return inline.plain(text)

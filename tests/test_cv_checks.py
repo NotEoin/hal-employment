@@ -91,6 +91,18 @@ class TypeChecks(unittest.TestCase):
         self.assertIn("passionate", items["profile_evidence"]["note"])
         self.assertFalse(items["entry_says_what"]["ok"])
 
+    def test_checks_read_the_words_of_a_formatted_line_not_its_marks(self):
+        cv = humanities_cv()
+        cv.sections[0].text = "*Passionate* and **hard-working** graduate."
+        cv.sections[3].entries[0].bullets = [B("b9", "**Responsible for** the till")]
+        items = {i["id"]: i for i in checks.type_checks(cv, cvtypes.load("humanities_grad"),
+                                                         profile_of(HUMANITIES))["items"]}
+        self.assertFalse(items["profile_evidence"]["ok"])
+        self.assertIn("passionate", items["profile_evidence"]["note"])
+        self.assertFalse(items["entry_says_what"]["ok"])
+        self.assertIn("Responsible for the till", checks.doc_lines(cv, {}))
+        self.assertEqual(checks.entry_lines(cv.sections[3].entries[0]), ["Responsible for the till"])
+
     def test_a_check_weighted_0_is_switched_off(self):
         t = cvtypes.load("humanities_grad")
         off = cvtypes.CVType(**{**t.__dict__, "checks": {**t.checks, "contact_at_top": 0}})

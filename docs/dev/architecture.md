@@ -406,6 +406,16 @@ runs: tests use `tests/support/fake_claude/`.
 - `cvstudio/model.py` gives every section, entry and line a stable id. `apply` changes a document by
   target (`""` is the whole document), `diff` compares by id (a swap counts as one move), and
   `to_v1`/`from_v1` keep the printable `cv.json`.
+- Bold, italic and links inside a line (a bullet, an entry's paragraph or a section's text) are kept in its
+  text as Markdown marks: `**bold**`, `*italic*`, `[words](https://...)`. `cvstudio/inline.py` is the only
+  code that reads or writes them. `runs(text)` gives `Run`s (text, bold, italic, link) to the renderers,
+  `html(text)` the escaped HTML, and `plain(text)` the words alone, which every reader that treats a line
+  as words uses: `model.plain_text`, `cv.facts_text_of`, `score.lines_of`, `checks.entry_lines` and
+  `checks.doc_lines`, `tailor._overlap`, JSON Resume and the pairs `writing.edits` learns from. A pair counts
+  only when it hugs words (the module's header gives the rule), so a lone star such as "C*" or "5* rating"
+  stays text; underscores never mark anything; links are http, https or mailto only. `to_text(runs)` writes
+  runs back so they read back the same, dropping formatting that cannot be written rather than storing a
+  broken pair.
 - `jobhunt/cvstudio/cv.py` is the reader of the store in the `cv.json` shape: `load()` returns the version in
   use as the PDF builder, the packs and the matching code expect it, so none of them needs the store itself.
   `v1_of(doc)` gives any document in that shape, as an application's CV is printed.

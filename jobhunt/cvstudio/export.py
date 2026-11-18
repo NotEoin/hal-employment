@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
 
-from jobhunt.cvstudio import printer, render
+from jobhunt.cvstudio import inline, printer, render
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 FORMATS = {"pdf": ("application/pdf", ".pdf"), "docx": (DOCX_MIME, ".docx"),
@@ -209,19 +209,19 @@ def to_jsonresume(doc: Any, profile: dict) -> dict:
             continue
         shown = [e for e in s.entries if not e.hidden]
         if s.kind == "summary" and s.text:
-            basics["summary"] = s.text
+            basics["summary"] = inline.plain(s.text)
         for e in shown:
-            highlights = [b.text for b in e.bullets if b.text]
+            highlights = [inline.plain(b.text) for b in e.bullets if b.text]
             if s.kind in ("experience", "volunteering"):
                 out["work"].append(_dated(e, {"name": e.org, "position": e.heading, "location": e.location,
-                                              "summary": e.text, "highlights": highlights}))
+                                              "summary": inline.plain(e.text), "highlights": highlights}))
             elif s.kind == "education":
                 out["education"].append(_dated(e, {"institution": e.org, "studyType": e.heading, "score": e.grade,
                                                    "courses": [m.name for m in e.modules]}))
             elif s.kind == "skills":
                 out["skills"].append({"name": e.heading, "keywords": list(e.items)})
             elif s.kind == "projects":
-                out["projects"].append({"name": e.heading, "description": e.text or e.meta,
+                out["projects"].append({"name": e.heading, "description": inline.plain(e.text) or e.meta,
                                         "highlights": highlights, **({"url": e.link} if e.link else {})})
     return out
 

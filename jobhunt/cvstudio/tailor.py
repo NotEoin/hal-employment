@@ -55,7 +55,7 @@ from collections.abc import Iterator
 
 from jobhunt import db
 from jobhunt.core import clock, events
-from jobhunt.cvstudio import suggest
+from jobhunt.cvstudio import inline, suggest
 
 log = logging.getLogger(__name__)
 
@@ -144,8 +144,8 @@ def requirements(job: dict, con: sqlite3.Connection | None = None) -> list[str]:
 
 
 def _overlap(entry, wanted: set[str]) -> int:
-    text = " ".join([entry.heading, entry.org, entry.meta, entry.text, *entry.items,
-                     *(b.text for b in entry.bullets)])
+    text = " ".join([entry.heading, entry.org, entry.meta, inline.plain(entry.text), *entry.items,
+                     *(inline.plain(b.text) for b in entry.bullets)])
     return len(words(text) & wanted)
 
 

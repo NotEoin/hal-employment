@@ -143,6 +143,14 @@ class TodaysShape(unittest.TestCase):
         self.assertTrue(text.startswith("Ada Example\nHistory graduate"))
         self.assertTrue(text.endswith("Course ends: 2026."))
 
+    def test_plain_text_gives_the_words_of_a_formatted_line_without_marks(self):
+        doc = model.from_v1(V1)
+        doc.sections[3].entries[0].text = "Ran the **local history** shelf with [Avery](https://example.org)."
+        text = model.plain_text(doc, {})
+        self.assertIn("Ran the local history shelf with Avery.", text)
+        self.assertNotIn("*", text)
+        self.assertNotIn("example.org", text)
+
     def test_nothing_is_lost_on_the_way_in(self):
         from jobhunt.cvstudio import import_v1
 

@@ -32,6 +32,7 @@ import statistics
 from collections import Counter
 
 from jobhunt.core import clock, events
+from jobhunt.cvstudio import inline
 
 log = logging.getLogger(__name__)
 
@@ -120,10 +121,10 @@ def _cv_texts(doc) -> dict[str, str]:
     out = {}
     for s in doc.sections:
         if s.text.strip():
-            out[f"s:{s.id}/text"] = s.text
+            out[f"s:{s.id}/text"] = inline.plain(s.text)
         for e in s.entries:
             for b in e.bullets:
-                out[f"s:{s.id}/e:{e.id}/b:{b.id}"] = b.text
+                out[f"s:{s.id}/e:{e.id}/b:{b.id}"] = inline.plain(b.text)
     return out
 
 
