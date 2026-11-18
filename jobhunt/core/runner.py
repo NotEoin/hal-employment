@@ -804,6 +804,30 @@ def run(kind: str, *, subject: str | None = None, job_id: str | None = None, par
     return get(live.id)
 
 
+def busy_with(work_class: int) -> bool:
+    """True while an action of `work_class` is queued or running, in this process or another live one."""
+    with _lock:
+        if any(live.kind.work_class == work_class and live.state in ACTIVE for live in _LIVE.values()):
+            return True
+        mine = set(_LIVE) | _ENDING
+    kinds = [k.kind for k in KINDS.values() if k.work_class == work_class]
+    if not kinds:
+        return False
+    con = db.connect()
+    try:
+        rows = con.execute(f"""SELECT id FROM actions WHERE kind IN ({','.join('?' * len(kinds))})
+                               AND state IN ('queued','running','waiting_for_you')""", kinds).fetchall()
+    finally:
+        con.close()
+    return any(r["id"] not in mine and _owner_alive(r["id"]) for r in rows)
+
+
+def wait_for_an_end(timeout: float) -> None:
+    """Returns when an action of this process ends, or after `timeout` seconds."""
+    with _ended:
+        _ended.wait(timeout)
+
+
 def idle(timeout: float = EXIT_FLUSH_S) -> bool:
     """Waits until no action of this process is queued or running and every row has landed; True if so.
 

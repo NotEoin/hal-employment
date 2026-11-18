@@ -9,7 +9,9 @@ from support.world import World, job_id
 
 from jobhunt import pack
 from jobhunt.ai import gpu
+from jobhunt.core import work
 from jobhunt.find import replenish, rules, screen
+from jobhunt.pack import freshness
 
 INTERN = job_id("quillon-intern")
 
@@ -43,6 +45,25 @@ class PreparingAhead(unittest.TestCase):
             worked, said = replenish.step(w.con)
         self.assertEqual((worked, built), (False, []))
         self.assertIn("check your record", said)
+
+    def test_nothing_is_drafted_while_your_record_is_updating_and_packs_are_document_writes(self):
+        built, classes = [], []
+
+        def build(con, jid):
+            built.append(jid)
+            classes.append(work.current())
+            ready(con, jid)
+        with World() as w, fixtures.goal(fixtures.TODAYS_GOAL), mock.patch.object(gpu, "busy", lambda: None), \
+                mock.patch.object(screen, "screen_one", lambda con, job: (True, "fits")), \
+                mock.patch.object(pack, "has_facts", lambda con: True), \
+                mock.patch.object(pack, "build", build):
+            rules.rescore_all(w.con)
+            with mock.patch.object(freshness, "record_busy", lambda: True):
+                worked, said = replenish.step(w.con)
+            self.assertEqual((worked, built), (False, []))
+            self.assertIn("waiting for your record", said)
+            replenish.step(w.con)
+        self.assertEqual(classes, [work.DOCUMENTS])
 
     def test_the_queue_prepares_internships_when_wanted(self):
         self.assertEqual(self.picks(fixtures.TODAYS_GOAL)[0], INTERN)

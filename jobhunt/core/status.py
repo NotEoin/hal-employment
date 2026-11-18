@@ -1,7 +1,10 @@
 """The status line's words: what Hal is doing now, or when it works next.
 
-The most urgent action wins: one waiting for the person first, then the lowest priority number (0 is
-something the person just asked for), then the newest. The rest comes from other areas when they are
+The most urgent action wins: one waiting for the person first, then running before queued, then the lowest
+priority number (0 is something the person just asked for), then one not waiting for a record update, then
+the lowest work class (`core.work`: what the person waits for, record updates, document writes, the rest),
+then the newest. A document write waiting for a record update says so after its label, so the line never
+claims Hal is writing while it waits. The rest comes from other areas when they are
 there, each optional so the line works on its own: `core.scheduler.next_runs()` and `paused()`,
 `ai.budget.today()` and `core.health.problem_count()`.
 
@@ -20,7 +23,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Any, NotRequired, TypedDict
 
-from jobhunt.core import clock, runner
+from jobhunt.core import clock, runner, work
 
 log = logging.getLogger(__name__)
 
@@ -85,13 +88,25 @@ def _call(module: str, name: str, *args: Any, default: Any = None) -> Any:
         return default
 
 
+STATE_ORDER = {"waiting_for_you": 0, "running": 1, "queued": 2}
+
+
+def _waits_for_record(row: sqlite3.Row) -> bool:
+    return row["state"] == "running" and row["message"] == work.RECORD_WAIT_WORDS
+
+
+def _urgency(row: sqlite3.Row) -> tuple[int, int, bool, int]:
+    kind = runner.KINDS.get(row["kind"])
+    cls = kind.work_class if kind is not None else work.for_kind(row["kind"], row["priority"])
+    return STATE_ORDER[row["state"]], row["priority"], _waits_for_record(row), cls
+
+
 def busiest(con: sqlite3.Connection) -> sqlite3.Row | None:
     """The action the status line shows, or None when Hal is idle."""
-    return con.execute(
+    rows = con.execute(
         """SELECT a.*, v.text AS activity_text FROM actions a LEFT JOIN activity v ON v.id = a.activity_id
-           WHERE a.state IN ('running', 'waiting_for_you', 'queued')
-           ORDER BY CASE a.state WHEN 'waiting_for_you' THEN 0 WHEN 'running' THEN 1 ELSE 2 END,
-                    a.priority, a.created DESC LIMIT 1""").fetchone()
+           WHERE a.state IN ('running', 'waiting_for_you', 'queued') ORDER BY a.created DESC""").fetchall()
+    return min(rows, key=_urgency) if rows else None     # `min` keeps the first, the newest, of equals
 
 
 def _paused(con: sqlite3.Connection) -> bool:
@@ -136,7 +151,7 @@ def status(con: sqlite3.Connection) -> StatusReply:
         "ai_limited_until": budget.get("limited_until"), "reconnecting": False}
     if row is not None:
         text = row["activity_text"] or row["message"] or row["kind"]
-        if row["state"] == "waiting_for_you" and row["message"]:
+        if (row["state"] == "waiting_for_you" or _waits_for_record(row)) and row["message"]:
             text = f"{text}. {row['message']}" if row["message"] != text else text
         out.update(busy=True, text=text, step_n=row["step_n"], step_total=row["step_total"],
                    eta_s=_eta(con, row), action_id=row["id"], why_activity_id=row["activity_id"], state=row["state"])

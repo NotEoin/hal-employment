@@ -11,7 +11,7 @@ from unittest import mock
 from support.api import HalServer
 from test_runner import WAIT_S, Kinds, fresh_home
 
-from jobhunt.core import clock, events, runner, status
+from jobhunt.core import clock, events, runner, status, work
 
 
 def from_stand_ins(**stand_ins: types.ModuleType):
@@ -105,6 +105,29 @@ class StatusLine(unittest.TestCase):
         self.assertAlmostEqual(first, 600, delta=2)
         self.assertAlmostEqual(again, 600, delta=2, msg="worked out at most every ETA_REFRESH_S")
         self.assertEqual(items.eta_for.call_count, 1)
+
+    def test_a_document_write_waiting_for_the_record_says_so_and_the_record_update_comes_first(self):
+        reached, release = threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+
+        def waits(ctx):
+            ctx.step(work.RECORD_WAIT_WORDS)
+            reached.set()
+            release.wait(WAIT_S)
+        reading, done = self.hold("record.test_read", label="Reading what you added to your record",
+                                  subject="_read")
+        self.kinds.add("test.document", waits, label="Writing your documents for {title} at {company}",
+                       work_class=work.DOCUMENTS)
+        writing = runner.start("test.document", job_id="demo:1")   # the newer, which wins a tie
+        self.assertTrue(reached.wait(WAIT_S))
+        runner.flush()
+        self.assertEqual(status.status(self.con)["action_id"], reading)
+        done.set()
+        runner.wait(reading)
+        line = status.status(self.con)
+        self.assertEqual((line["action_id"], line["text"]),
+                         (writing, "Writing your documents for Junior Archivist at Riverside Records. "
+                                   "Waiting for your record to finish updating"))
 
     def test_an_action_waiting_for_you_comes_before_any_other(self):
         self.hold("test.urgent", label="Answering a question", priority=0, subject="_ask")

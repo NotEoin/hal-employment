@@ -14,6 +14,11 @@ main CV goes as it is. Both were shown on My CV but not followed here before 202
 The CV of an application Hal writes now is kept with its change list (`cvstudio/tailor.py`) and printed from
 there; an application written before keeps the cv.json path (`cv.tailor`, `undone_changes`) until it is sent,
 decided by whether `job_cvs` holds a row for it.
+
+The record revision a job's documents were written from (`written_from`, set by `pack.build` through
+`mark_written_from`) is a `meta` row per job, `WRITTEN_FROM_PREFIX` and the job's id: one indexed read, and no
+new column while the migration numbers of this release are taken by other work. A job written before has
+none, so it is never called out of date.
 """
 import contextvars
 import json
@@ -27,6 +32,7 @@ from jobhunt.core import naming, settings
 from jobhunt.cvstudio import cv, tailor
 from jobhunt.docs import folders
 
+WRITTEN_FROM_PREFIX = "docs_written_from:"
 SECTION = re.compile(r"^## (.+?)\n(.*?)(?=^## |\Z)", re.S | re.M)
 # Where `render` writes while an approval builds the new folder. A context variable rather than an argument,
 # so `render(job, docs)` keeps the two-argument form the legacy tests replace it with.
@@ -120,6 +126,23 @@ def drafts(job) -> dict:
         "cv_summary": variant.get("summary", ""),
         "approved": False,
     }
+
+
+def written_from_key(job_id: str) -> str:
+    """The `meta` key holding the record revision a job's documents were written from."""
+    return f"{WRITTEN_FROM_PREFIX}{job_id}"
+
+
+def mark_written_from(con, job_id: str, revision: int) -> None:
+    """Notes that the job's documents were written from record revision `revision`; the caller commits."""
+    con.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)", (written_from_key(job_id), str(int(revision))))
+
+
+def written_from(con, job_id: str) -> int | None:
+    """The record revision the job's documents were written from, or None for documents written before Hal kept
+    it. Below `record.revision()` means the record changed since: the documents are out of date."""
+    row = con.execute("SELECT v FROM meta WHERE k = ?", (written_from_key(job_id),)).fetchone()
+    return int(row[0]) if row else None
 
 
 def load(con, job) -> dict:

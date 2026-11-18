@@ -19,6 +19,11 @@ What changed in each version, in plain words.
   applications being written. Reading files into your record also no longer waits for Hal's scheduled
   checks to finish.
 
+- **Documents are written from your record as it is now.** When you add to your record while Hal writes
+  applications, Hal waits for your record to finish updating before it writes the next one, and the line at
+  the top says "Waiting for your record to finish updating". If your record changes while Hal is writing,
+  Hal writes those documents again from the new record instead of keeping ones that are already out of date.
+
 - **Add your CV as a Markdown file.** Hal now reads CVs written in Markdown (.md): the top heading is your
   name, `##` headings are sections and `###` headings are jobs, qualifications or projects. Bold, italic
   and link marks are left out of what Hal keeps.

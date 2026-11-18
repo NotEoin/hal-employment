@@ -343,6 +343,19 @@ class Letter(unittest.TestCase):
         self.assertIn({"kind": "record", "label": "Volunteering/guide.md > Role", "ref": ""},
                       json.loads(row["used"] or "[]"))
 
+    def test_apply_with_hal_keeps_the_record_revision_its_documents_were_written_from(self):
+        from jobhunt.apply import actions
+
+        with as_applicant(people.HUMANITIES) as a:
+            job = add_job(a.con, "humanities_grad")
+            done = finished(actions.start("docs.prepare", job["id"]), WAIT_S)
+            stamped, now = documents.written_from(a.con, job["id"]), record.revision(a.con)
+            record.bump_revision()
+            later = record.revision(a.con)
+        self.assertEqual(done["state"], "done", done.get("error"))
+        self.assertEqual(stamped, now)
+        self.assertLess(stamped, later, "a change after the write leaves the documents out of date")
+
     def test_apply_with_hal_makes_the_cover_letter_pdf_before_approval(self):
         # testers found no cover letter in the application folder: only approving or editing made its PDF
         from jobhunt import documents

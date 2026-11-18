@@ -11,6 +11,7 @@ from jobhunt import db, pack
 from jobhunt.ai import gpu
 from jobhunt.core import settings, work
 from jobhunt.find import screen
+from jobhunt.pack import freshness
 
 # A pack that failed is retried after this long, in case the cause was transient.
 RETRY_AFTER = "-1 day"
@@ -84,6 +85,8 @@ def step(con, report=lambda msg: None) -> tuple[bool, str]:
         if not eligible:
             return True, f"screened out {job['company']}: {why}"
 
+    if freshness.record_busy():     # the pack would wait for it anyway, holding the worker's round
+        return False, f"{have} of {target} queued; waiting for your record to finish updating"
     report(f"drafting the pack for {job['company']}: {job['title']}")
     try:
         with work.entered(work.DOCUMENTS):   # the worker thread is in no action, so it says what it writes

@@ -197,8 +197,10 @@ processes, once a second. Payloads carry ids, never private data.
 - `activity.record()` refuses an empty why; every text field passes `ai.guard.contains_private` and is
   replaced by "(left out: it held one of your private answers)" on a match. `@activity.undo_handler(type)`
   lives in `undo.py` or `*_undo.py` modules.
-- `GET /api/v2/status` shows the most urgent action: one waiting for the person, then the lowest priority
-  number, then the newest. Its `eta_s` is the time left for a running action that counts items with
+- `GET /api/v2/status` shows the most urgent action: one waiting for the person, then running before
+  queued, then the lowest priority number, then one not waiting for a record update, then the lowest work
+  class, then the newest. A document write waiting for a record update (its step is
+  `work.RECORD_WAIT_WORDS`) reads "<its label>. Waiting for your record to finish updating". Its `eta_s` is the time left for a running action that counts items with
   `progress`, from `runner.eta_s` or the kind's own estimate in `status.ETA_BY_KIND` (`record.ingest` uses
   `ingest.items.eta_for`, so the line matches the Record page). It is None for the first `ETA_AFTER_S` (30)
   and is worked out at most every `ETA_REFRESH_S` (10), since the line is published on every item. The
@@ -235,6 +237,16 @@ processes, once a second. Payloads carry ids, never private data.
   `docs/folders.publish`), fixes the mode, session and helper the form is filled with, and starts
   `apply.fill`. Editing documents after a fill marks the form out of date. `discard` keeps each reason
   apart; `restore`, `sent_myself`, `change_status` and `add_note` are the rest of the board's buttons.
+- A pack (`pack.build`, from `docs.prepare` and from the worker's preparing ahead) is written from a settled
+  record (`pack/freshness.py`). `freshness.written(write, ctx)` waits while a record update is queued or
+  running here or in another live process (`runner.busy_with(work.RECORD)`), as a step that Stop ends, then
+  writes from the record's revision. `_build` calls `fresh.check()` after the letter, before the job's CV is
+  saved and before `pack.md` is written; a moved revision raises `RecordMoved` and the pack starts again once
+  the update is done, at most `MAX_RESTARTS` (2) times. The last try saves whatever it read. The revision a
+  pack was written from is kept in `meta` under `docs_written_from:<job id>` (`documents.mark_written_from`);
+  `documents.written_from(con, job_id)` reads it, None for a pack written before, and a value below
+  `record.revision()` means the documents are out of date. The worker does not start a pack while a record
+  update is in hand (`replenish.step` says it waits) and builds its packs as document writes.
 - The kinds `apply.fill`, `apply.apply_edits`, `apply.next_page`, `apply.draft_rest`, `apply.adopt`
   and `apply.match_tab` wrap the driver, so each run has steps, Stop and an Activity row.
 - The form driver's API in `core/runner.py` is keyed by job (`run_action`, `stop_action`, `ACTIONS`), so

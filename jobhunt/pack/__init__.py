@@ -64,6 +64,10 @@ Design notes:
   answer or a message with nothing after its introduction, as a dropped paragraph left nothing. The next
   story is tried, up to `STORY_TRIES`, and what is still empty is written by the whole-draft path.
 - The pack's checklist names no command: every action is a button on the Documents page.
+- A pack is written from a settled record (`freshness`): it waits while a record update is queued or running,
+  and starts again when the record's revision moves before the job's CV or the pack is saved, as packs
+  written behind a long record update read a record that changed under them (2026-11-18). The revision it
+  was written from is kept (`documents.mark_written_from`), so a later change shows it out of date.
 - Each pack logs how many model calls it made (`build`, `ai.counted`): a pack made about 55 with sentence
   checks, and the stories aim for about 30 at most (2026-11-08), so the count is logged to be measured.
 """
@@ -74,6 +78,7 @@ from jobhunt import ai, db
 from jobhunt.company import reputation
 from jobhunt.core import events
 from jobhunt.cvstudio import cv, tailor
+from jobhunt.pack import freshness
 from jobhunt.pack.checks import (
     CUT_FLAG,
     DANGLING_FLAG,
@@ -271,6 +276,7 @@ class NothingChecked(RuntimeError):
     """No card the person checked and no CV with entries: there is nothing true to write from."""
 
 
+AFTER_WAIT_WORDS = "Writing your documents from your updated record"
 NOTHING_CHECKED = ("Hal has nothing of yours to write from yet, so it wrote nothing for this job. Open Your record "
                    "and press Check your record to confirm the facts Hal found, or add your CV on My CV, then try "
                    "again.")
@@ -289,15 +295,18 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
     """Drafts the pack for one job and returns the pack's Markdown path; the log says how many model calls it
     made (`ai.counted`), the measure of a pack's cost on a local model.
 
-    With `ctx` (a running action) the record passages used are noted under its Activity "Used".
+    It is written from a settled record (`freshness.written`): it waits for a record update in hand, and
+    starts again when the record changes while it writes. With `ctx` (a running action) the wait is a step
+    that Stop ends, and the record passages used are noted under its Activity "Used".
     """
     with ai.counted() as calls:
-        pack_md = _build(con, job_id, use_web, ctx)
+        pack_md, _ = freshness.written(lambda fresh: _build(con, job_id, use_web, ctx, fresh), ctx,
+                                       then=AFTER_WAIT_WORDS)
     log.info("pack for job %s: %d model calls", job_id, calls.n)
     return pack_md
 
 
-def _build(con, job_id: str, use_web: bool, ctx) -> Path:
+def _build(con, job_id: str, use_web: bool, ctx, fresh: freshness.Fresh) -> Path:
     job = con.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
     from jobhunt import documents
 
@@ -318,6 +327,7 @@ def _build(con, job_id: str, use_web: bool, ctx) -> Path:
     plan = evidence_plan(analysis, facts, kept, tuple(COMMON_QUESTIONS))
     brief = Brief(job, who, analysis, about, facts, kept)
     written = write_letter(con, job, who=who, analysis=analysis, about=about, kept=kept, fit=fit, plan=plan)
+    fresh.check()
     letter = written["text"]
     context = _context(brief, fit, previous_applications(con, job))
     questions = [*(analysis.get("questions") or []), *COMMON_QUESTIONS]
@@ -329,6 +339,7 @@ def _build(con, job_id: str, use_web: bool, ctx) -> Path:
     message, answers = others["message"], others["answers"]
     letter, message, answers, refused = without_refusals(letter, message, answers)
 
+    fresh.check()    # the job's CV is saved next, so a record that moved is caught before anything is kept
     made = tailor.prepare(dict(job), priorities=tailor.picked(job_id, con), con=con)
     track = next((c["after"] for c in made["changes"] if c["target"] == "headline"), None)
     pdf = cv.render(tailor.v1(job_id, con), out_dir)
@@ -351,8 +362,10 @@ def _build(con, job_id: str, use_web: bool, ctx) -> Path:
 
     md = _markdown(brief, urls, fit, letter, message, answers, pdf, track, flagged, written["notes"])
     md = md.replace("## Role\n", company_md + "\n## Role\n", 1)
+    fresh.check()
     pack_md = out_dir / "pack.md"
     pack_md.write_text(md)
+    documents.mark_written_from(con, job_id, fresh.revision)
     events.publish(PREPARED, job_id=job_id, company=job["company"], title=job["title"], pack=str(pack_md))
     mirror_note(job, pack_md)
     if job["status"] in ("new", "shortlisted"):

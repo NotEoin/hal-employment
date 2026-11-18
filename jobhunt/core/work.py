@@ -32,6 +32,8 @@ CLASSES = (ON_SCREEN, RECORD, DOCUMENTS, OTHER)
 BY_PRIORITY = {0: ON_SCREEN, 1: DOCUMENTS, 2: OTHER}
 # action kinds whose first word names their class when their priority does not settle it
 BY_AREA = {"record": RECORD, "docs": DOCUMENTS, "cv": ON_SCREEN, "apply": ON_SCREEN, "form": ON_SCREEN}
+# the step of a document write waiting for a record update (`pack.freshness`); the status line names it
+RECORD_WAIT_WORDS = "Waiting for your record to finish updating"
 
 _class: contextvars.ContextVar[int | None] = contextvars.ContextVar("hal_work_class", default=None)
 
