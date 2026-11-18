@@ -152,14 +152,17 @@ class _Reading:
 
     def _hand_out(self, pool: ThreadPoolExecutor, workers: int) -> None:
         while len(self.in_hand) < workers and not self.gone and time.monotonic() >= self.resume_at:
-            if self.again:
+            retry = bool(self.again)
+            if retry:
                 source_id = self.again.pop(0)
             elif self.next < len(self.todo):
                 source_id = self.todo[self.next]
                 self.next += 1
             else:
                 return
-            self.ctx.step(f"Reading {self.done + len(self.in_hand) + 1} of {len(self.todo)}", total=len(self.todo))
+            if not retry:     # steps count sources, so a source tried again is no new step (2026-11-18)
+                self.ctx.step(f"Reading {self.done + len(self.in_hand) + 1} of {len(self.todo)}",
+                              total=len(self.todo))
             try:
                 begun = pipeline.begin(self.ctx.con, source_id)
             except LookupError:      # removed while it waited
@@ -206,7 +209,8 @@ class _Reading:
         if now >= self.resume_at:     # the first of the reads in hand to find the AI away sets the pause
             self.resume_at = now + self.pause
             self.pause = min(self.pause * 2, AI_RETRY_MAX_S)
-            self.ctx.step(f"Waiting for Hal's AI, then reading again ({done['kind']})")
+            # a message, not a step: the wait is no source, and a step for it showed "Step 2 of 1" (2026-11-18)
+            self.ctx.progress(self.done, len(self.todo), f"Waiting for Hal's AI, then reading again ({done['kind']})")
 
     def _wait_for_ai(self) -> None:
         while time.monotonic() < self.resume_at:

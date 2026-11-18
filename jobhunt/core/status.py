@@ -140,6 +140,15 @@ def _eta(con: sqlite3.Connection, row: sqlite3.Row) -> int | None:
     return None if kept[1] is None else max(0, round((kept[1] - now).total_seconds()))
 
 
+def _step_total(row: sqlite3.Row) -> int | None:
+    """The steps' total, or None once the step number has passed it, and the line then shows no step count (as it
+    does for an action with no total). An action's total is its own guess of how many steps it takes, and "Step
+    2 of 1" is false. The total is dropped, not raised: a raised one would say "Step 2 of 2" and claim the work
+    was done while more steps come (2026-11-18)."""
+    total = row["step_total"]
+    return None if total is not None and row["step_n"] > total else total
+
+
 def status(con: sqlite3.Connection) -> StatusReply:
     """The `/status` reply."""
     row = busiest(con)
@@ -153,6 +162,6 @@ def status(con: sqlite3.Connection) -> StatusReply:
         text = row["activity_text"] or row["message"] or row["kind"]
         if (row["state"] == "waiting_for_you" or _waits_for_record(row)) and row["message"]:
             text = f"{text}. {row['message']}" if row["message"] != text else text
-        out.update(busy=True, text=text, step_n=row["step_n"], step_total=row["step_total"],
+        out.update(busy=True, text=text, step_n=row["step_n"], step_total=_step_total(row),
                    eta_s=_eta(con, row), action_id=row["id"], why_activity_id=row["activity_id"], state=row["state"])
     return out

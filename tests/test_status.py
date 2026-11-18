@@ -49,6 +49,12 @@ class StatusLine(unittest.TestCase):
         runner.flush()
         return action_id, release
 
+    def test_a_step_number_past_its_total_is_shown_without_the_total(self):
+        """A CV added to the record showed "Step 2 of 1" while it was read (2026-11-18)."""
+        action_id, _ = self.hold("test.over", label="Reading what you added", steps=2, total=1)
+        line = status.status(self.con)
+        self.assertEqual((line["step_n"], line["step_total"], line["action_id"]), (2, None, action_id))
+
     def test_the_status_line_shows_the_most_urgent_running_action(self):
         background, _ = self.hold("test.screen", label="Checking 12 new matches", priority=2, subject="_screen")
         line = status.status(self.con)

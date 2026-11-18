@@ -361,6 +361,16 @@ class Pipeline(unittest.TestCase):
         self.assertEqual((done["result"]["read"], done["result"]["waiting_ai"], state), (1, 0, "read"))
         self.assertEqual(away.calls, 3)
 
+    def test_waiting_for_the_ai_adds_no_step_beyond_the_sources_being_read(self):
+        """A CV added to the record showed "Step 2 of 1": the wait and the second try each counted a step
+        (2026-11-18)."""
+        with home() as (con, _, _), reader("document", made=AiAway("document", fails=2)):
+            ids = pipeline.add_uploads(con, "document", [Incoming("award.md", AWARD.encode())])["added"]
+            with mock.patch.object(actions, "AI_RETRY_S", 0):
+                done = runner.run(actions.KIND, params={"ids": ids})
+            row = con.execute("SELECT step_n, step_total FROM actions WHERE id = ?", (done["id"],)).fetchone()
+        self.assertEqual((row["step_n"], row["step_total"]), (1, 1))
+
     def test_an_ai_that_is_not_set_up_ends_the_read_with_the_rest_still_waiting(self):
         # one read at a time: two at once both start before either learns the AI is missing (passed only where
         # this computer's Ollama made the default one call at a time, 2026-11-12)

@@ -68,6 +68,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **The line at the top no longer says "Step 2 of 1".** While Hal read a file you added to your record, a
+  wait for its AI or a second try counted as another step. Now only each file is a step, the wait shows as a
+  message, and a line never shows a step number above its total.
+
 - **A CV you add starts at version 1.** Adding a new CV used to show it as, say, "version 9" of your old one,
   and each upload made two versions. Now each new file is a CV of its own with one first version, and adding
   a file Hal already has shows the CV it made from it instead of a copy.
