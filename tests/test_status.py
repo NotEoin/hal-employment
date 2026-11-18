@@ -13,6 +13,10 @@ from test_runner import WAIT_S, Kinds, fresh_home
 
 from jobhunt.core import clock, events, runner, status, work
 
+# the time left comes from the real clock: each second a loaded machine takes before the check adds
+# three to an action that is a quarter done, and CI missed a 2 second allowance (2026-11-18)
+ETA_SLACK_S = 30
+
 
 def from_stand_ins(**stand_ins: types.ModuleType):
     """`status._optional` that finds `stand_ins` by module name, and any other module where it is loaded.
@@ -81,7 +85,7 @@ class StatusLine(unittest.TestCase):
 
     def test_a_long_action_shows_its_time_left_from_the_pace_so_far(self):
         self.counting("test.read", 2, 8, ran_s=60)
-        self.assertAlmostEqual(status.status(self.con)["eta_s"], 180, delta=2,
+        self.assertAlmostEqual(status.status(self.con)["eta_s"], 180, delta=ETA_SLACK_S,
                                msg="two items took a minute, so six more take three")
 
     def test_no_time_left_is_shown_in_the_first_seconds_or_without_items(self):
