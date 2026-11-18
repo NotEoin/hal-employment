@@ -10,20 +10,27 @@ import { Chip, Note } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 import { cvUrl } from "./chosen.js";
 import { Upload } from "./upload.js";
+import { Marked } from "./marks.js";
 
 const SHOW = { Reworded: "Reworded", Added: "Added", Moved: "Moved", "Left out": "Left out", Hidden: "Hidden", Shown: "Shown" };
+
+// A target that is a line, a paragraph or a profile may hold bold, italic and links, as `suggest.is_line`.
+const isLine = t => /\/b:/.test(t || "") || /\/text$/.test(t || "");
 
 function words(v) {
   if (v == null || v === "") return "";
   return typeof v === "string" ? v : Array.isArray(v) ? v.map(x => (typeof x === "object" ? x.name : x)).join(", ") : String(v);
 }
 
+/** A changed value as the CV shows it: a line's marks drawn, any other value as its words. */
+const shown = (c, v) => (isLine(c.target) && typeof v === "string" && v ? html`<${Marked} text=${v} />` : words(v));
+
 function Changes({ out }) {
   if (!out.changes.length) return html`<p class="small sub">Version ${out.a.n} and version ${out.b.n} are the same.</p>`;
   return html`<div class="cv-changes"><h3 class="h3">From version ${out.a.n} to version ${out.b.n}</h3>
     ${out.changes.map((c, i) => html`<div class="li" key=${i}><${Chip} tone=${c.kind === "Left out" ? "warn" : ""}>${SHOW[c.kind] || c.kind}<//>
-      <div class="grow"><div class="small sub">${c.where}</div>${(words(c.before) || words(c.after)) && html`<div class="ba"><div class="b"><small>Before</small>${words(c.before)}</div>
-      <div class="a"><small>After</small>${words(c.after)}</div></div>`}</div></div>`)}</div>`;
+      <div class="grow"><div class="small sub">${c.where}</div>${(words(c.before) || words(c.after)) && html`<div class="ba"><div class="b"><small>Before</small>${shown(c, c.before)}</div>
+      <div class="a"><small>After</small>${shown(c, c.after)}</div></div>`}</div></div>`)}</div>`;
 }
 
 /** The tab. */

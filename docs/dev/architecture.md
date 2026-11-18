@@ -669,6 +669,11 @@ runs: tests use `tests/support/fake_claude/`.
   `cvstudio/inline.py` into the text around the selection (`toggleMark`, `addLink`), trimmed of spaces and
   widened to whole words, so the pair always hugs words. The words stay selected; the change is an ordinary
   `replace` of the text.
+- Outside the editors a line reaches the page through `Marked` (`cv/marks.js`), which reads the marks by the
+  rules of `inline.py` (kept in step by hand) and draws `strong`, `em` and `a` with every word as Preact
+  text: suggestion cards (Now and the wording), "What Hal changed" on the CV tab and the Documents step, and
+  a version comparison where the target is a line. "Check what Hal read" gets plain words from the server, and
+  the record's CV preview is the rendered page.
 - An application whose documents were written before has no `job_cvs` row (`tailor.kept`), and keeps the
   cv.json path until it is sent: `documents.tailored` reorders the main CV with `cv.tailor`, and Undo is
   `docs["undone_changes"]`. Both paths send the main CV as it is while the setting is No, and the person's

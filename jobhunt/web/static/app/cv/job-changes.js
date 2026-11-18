@@ -6,6 +6,7 @@
 import { html } from "../core/html.js";
 import { Icon } from "../ui/icons.js";
 import { withGaps } from "./sugg-card.js";
+import { Marked } from "./marks.js";
 
 export const MAIN_CV = "your main CV";   // `tailor.MAIN_LABEL`: the CV's name while only one CV is in use
 
@@ -20,7 +21,7 @@ export function JobChanges({ changes = [], onToggle, why, cv = MAIN_CV }) {
       <div class="row tight"><span class="chip info">${c.kind}</span><span class="small sub">${c.where}</span><span class="sp"></span>
         ${c.on ? html`<button type="button" class="btn quiet small" onClick=${() => onToggle(c, false)}><${Icon} n="undo" c="s" />Undo</button>`
           : html`<span class="small sub">${c.held ? "Undone by Hal to keep to your page limit" : "Undone: your CV's version is used"}</span><button type="button" class="btn quiet small" onClick=${() => onToggle(c, true)}>Redo</button>`}</div>
-      ${c.on && html`<div class="ba"><div class="b"><small>Your CV</small>${c.before || "(not there)"}</div><div class="a"><small>For this job</small>${c.after ? withGaps(c.after) : "(left out)"}</div></div>
+      ${c.on && html`<div class="ba"><div class="b"><small>Your CV</small>${c.before ? html`<${Marked} text=${c.before} />` : "(not there)"}</div><div class="a"><small>For this job</small>${c.after ? withGaps(c.after) : "(left out)"}</div></div>
         ${c.why && html`<div class="small"><b style="color:var(--why)">Why:</b> ${c.why}${c.ev && html`<div class="sub">${c.ev}</div>`}</div>`}`}
     </article>`)}</div>`;
 }

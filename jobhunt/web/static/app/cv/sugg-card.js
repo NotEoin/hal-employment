@@ -7,15 +7,12 @@ import { post, run } from "../core/api.js";
 import { openDialog, toast } from "../core/store.js";
 import { Icon } from "../ui/icons.js";
 import { Switch } from "../ui/controls.js";
+import { Marked } from "./marks.js";
 
 const SUGG = "/cv/suggestions/";
 export const REASONS = ["Keep my wording", "This is not true", "Too formal", "Too long", "Not relevant"];
-const GAP = /(\[[^\]]+\])/;
-
-/** Text with Hal's gaps marked. */
-export function withGaps(text) {
-  return String(text || "").split(GAP).map(p => (GAP.test(p) ? html`<span class="ph">${p}</span>` : p));
-}
+/** A CV line with its bold, italic and links drawn and Hal's gaps marked. */
+export const withGaps = text => html`<${Marked} text=${text} gaps />`;
 
 const path = (x, what) => SUGG + encodeURIComponent(x.id) + "/" + what;
 
@@ -66,7 +63,7 @@ export function SuggCard({ x, onChange }) {
     <div class="row tight"><span class="chip info">${x.kind}</span><span class="small sub">${x.where}</span></div>
     <h3 class="h3" style="font-size:17px">${x.title}</h3>
     <div class="note"><${Icon} n="info" /><div><b>Why:</b> ${x.why}${x.trigger && html`<div class="small sub" style="margin-top:4px">Based on: ${x.trigger}</div>`}</div></div>
-    <div class="ba"><div class="b"><small>Now</small>${x.before || "(not there)"}</div><div class="a"><small>${label}</small>${mode === "edit"
+    <div class="ba"><div class="b"><small>Now</small>${x.before ? html`<${Marked} text=${x.before} />` : "(not there)"}</div><div class="a"><small>${label}</small>${mode === "edit"
       ? html`<textarea class="input" aria-label="Your wording" value=${txt} onInput=${e => setTxt(e.target.value)}></textarea>`
       : after ? withGaps(after) : "(left out)"}</div></div>
     ${x.evidence && x.evidence.length > 0 && html`<div class="small"><b>Evidence:</b> ${x.evidence.join("; ")}</div>`}

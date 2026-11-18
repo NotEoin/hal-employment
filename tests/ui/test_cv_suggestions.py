@@ -14,9 +14,10 @@ from support.ui import AppPage, chromium, skip_unless_browser
 from test_cv_suggest import made_up_cv
 
 from jobhunt import db
-from jobhunt.cvstudio import store, suggest
+from jobhunt.cvstudio import model, store, suggest
 
 FAILED_LOAD = "Failed to load resource"
+MARKED = "Organized **author events** for *the* [shop](https://example.org/shop)"
 # Draws a component from its module into a new box at the end of the main area.
 MOUNT = """async ([file, name, props]) => {
   const h = await import('/app/core/html.js');
@@ -107,6 +108,39 @@ class SuggestionsTab(unittest.TestCase):
         self.assertEqual(card.locator(".ph").inner_text(), "[when?]")
         card.locator("button:has-text('Accept')").first.click()
         p.page.wait_for_selector("text=Fill in the gap first")
+
+    def test_a_lines_bold_italic_and_links_are_drawn_never_shown_as_marks_at_both_sizes(self) -> None:
+        events = "s:experience/e:ex-shop/b:b-events"
+        doc = model.apply(store.current()[1], model.Change("replace", events, MARKED))
+        store.new_version(doc, origin="manual", what="Bold", by="you")
+        con = db.connect()
+        try:
+            suggest.look_again(con, use_ai=False)
+        finally:
+            con.close()
+        changes = [{"id": "c9", "kind": "Reworded", "where": "Work experience, Bookseller", "before": MARKED,
+                    "after": "Ran **author events** for *the* [shop](https://example.org/shop), [how many?] a year",
+                    "why": "", "ev": "", "on": True}]
+        for size, scheme in (("wide", "light"), ("narrow", "dark")):
+            with self.subTest(size=size):
+                p = self.page(size, scheme)
+                p.page.evaluate(MOUNT, ["sugg-tab.js", "SuggTab", {}])
+                card = p.page.locator("article.sugg", has_text="author events").filter(has_text="Use one spelling")
+                p.shows(card, "the spelling card")
+                p.page.evaluate(MOUNT, ["job-changes.js", "JobChanges", {"changes": changes}])
+                for box in (card, p.page.locator("#p34-JobChanges")):
+                    self.assertNotIn("*", box.inner_text())
+                    self.assertNotIn("](", box.inner_text())
+                    self.assertGreaterEqual(box.locator("strong", has_text="author events").count(), 2)
+                    self.assertGreaterEqual(box.locator("em", has_text="the").count(), 1)
+                    self.assertEqual({box.locator("a", has_text="shop").nth(i).get_attribute("href")
+                                      for i in range(box.locator("a", has_text="shop").count())},
+                                     {"https://example.org/shop"})
+                jobs = p.page.locator("#p34-JobChanges")
+                self.assertEqual(jobs.locator(".ph").inner_text(), "[how many?]")
+                self.assertEqual(self.errors(p), [])
+                self.assertEqual(p.sideways(), 0)
+                self.assertEqual(p.serious_axe(), [])
 
     def test_the_adjust_card_and_a_jobs_change_list_draw_and_answer(self) -> None:
         p = self.page("narrow", "dark")
