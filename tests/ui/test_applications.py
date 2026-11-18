@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import time
 import unittest
 
 from support.fake_api import MADE_UP_APP, MADE_UP_BOARD, FakeServer, FakeState
@@ -16,6 +17,9 @@ from support.ui import AppPage, chromium, skip_unless_browser
 
 APP = "app-demo%3A1"
 APP_PATH = "/applications/demo:1"   # what the page asks for at APP
+HELD_WAIT_S = 5.0     # how long a test waits for the page's request to reach a held route
+POLL_MS = 20          # how often it looks
+SETTLE_MS = 300       # how long it gives a second click to send a request of its own
 
 
 
@@ -182,6 +186,26 @@ class ApplicationsTest(unittest.TestCase):
         p.page.wait_for_selector("text=Hal is writing the documents again.")
         self.assertEqual(state.posts, [("/api/v2/applications/demo%3A1/documents/redo", {})])
         self.assertEqual(p.page.locator("[role=dialog]").count(), 0)
+        self.assertEqual(p.errors, [])
+
+    def test_a_double_click_on_write_the_documents_again_sends_one_write(self) -> None:
+        # review, 2026-11-18: without the dialog the button had no busy guard, and a second write replaced the first
+        state = self.documents_step()
+        p = self.tab(self.serve(state)).open(APP)
+        p.page.wait_for_selector(".approve")
+        held = []
+        p.page.route("**/documents/redo", lambda route: held.append(route))
+        button = p.page.locator(".approve").get_by_role("button", name="Write the documents again")
+        button.dblclick()
+        deadline = time.monotonic() + HELD_WAIT_S
+        while not held and time.monotonic() < deadline:
+            p.page.wait_for_timeout(POLL_MS)
+        p.page.wait_for_timeout(SETTLE_MS)   # time for a second request, were one sent
+        self.assertEqual(len(held), 1)
+        self.assertTrue(button.is_disabled(), "the button waits for the write to start")
+        held[0].continue_()
+        p.page.wait_for_selector("text=Hal is writing the documents again.")
+        self.assertEqual(state.posts, [("/api/v2/applications/demo%3A1/documents/redo", {})])
         self.assertEqual(p.errors, [])
 
     def test_with_one_cv_in_use_the_cv_tab_only_names_it(self) -> None:

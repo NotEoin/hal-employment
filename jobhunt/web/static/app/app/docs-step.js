@@ -64,26 +64,36 @@ async function reopen(a, reload) {
 const copy = text => copyText(text);
 const sentence = text => (text || "").replace(/\.\s*$/, "") + ".";
 
+// The applications whose "Write the documents again" request is on its way. A second write replaces the first,
+// so a double click must send one; the page's state alone is too late, as both clicks land before it redraws.
+const rewriting = new Set();
+
 /** Write the documents again from the record and CV as they are now. With edits of the person's own it asks
     first (dialogs/rewrite.js); with changes on the page not yet saved it asks for those to be saved first, so
-    Hal knows which edits are theirs. */
-async function writeAgain(a, unsaved, reload) {
+    Hal knows which edits are theirs. `setBusy` disables the button while the request is on its way, as the
+    dialog's does. */
+async function writeAgain(a, unsaved, reload, setBusy = () => {}) {
   if (unsaved) { toast("Save or discard your changes first, then write the documents again."); return; }
   if (a.docs.own_edits) { openDialog("rewrite", { app: a, then: reload }); return; }
+  if (rewriting.has(a.id)) return;
+  rewriting.add(a.id);
+  setBusy(true);
   try {
     await post(appPath(a) + "/documents/redo", {});
     invalidate("/applications*");
     toast("Hal is writing the documents again.");
-    if (reload) reload();
+    if (reload) await reload();
   } catch (err) { toast(err.message); }
+  finally { rewriting.delete(a.id); setBusy(false); }
 }
 
 /** The Documents step when Hal has no documents to show: why, and the button to write them again. */
 function Failed({ a, reload }) {
+  const [busy, setBusy] = useState(false);
   return html`<section class="card" role="status"><div class="row"><div class="ic warn"><${Icon} n="warn" /></div>
       <h2 class="h2" style="margin:0">Hal could not write the documents for this job</h2></div>
     <p class="sub" style="margin-top:8px">${sentence(a.docs.stopped)} Nothing was sent and no form was opened.</p>
-    <div class="row"><button type="button" class="btn primary" onClick=${() => writeAgain(a, false, reload)}><${Icon} n="refresh" c="s" />Write the documents again</button></div></section>`;
+    <div class="row"><button type="button" class="btn primary" disabled=${busy} onClick=${() => writeAgain(a, false, reload, setBusy)}><${Icon} n="refresh" c="s" />Write the documents again</button></div></section>`;
 }
 
 /** The PDF Hal will upload, drawn in the page; nothing when there is no file yet. */
@@ -152,6 +162,7 @@ export function DocsStep({ a, reload, onApproved }) {
   const [answers, setAnswers] = useState(d.answers);
   const [message, setMessage] = useState(d.message.text);
   const [cvDirty, setCvDirty] = useState(false);
+  const [rewriteBusy, setRewriteBusy] = useState(false);
   if (d.state === "writing") return html`<${Writing} a=${a} />`;
   if (a.step > 1) {
     return html`<section class="card"><div class="row"><div class="ic good"><${Icon} n="check" /></div><div class="grow" style="flex:1">
@@ -176,14 +187,14 @@ export function DocsStep({ a, reload, onApproved }) {
   const editable = d.cv.schema === 2 && !original && !pick.length;
   const unsaved = cvDirty || letter !== d.letter.text || message !== d.message.text
     || JSON.stringify(answers) !== JSON.stringify(d.answers);
-  const again = () => writeAgain(a, unsaved, reload);
+  const again = () => writeAgain(a, unsaved, reload, setRewriteBusy);
   const behind = d.out_of_date || d.stopped;
   return html`
     ${behind && html`<div class="note warn again" role="status" style="margin-bottom:12px"><${Icon} n="warn" /><div class="grow">
         <b>${d.out_of_date ? sentence(d.out_of_date) : "Hal could not write these again: " + sentence(d.stopped)}</b>
         <div class="small">${d.out_of_date ? "Write them again to use what changed. Hal asks before it replaces any edits of your own."
           : "These are the documents from before. Try again, or check them and approve them as they are."}</div></div>
-      <button type="button" class="btn primary small" onClick=${again}><${Icon} n="refresh" c="s" />Write the documents again</button></div>`}
+      <button type="button" class="btn primary small" disabled=${rewriteBusy} onClick=${again}><${Icon} n="refresh" c="s" />Write the documents again</button></div>`}
     <div class="approve"><div class="ic info"><${Icon} n="file" /></div><div class="grow"><b>Check what Hal made for this job, then approve it.</b>
       <div class="small">After you approve, Hal opens the employer's form and fills it in. It never presses Submit.</div>
       ${cvDirty && html`<div class="small" role="status">Save or discard your changes to the CV before you approve.</div>`}
@@ -191,7 +202,7 @@ export function DocsStep({ a, reload, onApproved }) {
       <button type="button" class="btn primary" disabled=${cvDirty || pick.length > 0} onClick=${onApprove}>Approve and fill in the form</button>
       <button type="button" class="btn" onClick=${() => openDialog("askchange", { app: a })}>Ask for changes</button>
       <button type="button" class="btn quiet" onClick=${() => openDialog("critique", { app: a })}><${Icon} n="eye" c="s" />Critique as a recruiter</button>
-      ${!behind && html`<button type="button" class="btn quiet" onClick=${again}><${Icon} n="refresh" c="s" />Write the documents again</button>`}</div>
+      ${!behind && html`<button type="button" class="btn quiet" disabled=${rewriteBusy} onClick=${again}><${Icon} n="refresh" c="s" />Write the documents again</button>`}</div>
     <${UncheckedNote} />
     <${Tabs} label="Documents" value=${tab} onChange=${setTab} tabs=${[["cv", "CV", plural(changes.filter(c => c.on).length, "change")],
       ["letter", "Cover letter", ""], ["answers", "Answers", answers.length || ""], ["message", "Message", ""]]} />
