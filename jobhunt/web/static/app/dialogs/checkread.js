@@ -9,6 +9,7 @@ import { put } from "../core/api.js";
 import { useApi, closeDialog, toast, invalidate } from "../core/store.js";
 import { DlgHead } from "../ui/dialog.js";
 import { Icon } from "../ui/icons.js";
+import { cvUrl } from "../cv/chosen.js";
 
 function Original({ o }) {
   if (o.page_urls.length) {
@@ -38,7 +39,7 @@ function Row({ r, onSaved }) {
   const save = async () => {
     setBusy(true);
     try {
-      await put("/cv/parse-report/" + encodeURIComponent(r.path), { value });
+      await put(cvUrl("/cv/parse-report/" + encodeURIComponent(r.path)), { value });
       setEditing(false);
       toast("Saved. Hal keeps your correction as a new version.");
       onSaved();
@@ -60,7 +61,7 @@ function Row({ r, onSaved }) {
 
 /** The dialog. */
 export default function CheckRead() {
-  const { data, error, reload } = useApi("/cv/parse-report");
+  const { data, error, reload } = useApi(cvUrl("/cv/parse-report"));
   const saved = () => { reload(); invalidate("/cv*"); };
   const head = html`<${DlgHead} title="Check what Hal read" sub="Your file on the left, Hal's reading on the right. Correct anything Hal got wrong." icon="eye" />`;
   if (error) return html`${head}<p>${error.message}</p><footer><button type="button" class="btn" onClick=${closeDialog}>Close</button></footer>`;
@@ -69,7 +70,7 @@ export default function CheckRead() {
   return html`${head}
     <div class="grid2 even"><div><${Original} o=${data.original} /></div>
       <div>${data.rows.map(r => html`<${Row} key=${r.path + ":" + r.value} r=${r} onSaved=${saved} />`)}</div></div>
-    <footer><a class="btn quiet" href="/api/v2/cv/original" download=${data.file.name}><${Icon} n="download" c="s" />Original</a>
+    <footer><a class="btn quiet" href=${"/api/v2" + cvUrl("/cv/original")} download=${data.file.name}><${Icon} n="download" c="s" />Original</a>
       <button type="button" class="btn primary" onClick=${closeDialog}>Looks right</button></footer>`;
 }
 CheckRead.wide = true;

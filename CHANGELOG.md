@@ -28,6 +28,13 @@ What changed in each version, in plain words.
   name, `##` headings are sections and `###` headings are jobs, qualifications or projects. Bold, italic
   and link marks are left out of what Hal keeps.
 
+- **Keep several CVs.** If you keep a different CV for each kind of job, add each one: the page becomes
+  **My CVs**, with a list of your CVs at the top. Each CV has its own name, versions numbered from 1, type,
+  look, checks and suggestions. A star (**Use this for applications**) marks the CVs Hal may use for
+  applications, and **Move to the archive** puts a CV away without deleting anything. A file you changed
+  outside Hal can be added to its CV as a new version from **Versions**. If you had uploaded several CVs
+  before, each upload is now a CV of its own: the one you were using is starred and the others are archived.
+
 ### Fixed
 
 - **A CV you add starts at version 1.** Adding a new CV used to show it as, say, "version 9" of your old one,

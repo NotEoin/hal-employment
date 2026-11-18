@@ -9,29 +9,28 @@ import { Seg, Note } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 import { DocPreview } from "../ui/doc-preview.js";
 import { Upload } from "./upload.js";
+import { cvUrl } from "./chosen.js";
 
-function YourFile({ cv }) {
-  const [replacing, setReplacing] = useState(false);
+function YourFile({ cv, setT }) {
   const b = cv.baseline;
   if (!b) {
     return html`<section class="card"><h2 class="h2">Your file</h2>
       <p class="small">You have not added a CV file, so Hal's copy is your main CV.</p>
-      <div style="margin:12px 0"><${Upload} /></div>
+      <div style="margin:12px 0"><${Upload} into=${cv.cv.id} fresh=${true} /></div>
       <${Note} icon="lock" tone="lock">Every change is saved as a new version, and you can go back to any version at any time.<//></section>`;
   }
   return html`<section class="card"><h2 class="h2">Your file</h2><dl class="kv"><dt>File</dt><dd>${b.name}</dd>
       <dt>Added</dt><dd>${dayWords(b.added)} at ${clock(b.added)}</dd>${b.pages && html`<dt>Pages</dt><dd>${b.pages}</dd>`}</dl>
     <div style="margin-top:12px"><${Note} icon="lock" tone="lock">Hal never changes your file. Every change is saved as a new version, and you can go back to your file at any time.<//></div>
     <div class="row" style="margin-top:12px"><button type="button" class="btn small" onClick=${() => openDialog("checkread")}><${Icon} n="eye" c="s" />Check what Hal read</button>
-      <button type="button" class="btn small" aria-expanded=${replacing ? "true" : "false"} onClick=${() => setReplacing(!replacing)}><${Icon} n="upload" c="s" />Replace</button>
-      <a class="btn quiet small" href="/api/v2/cv/original" download=${b.name}><${Icon} n="download" c="s" />Original</a></div>
-    ${replacing && html`<div style="margin-top:12px"><p class="small sub" style="margin:0 0 8px">Choose a new PDF, Word or Markdown file. Your versions are kept.</p>
-      <${Upload} fresh=${true} onRead=${() => setReplacing(false)} /></div>`}</section>`;
+      <button type="button" class="btn small" onClick=${() => setT("versions")}><${Icon} n="upload" c="s" />Upload a new version</button>
+      <a class="btn quiet small" href=${"/api/v2" + cvUrl("/cv/original")} download=${b.name}><${Icon} n="download" c="s" />Original</a></div>
+</section>`;
 }
 
 function Sending({ cv }) {
   const choose = async v => {
-    try { await put("/cv/send", { send: v }); invalidate("/cv*"); toast(v === "original" ? "Employers now get your original file" : "Employers now get Hal's copy"); }
+    try { await put(cvUrl("/cv/send"), { send: v }); invalidate("/cv*"); toast(v === "original" ? "Employers now get your original file" : "Employers now get Hal's copy"); }
     catch (err) { toast(err.message); }
   };
   return html`<section class="card"><h2 class="h2">What employers get</h2>
@@ -39,7 +38,7 @@ function Sending({ cv }) {
     <p class="small sub" style="margin-top:10px">${cv.send === "original"
       ? "Employers get your file exactly as you uploaded it. Hal cannot adjust it for each job, and accepted suggestions are kept in Hal's copy until you switch."
       : "Employers get Hal's copy: your CV in the look you chose, with the changes you accepted and any changes for that job, each approved by you."}</p>
-    <p class="small sub" style="margin:0">Want to change it in Word? <a class="btn quiet small" href="/api/v2/cv/export?format=docx">Download as Word</a></p></section>`;
+    <p class="small sub" style="margin:0">Want to change it in Word? <a class="btn quiet small" href=${"/api/v2" + cvUrl("/cv/export?format=docx")}>Download as Word</a></p></section>`;
 }
 
 function Glance({ cv, setT }) {
@@ -61,5 +60,5 @@ export function CvTab({ cv, setT }) {
       <p class="small sub" style="margin-top:8px">This is your CV as it stands (version ${cv.version.n}).</p></div>
     <div class="stack">
       ${cv.not_found.length > 0 && html`<${Note} icon="warn" tone="warn"><b>Some of your old CV is not in Hal's copy yet.</b> Check these and add them back if you need them: ${cv.not_found.join("; ")}<//>`}
-      <${YourFile} cv=${cv} /><${Sending} cv=${cv} /><${Glance} cv=${cv} setT=${setT} /></div></div>`;
+      <${YourFile} cv=${cv} setT=${setT} /><${Sending} cv=${cv} /><${Glance} cv=${cv} setT=${setT} /></div></div>`;
 }

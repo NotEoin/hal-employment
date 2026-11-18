@@ -1,14 +1,17 @@
 /* The drop zone and paste box for a CV, used by the setup guide's CV step and by My CV.
 
-   A file or pasted text goes to POST /cv/upload. The server answers at once when it cannot read the file
-   (too big, too long, a picture of a CV) and otherwise starts the reading as an action; this part follows
-   that action and then shows what Hal found, with "Check what Hal read" and a note for anything Hal was
-   not sure of. In the setup guide Hal speaks for itself ("Check what I read"). */
+   A file or pasted text goes to POST /cv/upload, which makes a new CV from it; with `into` it goes to
+   /cv/upload?cv=<id> instead, as a new version of that CV. The server answers at once when it cannot read the
+   file (too big, too long, a picture of a CV), or when the same file already made a CV (`duplicate`), and
+   otherwise starts the reading as an action; this part follows that action, chooses the CV it made (cv/chosen.js)
+   and then shows what Hal found, with "Check what Hal read" and a note for anything Hal was not sure of. In the
+   setup guide Hal speaks for itself ("Check what I read"). */
 import { html, useState } from "../core/html.js";
 import { run } from "../core/api.js";
 import { useApi, openDialog, invalidate } from "../core/store.js";
 import { plural } from "../core/format.js";
 import { Icon } from "../ui/icons.js";
+import { chooseCv, cvUrl } from "./chosen.js";
 
 const HIDDEN = "position:absolute;width:1px;height:1px;opacity:0;overflow:hidden";
 const ACCEPT = ".pdf,.docx,.md,.markdown,.txt,application/pdf,text/markdown,"
@@ -49,10 +52,17 @@ function ReadCard({ report, me }) {
     <${UnsureNote} unsure=${unsure} me=${me} /></section>`;
 }
 
+/** The words for a file that already made a CV: which one, and where it is when it is archived. */
+export function duplicateWords(dup) {
+  return "You added this file before, as \"" + dup.name + "\"."
+    + (dup.archived ? " It is in the archive: restore it from Archived CVs to use it again." : " Hal shows it now.");
+}
+
 /** The upload part. `me` makes Hal speak for itself (the setup guide); `fresh` starts at the drop zone even
-    when a reading exists (My CV's Replace); `onRead` hears each finished reading. */
-export function Upload({ me = false, fresh = false, onRead }) {
-  const { data: report, reload } = useApi("/cv/parse-report");
+    when a reading exists; `into` names the CV a file becomes a new version of (else it is a new CV);
+    `onRead` hears each finished reading, and a file that already made a CV as `{ cv, duplicate }`. */
+export function Upload({ me = false, fresh = false, into = null, onRead }) {
+  const { data: report, reload } = useApi(into ? cvUrl("/cv/parse-report", into) : "/cv/parse-report");
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState("");
   const [problem, setProblem] = useState("");
@@ -64,8 +74,17 @@ export function Upload({ me = false, fresh = false, onRead }) {
     setProblem("");
     setBusy("Reading your CV");
     try {
-      const done = await run("/cv/upload", body, ev => setBusy(ev.text || "Reading your CV"));
+      const done = await run(into ? cvUrl("/cv/upload", into) : "/cv/upload", body, ev => setBusy(ev.text || "Reading your CV"));
+      if (done && done.duplicate) {
+        chooseCv(done.duplicate.id);
+        invalidate("/cv*");
+        setBusy("");
+        setProblem(duplicateWords(done.duplicate));
+        if (onRead) onRead({ cv: done.duplicate.id, duplicate: done.duplicate });
+        return;
+      }
       if (done && done.state && done.state !== "done") throw new Error(done.error || "Hal could not read your CV.");
+      if (!into && done && done.result && done.result.cv) chooseCv(done.result.cv);
       invalidate("/cv*");
       await reload();
       setPasting(false);

@@ -8,6 +8,7 @@ import { Icon } from "../ui/icons.js";
 import { Bar } from "../ui/controls.js";
 import { DocPreview } from "../ui/doc-preview.js";
 import { SuggCard } from "./sugg-card.js";
+import { cvUrl } from "./chosen.js";
 
 const LIST = "/cv/suggestions";
 // "Accept all" is offered only for kinds whose fix needs no judgement.
@@ -16,7 +17,7 @@ const ACCEPT_ALL = [["Consistency", "Accept all consistency fixes", "Accepted al
 
 /** The Suggestions tab; `preview` replaces the CV preview beside the cards (My CV passes its own). */
 export function SuggTab({ preview }) {
-  const { data, error, reload } = useApi(LIST);
+  const { data, error, reload } = useApi(cvUrl(LIST));
   const [kind, setKind] = useState("All");
   const [looking, setLooking] = useState(false);
   if (error) return html`<div class="card empty">${error.message}</div>`;
@@ -27,11 +28,11 @@ export function SuggTab({ preview }) {
   const lookAgain = async () => {
     setLooking(true);
     toast("Hal is reviewing your CV again, section by section");
-    try { await run(LIST + "/look-again"); } catch (err) { toast(err.message); }
+    try { await run(cvUrl(LIST + "/look-again")); } catch (err) { toast(err.message); }
     finally { setLooking(false); reload(); }
   };
   const acceptAll = async (k, words) => {
-    try { const out = await post(LIST + "/accept-kind", { kind: k }); toast(out.accepted ? words : "Nothing to accept"); reload(); }
+    try { const out = await post(cvUrl(LIST + "/accept-kind"), { kind: k }); toast(out.accepted ? words : "Nothing to accept"); reload(); }
     catch (err) { toast(err.message); }
   };
   const busy = looking || data.state === "looking";

@@ -6,6 +6,7 @@ import { html, cx, useState } from "../core/html.js";
 import { post, put } from "../core/api.js";
 import { useApi, toast } from "../core/store.js";
 import { Icon } from "../ui/icons.js";
+import { cvUrl } from "./chosen.js";
 
 const TYPES = "/cv/types";
 const SOURCE_ROWS = 18;
@@ -20,7 +21,7 @@ function Outline({ o }) {
 function Compare({ types, a, onClose }) {
   const others = types.filter(t => t.id !== a);
   const [b, setB] = useState(others.length ? others[0].id : "");
-  const { data, error } = useApi(b ? TYPES + "/compare?a=" + encodeURIComponent(a) + "&b=" + encodeURIComponent(b) : null);
+  const { data, error } = useApi(b ? cvUrl(TYPES + "/compare?a=" + encodeURIComponent(a) + "&b=" + encodeURIComponent(b)) : null);
   return html`<section class="card" style="margin-top:12px"><div class="row"><h3 class="h3" style="margin:0;flex:1">Your CV under two types</h3>
       <select class="input" style="width:auto" aria-label="Compare with" value=${b} onChange=${e => setB(e.target.value)}>
         ${others.map(t => html`<option value=${t.id}>${t.name}</option>`)}</select>
@@ -52,7 +53,7 @@ function SourceEditor({ id, onDone }) {
 
 /** The type picker. */
 export function TypePicker() {
-  const { data, error, reload } = useApi(TYPES);
+  const { data, error, reload } = useApi(cvUrl(TYPES));
   const [comparing, setComparing] = useState(false);
   const [editing, setEditing] = useState("");
   if (error) return html`<p class="small">${error.message}</p>`;
@@ -60,7 +61,7 @@ export function TypePicker() {
   const current = data.types.find(t => t.id === data.current.id) || data.types[0];
   const choose = async t => {
     try {
-      await put("/cv/type", { id: t.id });
+      await put(cvUrl("/cv/type"), { id: t.id });
       toast("CV type changed to " + t.name + ". Hal will suggest changes to match; nothing changes until you accept.");
       reload();
     } catch (err) { toast(err.message); }
@@ -68,7 +69,7 @@ export function TypePicker() {
   const copy = async () => {
     try {
       const made = await post(TYPES + "/" + encodeURIComponent(current.id) + "/copy", {});
-      await put("/cv/type", { id: made.id });
+      await put(cvUrl("/cv/type"), { id: made.id });
       toast("Made \"" + made.name + "\", a copy of this type you can change");
       await reload();
       setEditing(made.id);

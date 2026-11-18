@@ -19,6 +19,7 @@ import { ask } from "../ui/dialog.js";
 import { EntryCard, Marks, focusSoon, marksAt } from "./edit-entry.js";
 import { JobChanges } from "./job-changes.js";
 import { applyChange, addChange, blankEntry, newId, target } from "./doc-changes.js";
+import { cvUrl } from "./chosen.js";
 
 // The record card kinds each section kind can take, as `edit.CARD_SECTIONS` the other way round.
 const FROM_RECORD = { experience: "job", volunteering: "job", education: "education", projects: "project",
@@ -70,7 +71,7 @@ function SectionCard({ s, act, marks, onCopy }) {
     onDirty }) it edits that application's CV: `onSaved` after a save or an Undo (the PDF is new), `onDirty`
     whenever unsaved changes come or go. */
 export function EditTab({ setT, job }) {
-  const src = job ? job.path : "/cv/document";
+  const src = job ? job.path : cvUrl("/cv/document");
   const { data: base, reload } = useApi(src);
   const [doc, setDoc] = useState(null);
   const [changes, setChanges] = useState([]);

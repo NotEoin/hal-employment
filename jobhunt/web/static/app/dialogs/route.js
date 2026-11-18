@@ -5,6 +5,7 @@ import { put } from "../core/api.js";
 import { useApi, closeDialog, toast, invalidate } from "../core/store.js";
 import { DlgHead } from "../ui/dialog.js";
 import { Icon } from "../ui/icons.js";
+import { cvUrl } from "../cv/chosen.js";
 
 const CHOICES = [
   ["as_is", "file", "Use my CV as it is", "Employers get your file exactly as it is. You can ask Hal for suggestions any time."],
@@ -14,11 +15,11 @@ const CHOICES = [
 
 /** The dialog. */
 export default function RouteDlg() {
-  const { data: cv } = useApi("/cv");
+  const { data: cv } = useApi(cvUrl("/cv"));
   const [r, setR] = useState(null);
   const chosen = r || (cv && cv.route) || "improve";
   const save = async () => {
-    try { await put("/cv/route", { route: chosen }); invalidate("/cv*"); closeDialog(); toast("Saved"); }
+    try { await put(cvUrl("/cv/route"), { route: chosen }); invalidate("/cv*"); closeDialog(); toast("Saved"); }
     catch (err) { toast(err.message); }
   };
   return html`<${DlgHead} title="How your CV is made" sub="Your versions are kept whichever you choose." icon="file" />

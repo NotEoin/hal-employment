@@ -1,12 +1,15 @@
-/* The Versions tab: every version of the main CV, newest first. Tick two to compare;
+/* The Versions tab: every version of the chosen CV, newest first, numbered from 1. Tick two to compare;
    use any one again; move one to the bin, where it stays for 30 days. Versions never change, so using an
-   old one only changes which one is in use. */
+   old one only changes which one is in use. "Upload a new version of this CV" reads a new file into this CV
+   as its next version; a file for a different CV is added from the CV list at the top instead. */
 import { html, useState } from "../core/html.js";
 import { get, post, del } from "../core/api.js";
 import { useApi, toast, invalidate } from "../core/store.js";
 import { dayWords, clock } from "../core/format.js";
 import { Chip, Note } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
+import { cvUrl } from "./chosen.js";
+import { Upload } from "./upload.js";
 
 const SHOW = { Reworded: "Reworded", Added: "Added", Moved: "Moved", "Left out": "Left out", Hidden: "Hidden", Shown: "Shown" };
 
@@ -25,8 +28,9 @@ function Changes({ out }) {
 
 /** The tab. */
 export function VersionsTab({ cv }) {
-  const { data: versions, reload } = useApi("/cv/versions");
+  const { data: versions, reload } = useApi(cvUrl("/cv/versions"));
   const [pick, setPick] = useState([]);
+  const [adding, setAdding] = useState(false);
   const [out, setOut] = useState(null);
   if (!versions) return html`<p class="sub">Loading your versions.</p>`;
   const flip = id => setPick(pick.includes(id) ? pick.filter(x => x !== id) : [...pick.slice(-1), id]);
@@ -50,5 +54,8 @@ export function VersionsTab({ cv }) {
           ${v.id !== first.id && html`<button type="button" class="iconbtn" aria-label=${"Move version " + v.n + " to the bin"} onClick=${() => act(() => del("/cv/versions/" + encodeURIComponent(v.id)), "Version " + v.n + " is in the bin for 30 days")}><${Icon} n="trash" c="s" /></button>`}`}
     </div>`)}
     <p class="small sub" style="margin:12px 0 0">Per-job versions live with each application in Documents. Deleted versions stay in the bin for 30 days.</p></div>
+    ${cv && html`<div class="card"><div class="row"><p class="sub grow" style="margin:0">Changed this CV outside Hal? Add the new file here. It becomes the next version of this CV, and every version before it is kept.</p>
+      <button type="button" class="btn small" aria-expanded=${adding ? "true" : "false"} onClick=${() => setAdding(!adding)}><${Icon} n="upload" c="s" />Upload a new version of this CV</button></div>
+      ${adding && html`<div style="margin-top:12px"><${Upload} into=${cv.cv.id} fresh=${true} onRead=${() => { setAdding(false); reload(); }} /></div>`}</div>`}
     ${out && html`<div class="card"><${Changes} out=${out} /></div>`}</div>`;
 }

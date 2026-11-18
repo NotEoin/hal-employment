@@ -1,6 +1,7 @@
 /* The rail: the app's main menu, grouped as designed, with counts.
 
-   The simple menu shows SIMPLE_MAIN and puts the rest under More. */
+   The simple menu shows SIMPLE_MAIN and puts the rest under More. My CV reads "My CVs" once the person has
+   several (`cvCount`, from Home and from My CV itself). */
 import { html, cx, useState, useEffect, useRef } from "../core/html.js";
 import { useStore, openDialog } from "../core/store.js";
 import { go, railPage } from "../core/router.js";
@@ -35,7 +36,7 @@ function initials(name) {
 /** The left-hand menu. */
 export function Rail() {
   const s = useStore(st => ({ route: st.route, railOpen: st.railOpen, simpleNav: st.simpleNav, counts: st.counts,
-                              session: st.session, busy: !!(st.status && st.status.busy) }));
+                              session: st.session, busy: !!(st.status && st.status.busy), cvCount: st.cvCount }));
   const [more, setMore] = useState(false);
   const narrow = useNarrow();
   const ref = useRef(null);
@@ -47,7 +48,7 @@ export function Rail() {
   const item = ([r, label, icon]) => {
     const n = (s.counts || {})[r] || 0;
     return html`<button type="button" class=${cx("nav", top === r && "on")} aria-current=${top === r ? "page" : null}
-      onClick=${() => go(r)}><${Icon} n=${icon} />${label}${n > 0 && html`<span class=${cx("count", HOT.has(r) && "hot")}>${n}</span>`}</button>`;
+      onClick=${() => go(r)}><${Icon} n=${icon} />${r === "cv" && s.cvCount > 1 ? "My CVs" : label}${n > 0 && html`<span class=${cx("count", HOT.has(r) && "hot")}>${n}</span>`}</button>`;
   };
   const all = NAV.flatMap(([, items]) => items);
   const rest = [...all.filter(i => !SIMPLE_MAIN.includes(i[0])), SETTINGS_ITEM];

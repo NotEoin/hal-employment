@@ -4,11 +4,12 @@ import { html } from "../core/html.js";
 import { put } from "../core/api.js";
 import { closeDialog, toast, invalidate } from "../core/store.js";
 import { DlgHead } from "../ui/dialog.js";
+import { cvUrl } from "../cv/chosen.js";
 
 /** The dialog. */
 export default function SendCopy() {
   const yes = async () => {
-    try { await put("/cv/send", { send: "hal_copy" }); invalidate("/cv*"); closeDialog(); toast("Employers now get Hal's copy, with this change"); }
+    try { await put(cvUrl("/cv/send"), { send: "hal_copy" }); invalidate("/cv*"); closeDialog(); toast("Employers now get Hal's copy, with this change"); }
     catch (err) { toast(err.message); }
   };
   return html`<${DlgHead} title="Send Hal's copy from now on?" icon="file" />

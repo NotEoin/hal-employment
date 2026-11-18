@@ -1,7 +1,7 @@
 """My CV in a real browser, against a real server in a temporary home with a made-up imported CV.
 
-Needs `HAL_TEST_BROWSER=1` and Playwright. This checks the header, Your CV, the Sections card, Versions and
-the "How your CV is made" dialog.
+Needs `HAL_TEST_BROWSER=1` and Playwright. This checks the header, Your CV, the Sections card, Versions,
+the "How your CV is made" dialog, and the list of CVs once there are several ("My CVs").
 """
 from __future__ import annotations
 
@@ -9,9 +9,12 @@ import contextlib
 import unittest
 
 from support.api import HalServer
+from support.fake_ai import fake_ai
+from support.make_cv_fixtures import FOLDER, NAMES
 from support.ui import AppPage, chromium, skip_unless_browser
 from test_cv_import import SITE, lay_out
 
+from jobhunt.ai.base import LLMUnavailable
 from jobhunt.cvstudio import import_v1, store
 
 # Home's summary, which this test's bare server does not draw.
@@ -103,6 +106,53 @@ class CvPage(unittest.TestCase):
         p.page.click("button:has-text('Use this')")
         p.page.wait_for_selector("text=Hal has no file of yours to send as it is. Add your CV file first.")
         self.assertEqual(store.doc()["send"], "hal_copy")
+
+    def test_several_cvs_switch_star_archive_and_restore_under_my_cvs(self) -> None:
+        _, doc = store.current()
+        museum = store.create("Museum roles", doc, origin="uploaded", what="Your file: museum.pdf", by="baseline")
+        p = self.page("cv-versions")
+        p.page.wait_for_selector(".cv-pick.on:has-text('Museum roles')")
+        self.assertEqual(p.page.inner_text("#main h1"), "My CVs")
+        self.assertIn("My CVs", p.page.inner_text("nav.rail"))
+        p.page.wait_for_selector("text=Version 1")
+        self.assertEqual(p.page.locator("input[aria-label^='Pick version']").count(), 1)
+        p.page.click(".cv-name:has-text('My CV')")
+        p.page.wait_for_selector("text=Version 4")
+        p.page.wait_for_selector(".cv-employers:has-text('version 4.')")
+        p.page.click("button[aria-label='Use this for applications: Museum roles']")
+        p.page.wait_for_selector("button[aria-label='Use this for applications: Museum roles'][aria-pressed=false]")
+        p.page.click("button[aria-label='Use this for applications: My CV']")
+        p.page.wait_for_selector("text=Hal needs one CV to use for applications")
+        self.assertTrue(store.doc(doc_id=store.DOC_ID)["starred"])
+        p.page.click(".cv-name:has-text('Museum roles')")
+        p.page.click("button:has-text('Move to the archive')")
+        p.page.wait_for_selector("button:has-text('Archived CVs (1)')")
+        self.assertEqual(p.page.locator(".cv-pick").count(), 1)
+        self.assertTrue(store.doc(doc_id=museum)["archived"])
+        p.page.click("button:has-text('Archived CVs (1)')")
+        p.page.click(".cv-archive button:has-text('Restore')")
+        p.page.wait_for_selector(".cv-pick:has-text('Museum roles')")
+        self.assertIsNone(store.doc(doc_id=museum)["archived"])
+        # the one 400 is the answer that says why the last star stays on
+        refused = [u for u in p.missing if u.endswith("/api/v2/cv/star?cv=main")]
+        self.assertEqual(len(refused), 1)
+        self.assertEqual([u for u in p.missing if u not in refused]
+                         + [e for e in p.errors if not e.startswith(FAILED_LOAD)], [])
+        self.assertEqual(p.serious_axe(), [])
+
+    def test_adding_another_cv_makes_a_new_cv_at_version_one(self) -> None:
+        self.enterContext(fake_ai({"cv_parse": LLMUnavailable("The made-up AI is switched off.")}))
+        p = self.page("cv")
+        p.page.wait_for_selector("text=At a glance")
+        p.page.click("button:has-text('Add another CV')")
+        p.page.locator(".cv-list input[aria-label='Choose your CV']").set_input_files(
+            str(FOLDER / f"{NAMES['humanities']}.pdf"))
+        p.page.wait_for_selector(f".cv-pick.on:has-text('{NAMES['humanities']}')")
+        p.page.wait_for_selector(".cv-employers:has-text('version 1.')")
+        self.assertEqual(p.page.inner_text("#main h1"), "My CVs")
+        self.assertEqual([v["n"] for v in store.versions(doc_id=store.lead_id())], [1])
+        self.assertEqual(store.versions(doc_id=store.DOC_ID)[0]["n"], 4, "the CV from before keeps its history")
+        self.assertEqual(self.errors(p), [])
 
 
 if __name__ == "__main__":

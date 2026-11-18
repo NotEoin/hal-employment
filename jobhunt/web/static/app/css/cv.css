@@ -11,3 +11,13 @@
 .cv-from-record { margin-top: 8px; }
 .cv-mark-hal { border-left: 4px solid var(--primary); padding-left: 8px; }
 .cv-mark-you { border-left: 4px dashed var(--good); padding-left: 8px; }
+.cv-list { margin: 0 0 14px; }
+.cv-picks { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.cv-pick { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 12px; padding: 4px 10px 4px 4px; min-width: 0; max-width: 100%; }
+.cv-pick.on { border-color: var(--primary); background: var(--primary-soft); }
+.cv-name { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; background: none; border: 0; padding: 4px; color: var(--ink); cursor: pointer; text-align: left; min-width: 0; font: inherit; }
+.cv-name b { overflow-wrap: anywhere; }
+.cv-star.on { color: var(--warn); }
+.cv-star.on svg.i { fill: currentColor; }
+.cv-rename { margin-top: 10px; }
+.cv-rename .input { min-width: 0; flex: 1 1 180px; }

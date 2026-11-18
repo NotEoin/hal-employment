@@ -238,7 +238,7 @@ public sector and technology. **Jobs**, **Where Hal looks** lists each one, with
 | Jobs | Matches, Saved and Hidden jobs, and Where Hal looks |
 | Applications | Every application, from Getting ready to Form filled, Sent, Interview and Offer |
 | Messages | Replies from employers and job alerts, sorted by Hal |
-| My CV | Your CV, editing it line by line ([how](../howto/edit-your-cv.md)), Hal's suggestions, its type and look, checks, and every version |
+| My CV | Your CV, editing it line by line ([how](../howto/edit-your-cv.md)), Hal's suggestions, its type and look, checks, and every version; called My CVs once you have [several](#keeping-several-cvs) |
 | Documents | The CVs and letters you approved, by application, ready to copy or send |
 | Your record | Your evidence: certificates, references, past work, and what Hal learned from them |
 | Activity | Everything Hal did and why, with Undo where it can be undone |
@@ -252,6 +252,27 @@ checks an advert is still open before writing, and reloads its page after an upd
 behaved before it could be changed.
 
 Press **Ctrl K** anywhere to search or jump to a page, and **Help and shortcuts** for the keys.
+
+## Keeping several CVs
+
+If you keep a different CV for each kind of job, give Hal each of them. The page is then called **My CVs**,
+and the list at its top shows every CV by name. Press a name to see that CV: every tab below it (Your CV,
+Edit your CV, Suggestions, Type and look, Checks and Versions) is about that CV only, and its versions are
+numbered from 1.
+
+- **Add another CV** reads a new file into a CV of its own, starting at version 1. If you add a file Hal
+  already has, Hal shows the CV it made from it instead of making a copy.
+- **Upload a new version of this CV**, in Versions, is for a file you changed outside Hal: it becomes the
+  next version of the CV you are looking at.
+- The star (**Use this for applications**) marks the CVs Hal may use for applications. A new CV is starred
+  and tried first. **Try this CV first** puts another starred CV at the front. Hal always keeps one CV
+  starred, so the last star stays on until you star another CV.
+- **Rename** changes a CV's name. Hal names a new CV after its file.
+- **Move to the archive** puts a CV away. Hal keeps all of its versions, so an application you sent with it
+  still has it. Open **Archived CVs** and press **Restore** to bring it back. Hal never deletes a CV.
+
+If you had uploaded several CVs before this version of Hal, each upload is now a CV of its own. The one you
+were using is starred and the others are in the archive.
 
 ## Sorting a big folder into your record
 

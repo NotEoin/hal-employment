@@ -8,6 +8,7 @@ import { useApi, toast } from "../core/store.js";
 import { go } from "../core/router.js";
 import { Empty } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
+import { cvUrl } from "./chosen.js";
 
 const PCT = 100;
 
@@ -58,17 +59,17 @@ function Job({ jobs, job, value, onPick, onOff }) {
 export function ChecksTab() {
   const [jobId, setJobId] = useState("");
   const [busy, setBusy] = useState(false);
-  const { data, error, reload } = useApi("/cv/checks" + (jobId ? "?job_id=" + encodeURIComponent(jobId) : ""));
+  const { data, error, reload } = useApi(cvUrl("/cv/checks" + (jobId ? "?job_id=" + encodeURIComponent(jobId) : "")));
   if (error) return html`<${Empty}>${error.message}<//>`;
   if (!data) return html`<p class="sub">Checking your CV...</p>`;
   const fix = async p => {
-    try { await post("/cv/checks/fix/" + encodeURIComponent(p.fix_id)); toast("Fixed in a new version. Your earlier version is kept."); reload(); }
+    try { await post(cvUrl("/cv/checks/fix/" + encodeURIComponent(p.fix_id))); toast("Fixed in a new version. Your earlier version is kept."); reload(); }
     catch (err) { toast(err.message); }
   };
   const ask = async () => {
     setBusy(true);
     try {
-      const done = await run("/cv/checks/recruiter", {});
+      const done = await run(cvUrl("/cv/checks/recruiter"), {});
       const out = (done && done.result) || {};
       if (out.ok === false) toast(out.why || "Hal could not read your CV as a recruiter just now.");
       reload();

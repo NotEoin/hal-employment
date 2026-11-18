@@ -6,6 +6,7 @@ import { get, put } from "../core/api.js";
 import { useApi, toast, invalidate } from "../core/store.js";
 import { Switch } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
+import { cvUrl } from "./chosen.js";
 
 const MAX_CHOICES = ["-", "1", "2", "3", "4", "6"];
 const ADDABLE = [["projects", "Projects"], ["volunteering", "Volunteering"], ["publications", "Publications"],
@@ -25,12 +26,12 @@ function AddSection({ onAdded }) {
   const [kind, setKind] = useState("projects");
   const add = async () => {
     try {
-      const doc = await get("/cv/document");
+      const doc = await get(cvUrl("/cv/document"));
       const title = ADDABLE.find(a => a[0] === kind)[1];
       const { version_id, n, ...body } = doc;
       body.sections = [...body.sections, { id: freeId(body, kind), kind, title, text: "", entries: [], also: "",
         visible: true, locked: false, max_entries: null }];
-      await put("/cv/document", { doc: body, what: "You added a section: " + title });
+      await put(cvUrl("/cv/document"), { doc: body, what: "You added a section: " + title });
       setOpen(false); onAdded(); toast("Added " + title + ". Saved as a new version.");
     } catch (err) { toast(err.message); }
   };
@@ -42,13 +43,13 @@ function AddSection({ onAdded }) {
 
 /** The card. */
 export function SectionsEditor() {
-  const { data, reload } = useApi("/cv/layout");
+  const { data, reload } = useApi(cvUrl("/cv/layout"));
   const [secs, setSecs] = useState(null);
   useEffect(() => { if (data) setSecs(data.sections); }, [data]);
   if (!secs) return html`<section class="card"><h2 class="h2">Sections</h2><p class="small sub">Loading your sections.</p></section>`;
   const save = async next => {
     setSecs(next);
-    try { await put("/cv/layout", { sections: next, locked_lines: data.locked_lines }); invalidate("/cv*"); }
+    try { await put(cvUrl("/cv/layout"), { sections: next, locked_lines: data.locked_lines }); invalidate("/cv*"); }
     catch (err) { toast(err.message); reload(); }
   };
   const move = (i, d) => { const n = [...secs]; const [x] = n.splice(i, 1); n.splice(i + d, 0, x); save(n); };

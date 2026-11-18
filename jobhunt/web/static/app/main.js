@@ -18,7 +18,7 @@ function SignedIn() {
   const home = useApi("/home");
   useEffect(() => {
     if (!home.data) return;
-    store.set({ counts: countsFrom(home.data), needs: (home.data.needs || []).length });
+    store.set({ counts: countsFrom(home.data), needs: (home.data.needs || []).length, cvCount: home.data.cv_count || 0 });
   }, [home.data]);
   return html`<${App} />`;
 }

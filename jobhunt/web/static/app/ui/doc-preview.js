@@ -4,6 +4,7 @@
    it is kept out of the tab order, because the card's own button is what the keyboard reaches. */
 import { html, useEffect, useRef, useState } from "../core/html.js";
 import { on } from "../core/events.js";
+import { chosenCv } from "../cv/chosen.js";
 
 const PAGE_W = 794;   // A4 width in CSS pixels at 96 per inch
 const PAGE_H = 1123;  // A4 height in CSS pixels
@@ -15,6 +16,7 @@ export function previewUrl({ versionId = "current", look, type, hl = [], rev } =
   if (type) q.set("type", type);
   if (hl.length) q.set("hl", hl.join(","));
   if (rev) q.set("r", String(rev));
+  if (versionId === "current" && chosenCv()) q.set("cv", chosenCv());
   const qs = q.toString();
   return "/api/v2/cv/versions/" + encodeURIComponent(versionId) + "/preview.html" + (qs ? "?" + qs : "");
 }

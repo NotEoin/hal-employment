@@ -404,7 +404,10 @@ runs: tests use `tests/support/fake_claude/`.
   an unknown id), the lead CV without it, so the setup guide and older clients keep working; a route that
   names a version acts on that version's CV. `GET /cv/cvs` answers `{cvs, archived, lead}`; `PUT /cv/star`
   (`{on}`), `PUT /cv/archive` (`{on}`, false restores), `PUT /cv/name` (`{name}`), `PUT /cv/order` (`{ids}`)
-  and `DELETE /cv` (archives) answer the same list.
+  and `DELETE /cv` (archives) answer the same list. The page keeps the chosen CV in `cv/chosen.js`, and
+  `cvUrl()` adds it to every My CV call, so each CV's answers are cached under their own address and every
+  tab and dialog acts on the CV the list at the top shows (`cv/cv-list.js`). The page and the menu say "My
+  CVs" once there are several, counted by `GET /cv/cvs` and Home's `cv_count`.
 - Per-CV data: `cv_suggestions.doc_id` (a review, its list, "Accept all" and the "nothing more" mark in `meta`
   are per CV), line preferences, `cv_parse_reports` and `cv_checks` (by version). Tone and length preferences,
   `cv_keywords_off` (by job) and `cv_types` hold for every CV.

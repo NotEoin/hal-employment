@@ -5,15 +5,16 @@ import { html, cx } from "../core/html.js";
 import { useApi, toast } from "../core/store.js";
 import { put } from "../core/api.js";
 import { DocPreview } from "../ui/doc-preview.js";
+import { cvUrl } from "./chosen.js";
 
 /** The gallery of looks for Hal's copy of the CV. */
 export function LookPicker({ versionId = "current" }) {
-  const looks = useApi("/cv/looks", { on: [ev => ev.type === "cv"] });
+  const looks = useApi(cvUrl("/cv/looks"), { on: [ev => ev.type === "cv"] });
   if (looks.error) return html`<p class="small sub">${looks.error.message}</p>`;
   if (!looks.data) return html`<p class="small sub">Loading the looks.</p>`;
   const choose = async l => {
     try {
-      await put("/cv/look", { id: l.id });
+      await put(cvUrl("/cv/look"), { id: l.id });
       looks.reload();
       toast("Look changed to " + l.name + ". Your words stay the same.");
     } catch (err) { toast(err.message); }

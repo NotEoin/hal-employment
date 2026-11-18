@@ -13,7 +13,7 @@ const TOAST_MS = 4500;        // long enough to read
 const TOAST_UNDO_MS = 8000;   // long enough to reach the Undo button by keyboard
 
 export const store = {
-  s: { route: "home", dialog: null, toasts: [], session: null, status: null, counts: {}, needs: 0,
+  s: { route: "home", dialog: null, toasts: [], session: null, status: null, counts: {}, needs: 0, cvCount: 0,
        theme: "system", simpleNav: false, railOpen: false, setup: { open: false, step: 0 },
        reconnecting: false, offline: false },
   ls: new Set(),

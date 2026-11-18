@@ -7,6 +7,7 @@ import { useApi, toast, invalidate } from "../core/store.js";
 import { go } from "../core/router.js";
 import { Seg } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
+import { cvUrl } from "./chosen.js";
 
 const TYPES = "/cv/types";
 const PAGES = [[1, "1 page"], [2, "Up to 2 pages"], [0, "As needed"]];
@@ -21,20 +22,20 @@ function Row({ lab, sub, children }) {
 
 /** The Writing card. */
 export function WritingSettings() {
-  const { data, error, reload } = useApi(TYPES);
+  const { data, error, reload } = useApi(cvUrl(TYPES));
   const [word, setWord] = useState("");
   if (error) return html`<section class="card"><h2 class="h2">Writing</h2><p class="small">${error.message}</p></section>`;
   if (!data) return html`<section class="card"><h2 class="h2">Writing</h2><p class="small sub">Loading...</p></section>`;
   const w = data.writing;
   const save = async change => {
     try {
-      const out = await put("/cv/writing", change);
+      const out = await put(cvUrl("/cv/writing"), change);
       toast(out.note || "Saved for " + out.type.name);
       reload();
     } catch (err) { toast(err.message); }
   };
   const spelling = async v => {
-    try { await put("/settings/cvdocs.spelling", { value: v }); invalidate(TYPES); toast("Saved"); }
+    try { await put("/settings/cvdocs.spelling", { value: v }); invalidate("/cv*"); toast("Saved"); }
     catch (err) { toast(err.message); }
   };
   const pages = PAGES.some(([v]) => v === w.pages) ? w.pages : 2;
