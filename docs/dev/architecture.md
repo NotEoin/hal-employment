@@ -2170,7 +2170,9 @@ upload, inbox or move; `roots`, `label`, `state` new | sorting | ready | failed 
   while a sort sorts or waits (`sorts.waiting`: ready, with rows still proposed), the rail counts those
   sorts on Your record (`sections/home.py`, Home's `counts.record`; a `sort` event reloads `/home`), and
   `useSortsOpenWhenReady` opens the review when a sort the page saw sorting turns ready. Lecture rows are
-  saved unticked (`sorts.UNTICKED`), and the lecture step says why once. An add of more than
+  saved unticked (`sorts.UNTICKED`), and the lecture step says why once. A row's tick and Showcase boxes show
+  what the person pressed until the table loads again after the change is saved, since the change's own
+  `sort` event reloads the table before the change's reply comes. An add of more than
   `CONFIRM_OVER` (50) ticked files, counted afresh from the server, asks first in the in-page confirm
   dialog (`ui/dialog.js` `ask`) with the reading time: the review's `read` is `sorts.read_estimate`, the
   seconds per file of the latest `READ_SAMPLE` (10) finished `record.sources` and `record.sort_accept`

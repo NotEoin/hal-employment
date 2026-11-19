@@ -50,6 +50,9 @@ What changed in each version, in plain words.
   the step had finished loading could be run together with the one Hal had saved, so **Test** said it was
   not an email address. Now what you type is kept.
 
+- **A tick stays on while it saves.** In **Sort a big folder for me**, a tick could go off again for a
+  moment just after you pressed it, so it looked as if it had not taken. Now it stays on while Hal saves it.
+
 ## 2.3.2 (2026-11-19)
 
 ### What's new

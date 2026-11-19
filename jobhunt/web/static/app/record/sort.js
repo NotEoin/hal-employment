@@ -133,15 +133,30 @@ function kindOptions(sections, section) {
 /** One proposal, or one module's group of files: tick, file, section, kind, card, showcase, and why. A group
     is changed as a whole, and "Show the files" lists its own rows. */
 function Row({ row, sections, cards, sortId, onOpen }) {
-  const change = body => act(() => row.group ? post(SORT + "/" + sortId + "/groups", { group: row.group, ...body })
-    : put("/record/sort-rows/" + row.id, body));
+  // A tick shows what the person pressed until the table is loaded again after the last change saved: a
+  // re-draw from the table's older copy took the box back off while the change was still saving (CI, 2026-11-19).
+  const [pending, setPending] = useState({});
+  const saving = useRef(0);
+  useEffect(() => { if (!saving.current) setPending({}); }, [row]);
+  const change = async body => {
+    const ticks = Object.fromEntries(Object.entries(body).filter(([key]) => key === "ticked" || key === "star"));
+    setPending(p => ({ ...p, ...ticks }));
+    saving.current += 1;
+    const out = await act(() => row.group ? post(SORT + "/" + sortId + "/groups", { group: row.group, ...body })
+      : put("/record/sort-rows/" + row.id, body));
+    saving.current -= 1;
+    if (out === null && !saving.current) setPending({});   // not saved: the table's copy is right again
+    return out;
+  };
+  const ticked = "ticked" in pending ? pending.ticked : row.ticked;
+  const star = "star" in pending ? pending.star : row.star;
   const kinds = kindOptions(sections, row.section);
   const choices = row.target_kind ? (cards[row.target_kind] || []) : [];
   const uid = "rec-sort-" + (row.id == null ? row.group : row.id);
   const open = row.state === "proposed" || row.state === "left_out" || row.state === "copy" || row.state === "failed";
   const unit = row.section === "project" ? "folder" : "file";     // a project's group is its numbered folders
   return html`<tr data-row=${row.id == null ? row.group : row.id}>
-    <td>${row.state === "proposed" && html`<input type="checkbox" checked=${row.ticked} aria-label=${"Add " + row.name}
+    <td>${row.state === "proposed" && html`<input type="checkbox" checked=${ticked} aria-label=${"Add " + row.name}
       onChange=${e => change({ ticked: e.target.checked })} />`}</td>
     <td><b>${row.name}</b>${row.group && html` <span class="small sub">(${plural(row.count, unit)})</span>`}
       <${PathText} rel=${row.rel} />
@@ -166,7 +181,7 @@ function Row({ row, sections, cards, sortId, onOpen }) {
         <option value="">${row.needs_card ? "Choose one" : "None"}</option>
         ${choices.map(c => html`<option value=${String(c.id)}>${c.title}</option>`)}</select>` : row.target_title}
       ${row.needs_card && row.state === "proposed" && html`<div class="small sub">Choose one, or add your CV first: Hal finds your courses and jobs in it.</div>`}</td>
-    <td>${row.can_star && row.state === "proposed" && html`<label class="small"><input type="checkbox" checked=${row.star}
+    <td>${row.can_star && row.state === "proposed" && html`<label class="small"><input type="checkbox" checked=${star}
       onChange=${e => change({ star: e.target.checked })} /> Showcase</label>`}</td></tr>`;
 }
 

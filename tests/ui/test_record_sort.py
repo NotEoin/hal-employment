@@ -285,6 +285,31 @@ class SortAFolder(unittest.TestCase):
         self.assertTrue(runner.idle(WAIT_S))
         self.assertEqual(len(self.listed("lecture")), MANY)
 
+    def test_a_tick_stays_on_while_the_table_reloads_before_the_change_is_answered(self) -> None:
+        # The change's own "sort" event reloaded the table before the change's reply came; the reload drew the
+        # older copy at once and took the tick back off (timed out under load, 2026-11-19).
+        sort_id = self.sorted_dump()
+        p = self.page()
+        p.go(f"sort-{sort_id}")
+        review = p.page.locator("section.rec-sort")
+        p.shows(review.get_by_text("Ready for you to check"), "the review")
+        self.step(review, 4)
+        module = review.get_by_role("checkbox", name="Add HIS2040 Archival Methods")
+        p.shows(module, "the module's row")
+        changes, reloads = [], []
+        p.page.route("**/groups", lambda route: changes.append(route))
+        with p.page.expect_request("**/groups"):
+            module.click()
+        p.page.route(f"**/record/sort/{sort_id}?*", lambda route: reloads.append(route))
+        with p.page.expect_request(f"**/record/sort/{sort_id}?*"):
+            answer = changes[0].fetch()   # the server saves and says so on the event stream; the page reloads
+        self.assertTrue(module.is_checked(), "the tick stays while the change and the reload are on their way")
+        p.page.unroute(f"**/record/sort/{sort_id}?*")
+        changes[0].fulfill(response=answer)
+        for route in reloads:
+            route.continue_()
+        p.shows(review.get_by_role("checkbox", name="Add HIS2040 Archival Methods", checked=True), "the saved tick")
+
     def test_reading_can_be_stopped_and_the_add_undone(self) -> None:
         read_all = source_actions.read_all
 
