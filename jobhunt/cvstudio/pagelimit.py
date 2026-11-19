@@ -43,7 +43,7 @@ KEY_CHARS = 20                  # as the export cache's file names, so a count's
 TEST_ENV, REAL_PRINT_ENV = "HAL_TEST_MODE", "HAL_TEST_REAL_PRINT"
 CHOICE_WORDS = {0: "No limit", 1: "One page", 2: "Two pages", 3: "Three pages", 4: "Four pages"}
 OFFERED = (0, 1, 2)             # the card's choices for every CV; longer ones only from a copied type (`choices`)
-OVER = "This CV is {now}{pages} pages. You asked for {limit}."
+OVER = "This CV is {now}{pages} pages. Its limit is {limit}."
 UNKNOWN = "Hal cannot count this CV's pages: no browser on this computer can print it."
 UNKNOWN_FAILED = "Hal could not print this CV to count its pages just now. It tries again in a few minutes."
 UNKNOWN_JOB = "Hal could not count the pages of this CV."
@@ -52,25 +52,25 @@ RETRY_S = 120                   # a failed print is tried again after 2, 4, 6 ..
 MAX_TRIES = 5                   # then not again until Hal restarts: the browser is broken, not slow
 NO_PRINTER_RETRY_S = 3600       # a browser installed meanwhile is found within the hour
 HELD = "Hal undid {n} of its own changes to keep this CV to {limit}. Press Redo to use one anyway."
-HELD_OVER_ALREADY = ("Without Hal's changes your CV is already {alone} pages, more than the {limit} you asked for. "
+HELD_OVER_ALREADY = ("Without Hal's changes your CV is already {alone} pages, more than its limit of {limit}. "
                      "Hal kept its changes that add no page and undid {n} that would. Press Redo to use one anyway.")
-HELD_OVER_YOURS = ("Your own edits for this job make it {alone} pages, more than the {limit} you asked for. Hal kept "
+HELD_OVER_YOURS = ("Your own edits for this job make it {alone} pages, more than its limit of {limit}. Hal kept "
                    "its changes that add no page and undid {n} that would. Press Redo to use one anyway.")
-SUGGESTION_HELD = ("Hal's wording would make this CV {pages} pages, and you asked for {limit}, so Hal did not use "
+SUGGESTION_HELD = ("Hal's wording would make this CV {pages} pages, and its limit is {limit}, so Hal did not use "
                    "it. Edit the words to use them anyway.")
 # The same for a CV over its limit already: Hal's wording would add a page to it.
-SUGGESTION_HELD_OVER = ("Hal's wording would make this CV {pages} pages instead of {before}, more than the {limit} "
-                        "you asked for, so Hal did not use it. Edit the words to use them anyway.")
+SUGGESTION_HELD_OVER = ("Hal's wording would make this CV {pages} pages instead of {before}, more than its limit of "
+                        "{limit}, so Hal did not use it. Edit the words to use them anyway.")
 SUGGESTION_SHORTER = "Hal used its shorter wording, so this CV keeps to {limit}."
 SUGGESTION_SHORTER_OVER = "Hal used its shorter wording, so this CV stays at {pages}."
 FIXES_HELD = "Hal left out {n} {fixes} that would make this CV longer than {limit}."
 FIXES_HELD_OVER = ("Hal left out {n} {fixes}: with every fix this CV would be {pages} pages instead of {before}, "
-                   "more than the {limit} you asked for.")
+                   "more than its limit of {limit}.")
 HOLD_TRIES = 8                  # prints at most while leaving Hal's fixes out of Accept all, a second or so each
 FRESH_SHORTER = "Hal wrote a shorter profile, so this CV keeps to {limit}."
 FRESH_NO_PROFILE = ("Hal left out the profile, so this CV keeps to {limit}. Add one on Edit your CV if you "
                     "want it.")
-FRESH_OVER = ("This CV is {pages} pages, and you asked for {limit}. Your answers alone take more room than that, "
+FRESH_OVER = ("This CV is {pages} pages, and its limit is {limit}. Your answers alone take more room than that, "
               "so Hal kept them all.")
 
 # (html, out, expect_name, expect_text) -> pages; raises `printer.PrintError` when it cannot print. None: the
@@ -136,7 +136,7 @@ def choices(limit: int, rule: int) -> list[list]:
 def words(pages: int | None, limit: int, *, now: bool = False, job: bool = False) -> str:
     """The warning in plain words, "" when the CV keeps to its limit or has none.
 
-    `now` after a save ("This CV is now 3 pages. You asked for 2."); `job` for an application's CV.
+    `now` after a save ("This CV is now 3 pages. Its limit is 2."); `job` for an application's CV.
     """
     if not limit:
         return ""

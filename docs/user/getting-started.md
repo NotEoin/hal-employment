@@ -328,7 +328,7 @@ Each CV has its own length. Open **My CV**, **Type and look**, and choose **Keep
 gave it three or four pages, **Three pages** or **Four pages** is offered too, for the CVs of that type.
 
 Hal counts the pages of the CV as it prints, in the look you chose, and says "It prints on 2 pages now".
-When the CV runs longer than you asked, Hal tells you, for example "This CV is now 3 pages. You asked for
+When the CV runs longer than its limit, Hal tells you, for example "This CV is now 3 pages. Its limit is
 2." It shows that after each save in **Edit your CV** and on the **Length** card. Hal never cuts your lines
 and never stops a save: what to shorten is your choice. The length check on **Checks** uses the same count.
 
@@ -342,7 +342,7 @@ a page and take the CV past that length; a CV that is already longer keeps every
 - **For a job.** When Hal adjusts your CV for an application and a change of its own would add a page past
   your length, Hal undoes it, the ones that add words first, newest first. Changes that shorten a line always
   stay. Each change Hal undid says **Undone by Hal to keep to your page limit**, and **Redo** puts it back if
-  you want it anyway. When your CV, or your own edits for that job, already make it longer than you asked,
+  you want it anyway. When your CV, or your own edits for that job, already make it longer than its limit,
   the CV tab says so with the number of pages.
 - **Suggestions.** When you accept Hal's wording on **Suggestions** and it would add a page past your length,
   Hal uses a shorter wording of the same suggestion, or leaves the line as it is and tells you the pages.
@@ -353,7 +353,7 @@ a page and take the CV past that length; a CV that is already longer keeps every
   says how many pages the CV is.
 
 An application's CV tab and its **Documents** step count the pages of the PDF employers get for that job and
-warn you before you approve, for example "This CV is 3 pages. You asked for 2." You can still approve it.
+warn you before you approve, for example "This CV is 3 pages. Its limit is 2." You can still approve it.
 
 ## Sorting a big folder into your record
 

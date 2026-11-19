@@ -27,8 +27,8 @@ What changed in each version, in plain words.
   longer on the Writing card, so changing it no longer makes a copy of the type.
 
 - **Real page counts.** Hal counts the pages of your CV as it prints in your look, instead of guessing from
-  the number of words. After you save in **Edit your CV**, Hal says when the CV runs longer than you asked,
-  for example "This CV is now 3 pages. You asked for 2." Your save always stands, and the length check on
+  the number of words. After you save in **Edit your CV**, Hal says when the CV runs longer than its limit,
+  for example "This CV is now 3 pages. Its limit is 2." Your save always stands, and the length check on
   **Checks** uses the same count. Where no browser can print, Hal says it cannot count the pages; when one
   print fails, Hal tries again a few minutes later.
 
@@ -37,7 +37,7 @@ What changed in each version, in plain words.
   newest first, and says so beside each one; **Redo** puts one back. When you accept a suggestion, Hal uses
   a shorter wording, or leaves the line and says why with the pages; **Accept all** leaves out the fixes that
   would add a page. **Build me a fresh CV** writes a shorter profile, or none. A CV that is already longer
-  than you asked keeps all of Hal's help that adds no page. Your own lines and answers are never cut. An
+  than its limit keeps all of Hal's help that adds no page. Your own lines and answers are never cut. An
   application's CV tab and its Documents step say how many pages the CV employers get is before you approve.
 
 ### Fixed

@@ -64,7 +64,7 @@ class PageLimit(unittest.TestCase):
                 card.get_by_role("radio", name=words).click()
                 # the toast, after the choice is stored: one page is also the starting type's own rule
                 p.page.wait_for_selector("text=Saved. Hal keeps an eye on this CV's length.")
-                p.page.wait_for_selector(f"text=This CV is {PRINTED} pages. You asked for {pages}.")
+                p.page.wait_for_selector(f"text=This CV is {PRINTED} pages. Its limit is {pages}.")
                 self.assertEqual(pagelimit.limit_of(self.doc_id), (pages, True))
                 self.assertEqual(card.get_by_role("radio", name=words).get_attribute("aria-checked"), "true")
                 card.get_by_role("radio", name="No limit").click()
@@ -98,7 +98,7 @@ class PageLimit(unittest.TestCase):
                 line.fill(f"Helped first-years debug their labs ({size})")
                 n = len(store.versions())
                 p.page.locator("button:has-text('Save changes')").click()
-                p.page.wait_for_selector(f"text=This CV is now {PRINTED} pages. You asked for 2.")
+                p.page.wait_for_selector(f"text=This CV is now {PRINTED} pages. Its limit is 2.")
                 self.assertEqual(len(store.versions()), n + 1, "the save is never refused")
                 self.assertEqual(p.sideways(), 0)
                 self.assertEqual(p.serious_axe(), [])
@@ -150,7 +150,7 @@ class JobCvLength(unittest.TestCase):
                 self.addCleanup(p.close)
                 p.page.goto(self.hal.open_url())
                 p.open("app-" + quote(APP_JOB, safe=""))
-                over = f"This CV is {PRINTED} pages. You asked for 2."
+                over = f"This CV is {PRINTED} pages. Its limit is 2."
                 p.shows(p.page.locator(".approve .cv-length", has_text=over + " You can still approve it."),
                         "the warning before Approve")
                 note = p.page.locator(".cv-job .cv-length")
