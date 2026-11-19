@@ -9,6 +9,10 @@ What changed in each version, in plain words.
 - After one busy moment, Hal could stop making to-dos from your emails and stop preparing applications
   and looking for contacts ahead of time, until it was restarted. It now recovers on its own.
 
+- **Reading your record no longer stops with "database is locked".** A file being read into your record
+  could fail with that message when Hal wrote something else at the same moment, such as the note of how
+  long its AI took. The read now carries on as it should.
+
 ## 2.3.3 (2026-11-19)
 
 ### What's new

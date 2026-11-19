@@ -18,7 +18,8 @@ Design decisions, each with its reason:
   ingest costs one full read, never a wrong match.
 - A connection is named by a token in its own temporary table, not by the object: `sqlite3.Connection`
   takes no weak reference, and holding the object would keep a closed or forgotten connection's file open.
-  Indexes of at most `CONNECTIONS` connections are kept.
+  Indexes of at most `CONNECTIONS` connections are kept. Naming a connection outside a transaction commits at
+  once, so it never leaves the caller in a transaction whose reads would hold an old snapshot (`_token`).
 """
 from __future__ import annotations
 
@@ -81,8 +82,14 @@ def _token(con: sqlite3.Connection) -> str:
     if row is not None:
         return row[0]
     token = uuid.uuid4().hex
+    opened = not con.in_transaction
     con.execute(f"CREATE TEMP TABLE IF NOT EXISTS {TOKEN_TABLE} (token TEXT NOT NULL)")
     con.execute(f"INSERT INTO temp.{TOKEN_TABLE} (token) VALUES (?)", (token,))
+    if opened:
+        # The insert's implicit BEGIN would stay open holding no lock on the database, so the next read pinned a
+        # snapshot and the caller's next write failed at once with "database is locked" when any other
+        # connection had committed meanwhile; a record read failed so in 2.3.3's CI (2026-11-19).
+        con.commit()
     return token
 
 
