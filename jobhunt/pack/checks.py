@@ -3,16 +3,16 @@
 
 Design decisions, each with its reason:
 
-- One check, not one per paragraph (owner, 2026-11-19): `settle` makes one `verify` call on every draft of a
-  job at once (the letter, the message and the answers in a pack), against the facts their writer was given,
-  then redrafts each draft at most once with everything wrong with it stated: the claims the check found, the
-  claims the checks with no AI found (`code_claims`, `lifted_claims`), the writing rules' high-severity breaks
-  (`writing.check`), wording that says how the draft was made, such as a stock tie to the job ("aligns with",
-  `writing.plain.problems`), sentences restating the advert (`drafts.echoes`), and what its `Draft.extra` adds (an
-  answer repeating an earlier one, a letter short of its length or opening its paragraphs alike). No guard
-  against invented facts is dropped: the checks with no AI run again on the redraft, and a claim the check
-  found that the redraft still makes (`still_says`) is listed under "Check before sending". The redraft is
-  not checked by the AI again: one redraft, never a loop.
+- One check, not one per paragraph (owner, 2026-11-19): `settle` makes one `verify` call on every draft of a job
+  at once (the letter, the message and the answers in a pack), against the facts their writer was given, then
+  redrafts each draft at most once with everything wrong with it stated: the claims the check found, the claims
+  the checks with no AI found (`code_claims`, `counts.miscounted`, `lifted_claims`), the writing rules'
+  high-severity breaks (`writing.check`), wording that says how the draft was made, such as a stock tie to the
+  job ("aligns with", `writing.plain.problems`), sentences restating the advert (`drafts.echoes`), and what its
+  `Draft.extra` adds (an answer repeating an earlier one, a letter short of its length or opening its paragraphs
+  alike). No guard against invented facts is dropped: the checks with no AI run again on the redraft, and a
+  claim the check found that the redraft still makes (`still_says`) is listed under "Check before sending". The
+  redraft is not checked by the AI again: one redraft, never a loop.
 - The advert and the company brief go to the check as the employer's own words, never flagged for being
   restated: most of the "unsupported" claims in real packs were the employer's own facts (2026-11-06). A
   claim one line of the facts the writer had states (`drafts.stated_in`) is supported, whatever the AI said.
@@ -29,7 +29,7 @@ from jobhunt.pack.fitmap import known_tools
 from jobhunt.pack.reading import SOMEONE, Brief, _record_part, prompt
 from jobhunt.profile import writing as profile_writing
 from jobhunt.writing import check as writing_check
-from jobhunt.writing import drafts, plain, stage, strengths, taught
+from jobhunt.writing import counts, drafts, plain, stage, strengths, taught
 
 CUT_FLAG = "the {what} stopped mid-sentence twice; Hal kept it to its last full sentence, so check its ending"
 CUT_WHAT = {"letter": "cover letter", "message": "message to the person hiring"}
@@ -214,9 +214,11 @@ def settle(brief: Brief, written: list[Draft], *, employer: tuple[str, ...], giv
         for d in _owners(claim, present):
             found[id(d)].append(claim)
 
+    every = "\n".join([own, brief.facts, brief.kept, *employer])
+
     def without_ai(text: str) -> list[str]:
-        return code_claims(text, facts=brief.facts, kept=brief.kept) + lifted_claims(text, employer, names,
-                                                                                     f"{own}\n{brief.facts}")
+        return code_claims(text, facts=brief.facts, kept=brief.kept) + counts.miscounted(text, every) \
+            + lifted_claims(text, employer, names, f"{own}\n{brief.facts}")
 
     for d in present:
         claims = found[id(d)] + without_ai(d.text())

@@ -26,6 +26,9 @@ Rules:
   has no number, say who it served or what it made possible. The fit map is a guide to what to argue, never
   a fact. Never add a duty, a result, a length of time, or what the work taught or proved, that the facts do
   not state.
+- Use a number or a length of time only as the facts state it, counting the same thing: if the facts say one
+  tool was tested in 9 runs, never write 9 tools, and never write "for four years" unless the facts or their
+  dates give four years.
 - Today's date and the applicant's stage are given. Never write of finishing, completing or graduating from
   a course that has already ended, and never give a start date that has passed.
 - Each piece of work says where it was done (degree work, university team project, at work, personal

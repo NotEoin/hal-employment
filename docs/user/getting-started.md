@@ -118,9 +118,11 @@ thing about the employer that draws you, tied to something of yours, and closes 
 step. The letter's notes list the work it names under **Evidence**.
 
 Then Hal checks everything once. One check reads the letter, the message and the answers together against
-the facts the writer was given, and Hal's own checks look for a number or tool your facts do not give (a
-tool you used on a project must be in that project's own facts, as a list of your skills says what you
-know, not where you used it), a tool or name that belongs to another of your projects, a project placed
+the facts the writer was given, checking every number and length of time, and Hal's own checks look for a
+number or tool your facts do not give (a tool you used on a project must be in that project's own facts,
+as a list of your skills says what you know, not where you used it), a number that counts something other
+than what your facts count (9 tests of one project are not 9 projects), a length of time your facts do not give, a tool
+or name that belongs to another of your projects, a project placed
 somewhere else (your degree instead of your own time), a team's work written as yours alone, a degree you
 do not hold, a phrase of the advert told as something you did, or a sentence that ties the work to the job
 with stock words such as "aligns with". A letter well under the length you prefer, or with paragraphs that

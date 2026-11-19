@@ -10,7 +10,9 @@ from jobhunt.ai import effort, prompts
 DOCUMENT_CALLS = {"analyse": (1950, 300), "brief": (2900, 120), "fit": (4000, 400), "letter": (5000, 400),
                   "message": (4300, 120), "answers": (4600, 300), "verify": (6100, 130)}
 REDRAFTED = ("letter", "message", "answers")    # each may be written once more, from about the same request
-FIRST_DRAFTS_S = 180           # about three minutes when nothing needs a redraft (owner's aim: about two)
+# About three minutes when nothing needs a redraft (owner's aim: about two): 188 s at most, of which the check at
+# `medium` takes 38 s, 14 s more than at `low` (768 more thinking tokens at 55 a second, 2026-11-19).
+FIRST_DRAFTS_S = 190
 WORST_S = 300                  # five minutes, the owner's most for one application (2026-11-19)
 READ_TOKENS_S, WRITE_TOKENS_S = 500, 55     # the owner's card (2026-11-19)
 
@@ -32,13 +34,13 @@ class Levels(unittest.TestCase):
             with self.subTest(pid):
                 self.assertEqual(effort.budget(pid, effort.CAP_DEFAULT), (effort.HIGH, 8192))
 
-    def test_the_letter_and_the_fit_map_think_at_medium_and_the_rest_little(self):
-        """The letter is written in one call that chooses and weaves the evidence; the check stays at low
-        (2026-11-19)."""
+    def test_the_letter_the_fit_map_and_the_check_think_at_medium_and_the_rest_little(self):
+        """The letter is written in one call that chooses and weaves the evidence; the one check let an invented
+        span of time and a miscounted number through at low (2026-11-19)."""
         self.assertEqual(effort.of("brief").level, effort.NONE)
-        for pid in ("verify", "message", "answers", "analyse"):
+        for pid in ("message", "answers", "analyse"):
             self.assertEqual(effort.of(pid).level, effort.LOW, pid)
-        for pid in ("fit", "letter"):
+        for pid in ("fit", "letter", "verify"):
             self.assertEqual(effort.of(pid).level, effort.MEDIUM, pid)
 
     def test_an_applications_documents_fit_their_budget_even_when_every_call_thinks_its_whole_budget(self):

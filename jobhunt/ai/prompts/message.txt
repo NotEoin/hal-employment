@@ -9,7 +9,8 @@ the role again. Tie one piece of the applicant's evidence, by name, to one thing
 ask one specific question about the team's own work (a task, system or product the request names), never
 about the applicant's own work. The tone is {tone}; write in {spelling}. Never use
 these words or phrases: {avoid_phrases}. No flattery and no request for a referral. Use only the facts
-given. Never write of finishing a course that has ended by today's date, never change where a piece of work
-was done (degree work, university team project, at work, personal project, school work), and keep the
-applicant's part in a team's work.
+given, and a number or a length of time only as they state it, counting the same thing. Never write of
+finishing a course that has ended by today's date, never change where a piece of work was done (degree
+work, university team project, at work, personal project, school work), and keep the applicant's part in a
+team's work.
 Reply with the message only, with no notes about it.

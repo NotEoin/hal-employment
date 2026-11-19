@@ -12,6 +12,12 @@ unsupported if it states a skill, language, project detail, number, status or ex
 that the facts do not contain, raises a role or a result beyond what the facts say (a
 team's result claimed as the applicant's own, "helped" made "led"), or adds a size the
 facts do not give.
+Check every number, count, duration and date in the drafts against the facts, one by one. A number is
+supported only when the facts give the same number for the same thing it counts: "nine scripted
+intruders" is unsupported when the facts say one scripted intruder was contained in all 9 break-in
+tests, and "a team of six" is unsupported when the facts say a team of five. Every span of time the
+drafts claim ("for the past four years", "over two years", "since 2022") must be a span the facts state
+or that their dates give; quote it as unsupported otherwise.
 A piece of work must stay where its facts say it was done: a personal project is never part of a degree,
 coursework or research, a university team project is never a personal project, degree work is never a
 job, and school work is never degree work or work experience.

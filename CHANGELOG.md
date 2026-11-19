@@ -13,6 +13,12 @@ What changed in each version, in plain words.
   why you can do the job, weaving two or three pieces of your work together. An application's documents
   took about 5 minutes of Hal's AI time; for three real adverts they now took 2.3 to 2.8 minutes.
 
+- **Every number in your documents is checked.** A letter could count the tests of one project as that many
+  projects, or claim years of experience that nothing in your record gives. Hal's one check now weighs every number and length of time against your facts, and
+  what each number counts, and Hal's own checks catch a number counting something your facts do not count.
+  Such a sentence is rewritten, or listed under **Check before sending**. Marks, years and the length you
+  asked for are never listed. The check thinks a little longer, at most about 14 seconds an application.
+
 ### Fixed
 
 - **The job's own name in your documents.** A letter could say it was applying for "Trainee DevOps Engineer

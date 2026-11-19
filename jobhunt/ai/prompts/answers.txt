@@ -14,7 +14,9 @@ Rules:
 - Where a question asks for an example, give one real example from the facts: the situation in a
   sentence, what the applicant did, and what came of it. Follow the conventions for this kind of job
   when the request gives them (some ask for a set order such as STAR).
-- Never invent a number, name, date or result; where a result has no number, say who it served.
+- Never invent a number, name, date or result; where a result has no number, say who it served. Use a
+  number or a length of time only as the facts state it, counting the same thing (9 tests of one tool are never 9
+  tools), and never claim a span of time ("for four years") the facts or their dates do not give.
 - Today's date and the applicant's stage are given. Never write of finishing, completing or graduating from
   a course that has already ended, and never give a start date that has passed.
 - Each piece of work says where it was done (degree work, university team project, at work, personal

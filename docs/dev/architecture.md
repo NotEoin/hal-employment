@@ -385,10 +385,10 @@ comes from their settings.
 Every prompt has an effort level in one table, `effort.LEVELS`, with a reason: `none` only where there is
 nothing to reason about (a short note, a name), `low` for writing a paragraph, a check against facts or a
 pick that must judge (thinking off answered a small reasoning question wrongly on Hal's Qwen 3.8 model,
-2026-11-19), `medium` for weighing evidence (`fit`), writing the whole letter in one go (`letter`) and a
-recruiter's read, `high` for reads of the record, which keep the thinking they had (with thinking off a read
-kept 55 facts against 77, 2026-11-12). Each level has a thinking budget (`effort.BUDGETS`: 0, 512, 1,280
-and 8,192 tokens), held under the person's hard cap `ai.thinking_cap_tokens` (default 8,192, so nothing thinks less than its level until the person lowers it;
+2026-11-19), `medium` for weighing evidence (`fit`), writing the whole letter in one go (`letter`), the
+one check of an application's drafts (`verify`) and a recruiter's read, `high` for reads of the record,
+which keep the thinking they had (with thinking off a read kept 55 facts against 77, 2026-11-12).
+Each level has a thinking budget (`effort.BUDGETS`: 0, 512, 1,280 and 8,192 tokens), held under the person's hard cap `ai.thinking_cap_tokens` (default 8,192, so nothing thinks less than its level until the person lowers it;
 0 turns thinking off). `ai.chat` puts both on the request (`ChatRequest.effort`, `thinking_budget`) and Hal's
 gateway sends them as `reasoning_effort` and `thinking_budget_tokens`; other backends send neither. A prompt
 missing from the table is sent no level and the cap.
@@ -396,8 +396,8 @@ missing from the table is sent no level and the cap.
 The budgets come from the time one application's documents may take: calls x (prompt tokens / 500 +
 (thinking + answer tokens) / 55), on the speeds measured on 2026-11-19, at most five minutes and ideally
 about two (owner, 2026-11-19). An application asks seven calls (analyse, brief, fit, letter, message,
-answers, verify), reading about 29,000 tokens; with every call thinking its whole budget (4,608 tokens in
-all) they come to at most about 174 s, and a redraft of each document adds about 85 s, 258 s in all
+answers, verify), reading about 29,000 tokens; with every call thinking its whole budget (5,376 tokens in
+all) they come to at most about 188 s, and a redraft of each document adds about 85 s, 272 s in all
 (`tests/test_ai_effort.py` checks both). Before, every call could think to 8,192 tokens and a median call
 thought for 1,400 to 1,600 for a 130-token answer. Measured on three real adverts on a copy of real data
 through Hal's gateway (2026-11-19, from the gateway's replies): 9 to 10 calls, 139 to
@@ -944,20 +944,30 @@ runs: tests use `tests/support/fake_claude/`.
   whose names share a word with the job's needs and none with the work given, best mark first, at most
   `plan.MODULE_CLAUSE` (2). `plan.without_listings` takes out a passage of a file that lists projects
   (`profile.owners.Files.listings`) unless it names exactly one card.
-- One check, at most one redraft each (`checks.settle`): one `verify` call (at `low`) reads every draft of
-  the job at once ("Letter:", "Message:", "Answers:") against `Given.checked()`, the facts the writer had,
-  the fit map aside, with the advert and the employer note fenced as the employer's own words. A claim the
-  AI quotes is put to every draft that still makes it (`checks.still_says`: its words, or `KEPT_SHARE` (0.6)
-  of its own words in one sentence), else to the draft sharing most of its words; one that a line of the
+- One check, at most one redraft each (`checks.settle`): one `verify` call (at `medium`) reads every draft
+  of the job at once ("Letter:", "Message:", "Answers:") against `Given.checked()`, the facts the writer had,
+  the fit map aside, with the advert and the employer note fenced as the employer's own words. The prompt
+  has it check every number, count, duration and date against the facts, with what each number counts, and
+  every span of time the drafts claim: at `low` it let a span of years no fact gave, and a number of
+  tests told as a number of the things tested, through (2026-11-19). A claim the AI
+  quotes is put to every draft that makes it (`checks.still_says`: its words, or `KEPT_SHARE` (0.6) of
+  its own words in one sentence), else to the draft sharing most of its words; one that a line of the
   writer's facts states (`drafts.stated_in`, `CV_SHARE` of its own words) is dropped, as the check flagged
-  sentences the CV states nearly word for word (2026-11-19). Each draft is then redrafted once, with its first draft and
-  every problem in one note: the check's claims, the claims found with no AI (`checks.code_claims`: `stage.ended_course`,
-  `drafts.misplaced_tools`, `drafts.wrong_context`, `drafts.crossed`, `drafts.unheld_degrees`,
-  `drafts.solo_claims`, `strengths.studied_claims`, `taught.unsupported`, `taught.tooled`) and an advert
-  phrase told as the person's work (`checks.lifted_claims`), the writing rules' high hits, the wording
-  `plain.problems` finds (a stock tie to the job such as "aligns with"), sentences restating the advert (`drafts.echoes`: the letter's first paragraph, the "why
-  here" answers), a later answer repeating an earlier one (`repeats.repeated`), and for the letter a length
-  under `flow.LENGTH_FLOOR` of the setting or paragraphs opening alike (`flow.alike_openings`: the same first
+  sentences the CV states nearly word for word (2026-11-19). Each draft is then redrafted once, with its
+  first draft and every problem in one note: the check's claims; the claims found with no AI
+  (`checks.code_claims`: `stage.ended_course`, `drafts.misplaced_tools`, `drafts.wrong_context`,
+  `drafts.crossed`, `drafts.unheld_degrees`, `drafts.solo_claims`, `strengths.studied_claims`,
+  `taught.unsupported`, `taught.tooled`); a number counting something the facts do not count that way
+  (`counts.miscounted`: a number with what it counts within `COUNTED_AFTER` (3) words after it in its
+  clause, "a team of" before it counting too, must stand in a clause of the writer's facts, the employer's
+  words included, with a word of the same `COUNT_STEM` (4) letters at most `FACT_BEFORE` (2) words before
+  or `FACT_AFTER` (3) after it; a number word no fact holds, "the past four years", fails too; years,
+  sums, marks ("2:1", "72%", "(86)"), numbers of words, ordinals, one, zero and rough numbers ("two or
+  three") are never read, and a number in digits no source holds is `writing.check`'s); an advert phrase told as the person's work (`checks.lifted_claims`);
+  the writing rules' high hits; the wording `plain.problems` finds (a stock tie to the job such as "aligns
+  with"); sentences restating the advert (`drafts.echoes`: the letter's first paragraph, the "why here"
+  answers); a later answer repeating an earlier one (`repeats.repeated`); and for the letter a length under
+  `flow.LENGTH_FLOOR` of the setting or paragraphs opening alike (`flow.alike_openings`: the same first
   `flow.OPENING_WORDS` (2) words as an earlier paragraph, or a second paragraph opening "I") or a middle
   paragraph ending on a sentence that only claims relevance (`flow.relevance_closers`). The redraft
   is not read by the AI again; the checks with no AI run on it, and a claim of the check it still makes is
@@ -1110,6 +1120,9 @@ runs: tests use `tests/support/fake_claude/`.
   about the employer or the role (`drafts.about_employer`: "you", "your", "this role", the employer's name
   or the job title) may use them. "low-latency systems" and "AI agents for customer support" became the
   person's claims in sentences mostly their own (2026-11-08).
+- `writing/counts.py`: `miscounted(draft, facts)` lists each sentence of a draft whose number counts
+  something the facts do not count that way, or that no fact holds as a word ("the past four years"); the
+  rule is under the one check above.
 - `writing/repeats.py`: `repeated(answers)` finds each sentence of a later form answer whose own words
   (at least `REPEAT_MIN_WORDS`) are `REPEAT_SHARE` in a sentence of an earlier answer; it asks for the
   answers' one redraft with other evidence in the later ones, and one still repeating is listed as

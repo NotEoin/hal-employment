@@ -12,14 +12,16 @@ Design decisions, each with its reason:
   most, then about two once each document is written in one call), on the speeds measured that day (about 55
   tokens a second written, 500 read): calls x (prompt tokens / 500 + (thinking + answer tokens) / 55).
   Before, about 90% of each call was thinking (a median 1,400 to 1,600 tokens for a 130-token answer). The
-  seven calls of `docs.prepare` (analyse, brief, fit, letter, message, answers, verify) think at most 4,608
+  seven calls of `docs.prepare` (analyse, brief, fit, letter, message, answers, verify) think at most 5,376
   tokens in all; the budget, with a redraft of each document, is in docs/dev/architecture.md ("Thinking
   effort") and `tests/test_ai_effort.py`. The letter thinks at `medium`, as it now chooses and weaves the
-  evidence itself; the message, the answers and the check at `low`.
+  evidence itself; the message and the answers at `low`.
 - Reads of the record keep thinking on at the level they always had (`high`, today's 8,192-token bound): with
   thinking off a read kept 55 facts against 77 (owner's test, 2026-11-12), so they are never lowered.
-- The check that guards against invented facts (`verify`) gets `low`, not `none`: it weighs
-  each claim against the facts, and a few hundred tokens of thinking is cheap beside a wrong letter.
+- The one check that guards against invented facts (`verify`) gets `medium`: it reads every draft of an
+  application at once and must weigh each number and span of time against what the facts count. At `low` it
+  let a span of years no fact gave, and a number of tests told as a number of the things tested, through in
+  real letters (2026-11-19); the 768 more thinking tokens cost about 14 s at most.
 - `none` is only for jobs with nothing to reason about (a short note, a name, a report turned into a note):
   on Hal's Qwen 3.8 model, thinking off answered a small reasoning question wrongly twice where `low` answered
   it in 22 to 37 tokens (gateway owner's test, 2026-11-19), so a pick or a sort that must judge gets `low`.
@@ -64,7 +66,7 @@ LEVELS: dict[str, Effort] = {
     "letter": Effort(MEDIUM, "writes the whole letter in one go: picks and weaves the evidence into an argument"),
     "message": Effort(LOW, "writes a short note to the person hiring"),
     "answers": Effort(LOW, "writes short answers to an advert's questions"),
-    "verify": Effort(LOW, "a guard: checks every draft's claims against the facts, once"),
+    "verify": Effort(MEDIUM, "a guard: weighs every claim, number and span of time of all drafts, once"),
     "prep": Effort(LOW, "writes notes for an interview or a test"),
     # the person's CVs
     "cv_parse": Effort(HIGH, "reads an uploaded CV into sections; a read, kept as it was"),

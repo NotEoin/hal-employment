@@ -669,6 +669,35 @@ class OneRequest(unittest.TestCase):
                       letters[1]["user"])
         self.assertFalse([f for f in written["flags"] if "relevant" in f], written["flags"])
 
+    def test_a_miscounted_number_or_an_invented_span_is_caught_with_no_ai_redrafted_once_then_listed(self):
+        # a number of tests told as a number of the things tested, and a span of years no fact gave, got past the
+        # AI check in real letters (2026-11-19); the facts here are made up in that shape
+        from jobhunt.profile import store
+
+        for said, why in (("Quill was tested against nine scripted intruders.", "says 9 scripted intruders"),
+                          ("I have spent the past four years building Quill.", "says 4 years building")):
+            with self.subTest(said):
+                writer = FakeWriter(letter=said)
+                with quill_world(writer) as a:
+                    store.confirm(a.con, store.add_found(a.con, "project", {"name": "Harbour bot", "tools": ["Lua"]}, {
+                        "source_rel": "Sources/Code/bot.md", "quote": "A scripted intruder was contained in all 9 "
+                        "break-in tests of the Harbour bot", "field": "", "doc_type": "repository"}))
+                    written = pack.write_letter(a.con, a.job)
+                letters = writer.asked("letter")
+                self.assertEqual(len(letters), 2)
+                self.assertIn(why, letters[1]["user"])
+                self.assertTrue(any(f.startswith(f"unsupported claim: {said} ({why}") for f in written["flags"]),
+                                written["flags"])
+
+    def test_the_check_is_asked_to_weigh_every_number_and_span_of_time_at_medium(self):
+        with quill_world(FakeWriter()) as a:
+            pack.write_letter(a.con, a.job)
+            system = " ".join(pack.prompt("verify").split())
+        self.assertIn("Check every number, count, duration and date in the drafts against the facts", system)
+        self.assertIn("all 9 break-in tests", system)
+        self.assertIn("Every span of time the drafts claim", system)
+        self.assertEqual(ai.effort.of("verify").level, ai.effort.MEDIUM)
+
     def test_a_tool_given_to_the_wrong_project_is_redrafted_once_then_listed(self):
         said = "Quill keeps my notes in SQLite."
         writer = FakeWriter(letter=said)
