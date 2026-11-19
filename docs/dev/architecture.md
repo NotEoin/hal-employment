@@ -615,7 +615,10 @@ runs: tests use `tests/support/fake_claude/`.
   when it is as large as the file's other section titles (`_section_kinds`).
 - Above the first heading, `_contact` takes the name, the contact lines and a short headline. A row of
   short facts split with `|` (places, right to work, notice: `_facts`) joins the headline; anything longer
-  is the profile. A reading has one summary section: `_one_summary` (rules) and `_one_ai_summary` (AI)
+  is the profile. A headline is at most 12 words on one line that does not end like a sentence
+  (`is_headline`); a short line that the next line carries on in lower case is the start of a pasted
+  paragraph, so it is the profile too. The AI's reading follows the same rule: a headline it gives that
+  is not one is put at the start of the profile (`_profile_from_headline`). A reading has one summary section: `_one_summary` (rules) and `_one_ai_summary` (AI)
   merge a later one into the first, text in reading order, under the title the CV wrote.
 
 ## CV types and checks (`cvstudio/types.py`, `cvstudio/checks.py`)

@@ -21,6 +21,11 @@ field. Design decisions, each with its reason:
 - Rows of the "Check what Hal read" report have a path that names one field
   (`contact/email`, `s:<section>/text`, `s:<section>/e:<entry>/<field>`, `.../b:<bullet>`), and
   `correct()` changes exactly that field.
+- A headline is a few words on one line (a job title, a tagline) or a row of short facts; a paragraph or a
+  sentence never is (`is_headline`). Either reading may offer one: the rules take the first line under the
+  contact details, and Claude gave a CV's whole profile paragraph as its headline (seen on 2026-11-19), which
+  drew the profile above the contact line. A line that is not a headline is the start of the profile, and a
+  CV with no such line has no headline.
 - A CV has one summary. Text above the first heading becomes the profile only when it reads as one; a line
   of short facts set apart by "|" (places, right to work, notice) joins the headline instead. When a CV
   still gives two summaries (a paragraph above a "Profile" heading, or the AI returning two), they are
@@ -65,7 +70,8 @@ LOW_CONFIDENCE = 0.6            # an AI confidence below this marks the field "C
 LARGE_TYPE = 1.15               # a line this much larger than the body text may be a heading
 HEADING_WORDS = 5               # headings are short
 HEADLINE_WORDS = 12             # a line under the name longer than this is a profile, not a headline
-FACT_WORDS = 8                  # each part of a "Leeds | UK citizen, no visa needed | Available now" line is this short
+SENTENCE_ENDS = (".", "!", "?")  # a line that ends like a sentence is a profile's, never a headline
+FACT_WORDS = 8                 # each part of a "Leeds | UK citizen, no visa needed | Available now" line is this short
 PARAGRAPH_WORDS = 14            # a non-bullet line this long inside an entry is its paragraph, not a header
 
 PICTURE_WORDS = "This PDF is a picture of a CV, so Hal cannot read it. Upload the Word file, or paste the text."
@@ -750,6 +756,17 @@ def _facts(text: str) -> bool:
     return len(parts) > 1 and all(len(p.split()) <= FACT_WORDS for p in parts)
 
 
+def is_headline(text: str) -> bool:
+    """True when `text` may stand under the name: a row of short facts, or a few words on one line that do
+    not end like a sentence. A paragraph or a sentence is the profile's text, never a headline."""
+    text = text.strip()
+    if not text or "\n" in text:
+        return False
+    if _facts(text):
+        return True
+    return len(text.split()) <= HEADLINE_WORDS and not text.endswith(SENTENCE_ENDS)
+
+
 def _one_summary(groups: list[tuple[str, str, list]], default_title: str) -> list[tuple[str, str, list]]:
     """`groups` with every summary merged into the first one, its body in reading order; the merged one takes
     the first title the CV wrote itself rather than `default_title`, Hal's own name for untitled text."""
@@ -766,6 +783,7 @@ def _contact(top: list[Line], body_size: float | None, marks: dict[str, str]) ->
     """The contact snapshot, the headline and any profile lines from the lines above the first heading."""
     contact: dict[str, Any] = {}
     headline, leftover = "", []
+    head_line: Line | None = None
     rest = list(top)
     if rest and not EMAIL.search(rest[0].text) and not PHONE.search(rest[0].text):
         name_line = rest.pop(0)
@@ -798,12 +816,18 @@ def _contact(top: list[Line], body_size: float | None, marks: dict[str, str]) ->
         if found or (parts and all(len(p.split()) <= 4 for p in parts) and len(rest) > 1 and not headline):
             places += [p for p in parts if re.fullmatch(r"[A-Za-z\u00c0-\u024f' .-]+", p) and len(p.split()) <= 4]
             continue
-        if not headline and len(line.text.split()) <= HEADLINE_WORDS:
-            headline = line.text.strip()
+        if not headline and is_headline(line.text):
+            headline, head_line = line.text.strip(), line
         elif not leftover and _facts(line.text):
             headline = " | ".join(x for x in (headline, line.text.strip()) if x)
         else:
             leftover.append(line)
+    if (head_line is not None and headline == head_line.text.strip() and leftover
+            and leftover[0].text[:1].islower() and not _facts(headline)):
+        # pasted text keeps a paragraph's wrapped rows as lines, so a short first row that the next row
+        # carries on in lower case is the start of the profile, not a headline
+        leftover.insert(0, head_line)
+        headline = ""
     if places:
         contact["city"] = places[0]
         if len(places) > 1:
@@ -909,6 +933,19 @@ def _one_ai_summary(sections: list[dict]) -> list[dict]:
     return [merged if s is summaries[0] else s for s in sections if id(s) not in later]
 
 
+def _profile_from_headline(paragraph: str, sections: list[dict]) -> list[dict]:
+    """The AI's sections with a paragraph it gave as the headline put at the start of the profile (a new
+    one first when there is none), unless the profile holds it already."""
+    summary = next((s for s in sections if _ai_kind(s) == "summary"), None)
+    if summary is None:
+        return [{"kind": "summary", "title": UNTITLED_PROFILE, "text": paragraph}, *sections]
+    text = _s(summary.get("text"))
+    if _norm(paragraph) in _norm(text):
+        return sections
+    merged = {**summary, "text": f"{paragraph} {text}".strip()}
+    return [merged if s is summary else s for s in sections]
+
+
 def from_ai(reply: dict) -> Reading | None:
     """Schema 2 from the AI's JSON, with its unsure fields marked; None when the reply holds no sections."""
     sections = reply.get("sections") if isinstance(reply.get("sections"), list) else []
@@ -926,10 +963,14 @@ def from_ai(reply: dict) -> Reading | None:
             marks[f"contact/{key}"] = UNSURE_WHY
     if "name" not in contact:
         marks["contact/name"] = MISSING_WHY
-    doc = CVDoc(headline=_s(reply.get("headline")), contact_snapshot=contact)
+    headline = _s(reply.get("headline"))
+    raw_sections = _one_ai_summary([s for s in sections if isinstance(s, dict)])
+    if headline and not is_headline(headline):
+        raw_sections, headline = _profile_from_headline(headline, raw_sections), ""
+    doc = CVDoc(headline=headline, contact_snapshot=contact)
     used: set[str] = set()
     counts: Counter = Counter()
-    for raw in _one_ai_summary([s for s in sections if isinstance(s, dict)]):
+    for raw in raw_sections:
         kind = _ai_kind(raw)
         counts[kind] += 1
         n = counts[kind]

@@ -22,6 +22,11 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Your profile stays a profile.** A profile paragraph or sentence under your contact details was
+  sometimes read as the line under your name, so Hal's copy showed your profile above your contact details.
+  Hal now reads only a few words on one line, such as a job title, as that line, and a CV without one has
+  none.
+
 - **A CV you add shows straight away.** A CV you upload on **My CVs**, or a new version of one, used to
   appear only once Hal's AI had finished reading it, so it could be missing for a long time while the AI was
   busy. It is now in the list within a second or two, marked **Hal is reading this CV** until the reading ends. When the

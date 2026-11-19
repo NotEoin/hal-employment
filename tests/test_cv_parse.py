@@ -409,6 +409,44 @@ class OneProfile(unittest.TestCase):
         self.assertEqual([s.kind for s in doc.sections], ["summary", "education"])
         self.assertTrue(doc.sections[0].text.startswith("I sort records"))
 
+    def test_a_sentence_under_the_contact_line_is_the_profile_never_the_headline(self):
+        # 2026-11-19: a one-sentence profile under the contact line was drawn as the headline, above the contact
+        for profile in ("Calm archivist who answers questions.", "I sort records and answer questions for "
+                        "visitors\nto a made-up archive in the fens"):
+            with self.subTest(profile=profile):
+                doc = parse.read_rules(parse.text_lines(
+                    f"Ada Example\nada@example.org | 07700 900466\n{profile}\n\nEducation\n"
+                    "BA History    2023 - 2026\n")).doc
+                self.assertEqual(doc.headline, "")
+                self.assertEqual([s.kind for s in doc.sections], ["summary", "education"])
+                self.assertEqual(doc.sections[0].text, profile.replace("\n", " "))
+
+    def test_a_few_words_under_the_name_are_still_the_headline(self):
+        doc = parse.read_rules(parse.text_lines(
+            "Ada Example\nArchivist and guide for small museums\nada@example.org | 07700 900466\n\nEducation\n"
+            "BA History    2023 - 2026\n")).doc
+        self.assertEqual(doc.headline, "Archivist and guide for small museums")
+        self.assertEqual([s.kind for s in doc.sections], ["education"])
+
+    def test_a_paragraph_the_ai_gives_as_the_headline_becomes_the_profile(self):
+        # 2026-11-19: Claude gave a CV's profile paragraph as its headline; the CV had no headline at all
+        paragraph = ("Archivist with three years of work on made-up collections, careful with sources and calm "
+                     "with visitors.")
+        reply = {"headline": paragraph, "contact": {"name": "Ada Example"}, "sections": [
+            {"kind": "education", "title": "Education", "entries": [{"heading": "BA History"}]}]}
+        doc = parse.from_ai(reply).doc
+        self.assertEqual(doc.headline, "")
+        first = doc.sections[0]
+        self.assertEqual((first.kind, first.title, first.text), ("summary", "Profile", paragraph))
+        reply["sections"].insert(0, {"kind": "summary", "title": "Profile", "text": "Fond of old maps."})
+        doc = parse.from_ai(reply).doc
+        self.assertEqual([s.kind for s in doc.sections], ["summary", "education"])
+        self.assertEqual(doc.sections[0].text, f"{paragraph} Fond of old maps.")
+        reply["sections"][0]["text"] = paragraph
+        self.assertEqual(parse.from_ai(reply).doc.sections[0].text, paragraph, "a paragraph is never there twice")
+        reply["headline"] = "Archivist and guide"
+        self.assertEqual(parse.from_ai(reply).doc.headline, "Archivist and guide")
+
     def test_the_ais_two_summaries_are_merged_into_one_as_the_rules_merge_them(self):
         reply = {"headline": "", "contact": {"name": "Ada Example"}, "sections": [
             {"kind": "summary", "title": "", "text": "I sort records."},

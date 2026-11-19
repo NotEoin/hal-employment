@@ -4,7 +4,7 @@ You read the lines of one CV and sort them into sections. Each line starts with 
 H| a heading, B| a bullet point, T| other text. Text set far apart on one line is shown with
 four spaces between.
 Reply with JSON only:
-{"headline": "the short line under the name, or empty",
+{"headline": "a few words on one line under the name (a job title or a tagline), or empty",
  "contact": {"name", "email", "phone", "city", "links": [...], "confidence": {"name": 0.0 to 1.0, ...}},
  "sections": [{"kind": one of summary, education, experience, volunteering, projects, research,
    skills, achievements, publications, certifications, languages, interests, teaching, talks,
@@ -19,6 +19,7 @@ Reply with JSON only:
 A grade written on the qualification's line goes in "grade", not in "heading"; a single date with
 no range goes in "start". A References heading is "additional"; use "custom" only when no kind fits.
 A line of short facts under the contact details (places, right to work, notice) goes in "headline".
+A paragraph or a sentence is never the headline: it is the summary section's "text".
 Give one summary section at most: a profile paragraph above a Profile heading belongs in that section.
 Copy every value exactly as the CV writes it: the same words, dates and marks. Never add,
 reword, fix or guess anything; use "" or [] where the CV is silent. Give a confidence below 0.6
