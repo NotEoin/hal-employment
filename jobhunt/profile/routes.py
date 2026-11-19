@@ -32,16 +32,16 @@ modules[{name, mark}]), skill (name, level, category), project (name, summary, r
 achievement (title, date, detail, issuer), certificate (name, issuer, date, expires, grade), basic (key,
 value) and link (label, url). `tier` is core | supporting | archive | "" (not sorted yet), only for jobs,
 education, projects, achievements and certificates (`profile.tiers`); `tier_by` is hal | person | "".
-`context` is degree | team | work | personal | "" (not known), for the same kinds (`profile.contexts`), with
-`context_by` hal | person | "" and `context_words` the page's words for it ("Part of my degree",
-"University team project", "At work", "In my own time"). `merged_into` is the id of the card a hidden card
-was folded into by Hal (`store.fold_away`) or the person (`store.same_as`), else null, and `merged_why` the
-words on why ("Part of Lantern workspace", "You said it is the same as Tide gauge"). `star` is the person's
-star on a project or job (`can_star`), with `star_by` "you" once they set it. A source's `source_id` is the
-source of the record it came from (`jobhunt.sections`), with `place` (a file inside it or a URL) and `line`,
-or null and "" for facts the bulk read found. A skill's source says how strongly it shows the skill (`strength`
-and `strength_words`, `profile.strength`; "" for other kinds), and `star_by` is "coursework" for a project card
-starred through a piece of coursework in the showcase.
+`context` is degree | team | work | personal | school | "" (not known), for the same kinds
+(`profile.contexts`), with `context_by` hal | person | "" and `context_words` the page's words for it ("Part
+of my degree", "University team project", "At work", "In my own time", "At school"). `merged_into` is the
+id of the card a hidden card was folded into by Hal (`store.fold_away`) or the person (`store.same_as`),
+else null, and `merged_why` the words on why ("Part of Lantern workspace", "You said it is the same as Tide
+gauge"). `star` is the person's star on a project or job (`can_star`), with `star_by` "you" once they set
+it. A source's `source_id` is the source of the record it came from (`jobhunt.sections`), with `place` (a
+file inside it or a URL) and `line`, or null and "" for facts the bulk read found. A skill's source says how
+strongly it shows the skill (`strength` and `strength_words`, `profile.strength`; "" for other kinds), and
+`star_by` is "coursework" for a project card starred through a piece of coursework in the showcase.
 
 A conflict (`CONFLICT`):
 
@@ -98,7 +98,7 @@ Routes:
 - `PUT /api/v2/profile/items/{id}/star` {"star": true}: the person's star on a project or job
   (`store.set_star`); ITEM. Any other kind, or `star` not true or false, is 400.
 - `PUT /api/v2/profile/items/{id}/context` {"context": "personal"}: where the person says an experience was
-  done, which Hal never changes; ITEM. A context that is not one of the four, or an item with none, is 400.
+  done, which Hal never changes; ITEM. A context that is not one of the five, or an item with none, is 400.
 - `POST /api/v2/profile/tiers`: starts sorting the experiences again (action `profile.tiers`);
   {"action_id"}, or 409 while one is running.
 - `POST /api/v2/profile/confirm-many` and `.../hide-many` {"ids": [3, 4]}: changes them all with one event;

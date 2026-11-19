@@ -473,9 +473,9 @@ Hal would tell an employer about first, with a few words on why each one is ther
 reads your files, putting what you would lead with first, then what is useful when a job asks for it. It
 shows about 25, so you can check them in one sitting.
 
-Each one also says where it was done: **Part of my degree**, **University team project**, **At work** or
-**In my own time**. Hal fills this in from your files; if it is wrong, pick the right one. Hal writes about
-the experience that way and never changes your choice.
+Each one also says where it was done: **Part of my degree**, **University team project**, **At work**,
+**In my own time** or **At school**. Hal fills this in from your files; if it is wrong, pick the right one.
+Hal writes about the experience that way and never changes your choice.
 
 Each has three buttons:
 

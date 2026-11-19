@@ -12,7 +12,7 @@ CONTEXT_KINDS = ("job", "education", "project", "achievement", "certificate")   
 # The person's choice on a card, in the words the Check your record page shows; the keys are
 # `writing.stage.CONTEXTS`, written out because `stage` is still loading when the profile package is.
 CHOICE_WORDS = {"degree": "Part of my degree", "team": "University team project", "work": "At work",
-                "personal": "In my own time"}
+                "personal": "In my own time", "school": "At school"}
 BY_KIND = {"job": "work", "education": "degree"}   # unless the person says otherwise
 
 

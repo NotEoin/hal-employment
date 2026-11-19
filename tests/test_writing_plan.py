@@ -118,6 +118,15 @@ class SimilarNames(unittest.TestCase):
         self.assertIn("about Quill Employment (job-search helper), university team project", item.words())
 
 
+class School(unittest.TestCase):
+    def test_an_item_about_school_work_says_school_work_never_degree_work(self):
+        # GCSEs were called "degree work" before school had a context (2026-11-19)
+        item = plan.Item(id="E1", text="built a weather station", source=plan.CV, card="Rain gauge",
+                         context="school")
+        self.assertIn("about Rain gauge, school work", item.words())
+        self.assertNotIn("degree", item.words())
+
+
 class PlannedNotDone(unittest.TestCase):
     def test_an_item_quoting_a_plan_is_marked_planned_and_says_so(self):
         # a team's design document planned Docker; the built app used SQLite, and every pack said the person

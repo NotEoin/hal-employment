@@ -17,7 +17,9 @@ Design decisions, each with its reason:
   degree includes building a local RAG assistant" of a personal project (2026-11-07). The words are narrow
   on purpose ("module" only as course work, "personal" only as personal work or project), as "a Lua module"
   or "personal data" say nothing about where the work was done. A sentence that also says words agreeing
-  with the card ("alongside my degree, in my own time") is left alone.
+  with the card ("alongside my degree, in my own time") is left alone. School work is misframed by words of a
+  degree, a university or a job, as GCSEs were called "degree work" before school had a context
+  (2026-11-19).
 - A fit row says each project's own kind (`own_contexts`): "personal projects like Hal and CramBerry" called a
   degree team project personal (2026-11-08), so a kind that does not fit a named card is taken out and each
   card's own context words follow its name.
@@ -263,13 +265,13 @@ def evidence_checked(text: str, cards: list[dict], known: list[str], facts: str 
 
 # "personal projects", "university project": a kind of project said of the cards a fit row names, with the
 # contexts (`stage.CONTEXTS`) each word fits.
-CONTEXT_PHRASE = re.compile(r"\b(personal|side|hobby|university|uni|degree|coursework|academic|module|team|group)"
-                            r"\s+(projects?)\b", re.I)
+CONTEXT_PHRASE = re.compile(r"\b(personal|side|hobby|university|uni|degree|coursework|academic|module|team|group|"
+                            r"school)\s+(projects?)\b", re.I)
 PHRASE_FITS = {"personal": {stage.PERSONAL}, "side": {stage.PERSONAL}, "hobby": {stage.PERSONAL},
                "university": {stage.DEGREE, stage.TEAM}, "uni": {stage.DEGREE, stage.TEAM},
                "degree": {stage.DEGREE, stage.TEAM}, "coursework": {stage.DEGREE, stage.TEAM},
                "academic": {stage.DEGREE, stage.TEAM}, "module": {stage.DEGREE, stage.TEAM},
-               "team": {stage.TEAM, stage.WORK}, "group": {stage.TEAM, stage.WORK}}
+               "team": {stage.TEAM, stage.WORK}, "group": {stage.TEAM, stage.WORK}, "school": {stage.SCHOOL}}
 
 
 def own_contexts(text: str, named: list[dict]) -> str:
@@ -309,20 +311,23 @@ SAID_DEGREE = re.compile(r"\b(degree(?! of)|university|coursework|dissertation|m
 SAID_PERSONAL = re.compile(r"\b(personal (project|work|interest|initiative)|(my|in my) own time|spare time|"
                            r"side project|hobby|hobbies|for fun)\b", re.I)
 SAID_WORK = re.compile(r"\b(at work|placement|internship|in my (job|role)|for my employer|client)\b", re.I)
-SAID = {"degree": SAID_DEGREE, "personal": SAID_PERSONAL, "work": SAID_WORK}
+# "A level" is left out: without case it is also "a level of detail".
+SAID_SCHOOL = re.compile(r"\b(school|sixth form|i?gcses?)\b", re.I)
+SAID = {"degree": SAID_DEGREE, "personal": SAID_PERSONAL, "work": SAID_WORK, "school": SAID_SCHOOL}
 # For each context: the words that disagree with it, and the words that agree with it.
 CLASHES = {stage.PERSONAL: ("degree",), stage.DEGREE: ("personal",), stage.TEAM: ("personal",),
-           stage.WORK: ("degree", "personal")}
-AGREES = {stage.PERSONAL: ("personal",), stage.DEGREE: ("degree",), stage.TEAM: ("degree",), stage.WORK: ("work",)}
-NOT_WORDS = {"degree": "part of a degree", "personal": "a personal project"}
+           stage.WORK: ("degree", "personal"), stage.SCHOOL: ("degree", "work")}
+AGREES = {stage.PERSONAL: ("personal",), stage.DEGREE: ("degree",), stage.TEAM: ("degree",), stage.WORK: ("work",),
+          stage.SCHOOL: ("school",)}
+NOT_WORDS = {"degree": "part of a degree", "personal": "a personal project", "work": "work done in a job"}
 IS_WORDS = {stage.DEGREE: "degree work", stage.TEAM: "a university team project", stage.WORK: "work done in a job",
-            stage.PERSONAL: "a personal project"}
+            stage.PERSONAL: "a personal project", stage.SCHOOL: "school work"}
 
 
 def wrong_context(draft: str, cards: list[dict]) -> list[str]:
-    """Sentences that place one project card in a degree or in the person's own time against its `context`,
-    each with what the card says: "My degree includes Tide gauge. (Tide gauge is a personal project, not part
-    of a degree)"."""
+    """Sentences that place one project card in a degree, in the person's own time or in a job against its
+    `context`, each with what the card says: "My degree includes Tide gauge. (Tide gauge is a personal project,
+    not part of a degree)"."""
     every = [c for c in cards if c["kind"].startswith("project") and c["name"].strip()]
     projects = [c for c in every if c.get("context") in CLASHES]
     out = []

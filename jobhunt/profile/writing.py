@@ -26,10 +26,11 @@ Design decisions, each with its reason:
 - No line of the block is a bracketed "[file > heading]" label, because `pack.passages` counts those lines
   as record passages the letter used.
 - A project's line names its context ("degree work", "university team project", "at work", "personal
-  project"), the person's choice or else what its evidence shows (`profile.contexts`), since letters called a
-  personal project degree work (2026-11-06) and a team project a personal one (2026-11-07). Another card
-  names its context only when it is not its kind's own (a job done as part of a degree). A record passage
-  from a project card's file says the card's context on its "(Kind: ...)" line (`passage_contexts`).
+  project", "school work"), the person's choice or else what its evidence shows (`profile.contexts`), since
+  letters called a personal project degree work (2026-11-06) and a team project a personal one (2026-11-07).
+  Another card names its context only when it is not its kind's own (a job done as part of a degree). A
+  record passage from a project card's file says the card's context on its "(Kind: ...)" line
+  (`passage_contexts`).
 - A project card carries the other names a draft may call it by (`aliases`): the names of hidden cards
   resting on one of its project files, its repository's or folder's name and the end of its link. A letter
   placed a personal project in a degree under a hidden copy's shorter name, and the check, reading only the

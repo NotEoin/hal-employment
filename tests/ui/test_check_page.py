@@ -285,6 +285,8 @@ class CheckPage(unittest.TestCase):
         where = p.page.locator(f"li[data-best='{letters}']").get_by_label("Where was this done?")
         p.shows(where, "the choice on the card")
         self.assertEqual(where.input_value(), "personal", "Hal's reading of a repository")
+        self.assertEqual(where.locator("option").all_inner_texts(),
+                         ["Part of my degree", "University team project", "At work", "In my own time", "At school"])
         self.clean(p)
         where.select_option(label="University team project")
         p.shows(p.page.get_by_text("Saved. Hal will describe it this way."), "the choice saved")

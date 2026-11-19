@@ -1,9 +1,9 @@
-"""Where each experience was done: part of a degree, a university team project, at work, or in the person's
-own time.
+"""Where each experience was done: part of a degree, a university team project, at work, in the person's own
+time, or at school.
 
 Each job, course, project, achievement and certificate (`tiers.TIERED_KINDS`) keeps a `context`
-(`writing.stage.CONTEXTS`: degree, team, work, personal, or '' when nothing shows it) and `context_by` (`hal`
-or `person`), migration 0026. `found(item, employers)` is Hal's reading of a card; `current(item, employers)`
+(`writing.stage.CONTEXTS`: degree, team, work, personal, school, or '' when nothing shows it) and `context_by`
+(`hal` or `person`), migration 0026. `found(item, employers)` is Hal's reading of a card; `current(item, employers)`
 is the context writing uses; `refresh(con)` stores Hal's reading for every card the person has not set;
 `set_context` is the person's choice; `context_rules.shown(item, stored)` is what a shaped item carries.
 

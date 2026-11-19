@@ -13,6 +13,6 @@ Reply with JSON only:
   of a fact is supported.
 - "context_ok" is false when it places the work somewhere the facts do not: a personal project as part of a
   degree, a module or coursework; degree work as a job or as personal work; a university team project as
-  personal work.
+  personal work; school work as a degree, university work or a job.
 - "role_ok" is false when it gives the applicant more of the work than the facts do: a team's work written as
   their own, the whole project when they built a part, "helped" made "led".

@@ -11,7 +11,7 @@ Rules:
 - Use only the facts given about this work. Never add a tool, number, name, date, place, purpose or result
   they do not give, and never bring in another project, job or module.
 - Name the work as the facts name it, where the shape says, and say where it was done as the facts say it
-  (personal project, degree work, university team project, a job). Never change that.
+  (personal project, degree work, university team project, school work, a job). Never change that.
 - Tell one connected story: what it is, what you did, how, and what came of it. Keep to the shape's length.
 - "Your part" says what you did: write it as what you did, never as a label ("As the owner, ..."). When the
   work was a team's, say so and say your part; never write the whole as yours alone.

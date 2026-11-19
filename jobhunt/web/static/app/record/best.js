@@ -16,7 +16,7 @@ import { SameAs } from "./same.js";
 const CHECKED = ["confirmed", "edited"];
 // Where an experience was done, as `profile.contexts` keeps it, in the person's words.
 const CONTEXTS = [["degree", "Part of my degree"], ["team", "University team project"], ["work", "At work"],
-  ["personal", "In my own time"]];
+  ["personal", "In my own time"], ["school", "At school"]];
 
 const tierPath = item => "/profile/items/" + encodeURIComponent(item.id) + "/tier";
 

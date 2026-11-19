@@ -16,8 +16,9 @@ Rules:
 - Today's date and the applicant's stage are given. Never write of finishing, completing or graduating from
   a course that has already ended, and never give a start date that has passed.
 - A project's kind is given where it is known (degree work, university team project, at work, personal
-  project). Never change it: a personal project is never part of a degree, coursework or research, a
-  university team project is never a personal project, degree work is never personal work or a job.
+  project, school work). Never change it: a personal project is never part of a degree, coursework or
+  research, a university team project is never a personal project, degree work is never personal work or a
+  job, and school work is never degree work, university work or work experience.
 - Keep the applicant's part in a team's work as given: a team's work stays a team's.
 - Plain words and short sentences: no stock openings, no "not just X but Y", no list of three
   qualities, no long dashes, no hedging.

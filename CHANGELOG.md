@@ -2,6 +2,14 @@
 
 What changed in each version, in plain words.
 
+## Unreleased
+
+### What's new
+
+- **At school.** On **Check your record**, **Where was this done?** now has **At school** as well as
+  **Part of my degree**, **University team project**, **At work** and **In my own time**. Pick it for
+  something you did at school, and Hal calls it school work, never degree work, university work or a job.
+
 ## 2.3.1 (2026-11-19)
 
 ### What's new

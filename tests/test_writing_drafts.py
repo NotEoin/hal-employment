@@ -169,6 +169,19 @@ class Contexts(unittest.TestCase):
                                  "Harbour survey was personal work. (Harbour survey is degree work, not a "
                                  "personal project)"])
 
+    def test_school_work_called_degree_work_or_a_job_is_found(self):
+        # GCSE work was called "degree work" before school had a context (2026-11-19)
+        cards = [{"kind": "project (school work)", "name": "Rain gauge", "tools": [], "summary": "",
+                  "context": "school"}]
+        found = drafts.wrong_context("Rain gauge was part of my degree. I built Rain gauge at my placement.", cards)
+        self.assertEqual(found, ["Rain gauge was part of my degree. (Rain gauge is school work, not part of a degree)",
+                                 "I built Rain gauge at my placement. (Rain gauge is school work, not work done in "
+                                 "a job)"])
+        self.assertEqual(drafts.wrong_context("At school, Rain gauge led me to my degree.", cards), [],
+                         "a sentence that says school as well is left alone")
+        self.assertEqual(drafts.evidence_checked("Built university projects like Rain gauge.", cards, [])[0],
+                         "Built projects like Rain gauge (school work).")
+
     def test_a_project_is_caught_under_its_other_names(self):
         # "During my degree, I built a real-time autopilot for the LIDAR Autonavigation project" of a personal
         # project whose card is named "LIDAR Autonomous Navigation" (2026-11-07)

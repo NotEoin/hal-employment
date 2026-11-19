@@ -9,5 +9,6 @@ the role again. Give one concrete reason the applicant fits,
 and ask one specific question about the team's work. The tone is {tone}; write in {spelling}. Never use
 these words or phrases: {avoid_phrases}. No flattery and no request for a referral. Never write of
 finishing a course that has ended by today's date, and never change a project's kind (degree work,
-university team project, at work, personal project), and keep the applicant's part in a team's work.
+university team project, at work, personal project, school work), and keep the applicant's part in a team's
+work.
 Reply with the message only, with no notes about it.
