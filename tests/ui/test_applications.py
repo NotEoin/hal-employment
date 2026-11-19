@@ -20,6 +20,9 @@ APP_PATH = "/applications/demo:1"   # what the page asks for at APP
 HELD_WAIT_S = 5.0     # how long a test waits for the page's request to reach a held route
 POLL_MS = 20          # how often it looks
 SETTLE_MS = 300       # how long it gives a second click to send a request of its own
+# A page picture the fake server need not serve: one white pixel, which the app's img-src allows as data:
+PIXEL = ("data:image/png;base64,"
+         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=")
 
 
 
@@ -256,6 +259,35 @@ class ApplicationsTest(unittest.TestCase):
                 p = self.tab(self.serve(state)).open(APP)
                 p.page.wait_for_selector(".base-cv")
                 self.assertEqual(p.page.get_by_text(said).count(), 1)
+                self.assertEqual(p.errors, [])
+
+    def test_a_cv_that_sends_your_own_file_shows_that_files_pages_or_says_hal_shows_its_reading(self) -> None:
+        # 2026-11-19: a Word file sent as it is showed only "cannot be shown here", and a PDF only in the
+        # browser's viewer
+        pdf = {"kind": "pdf", "name": "Robin-CV.pdf", "pages": 2, "page_urls": [PIXEL, PIXEL + "#2"], "why": "",
+               "version_id": "v1-demo"}
+        word = {**pdf, "kind": "docx", "name": "Robin-CV.docx", "pages": None, "page_urls": []}
+        for original, size in ((pdf, "narrow"), (word, "wide")):
+            with self.subTest(kind=original["kind"]):
+                state = self.documents_step()
+                state.pages[APP_PATH]["docs"]["cv"].update(sent_as="original", original=original)
+                p = self.tab(self.serve(state), size).open(APP)
+                p.page.wait_for_selector(".sent-preview")
+                pages = p.page.locator(".sent-preview img")
+                if original["page_urls"]:
+                    self.assertEqual([pages.nth(i).get_attribute("alt") for i in range(2)],
+                                     ["Page 1 of 2 of your CV file", "Page 2 of 2 of your CV file"])
+                    self.assertIn("This is your file, Robin-CV.pdf, as employers get it.",
+                                  p.page.inner_text(".sent-preview"))
+                else:
+                    self.assertEqual(pages.count(), 0)
+                    self.assertIn("Employers get your file, Robin-CV.docx, as you uploaded it. Hal cannot show a "
+                                  "Word file as pages, so this is Hal's reading of it.",
+                                  p.page.inner_text(".sent-preview"))
+                    self.assertEqual(p.page.locator(".sent-preview iframe[title='CV preview']").count(), 1)
+                self.assertEqual(p.page.locator("iframe.pdfview").count(), 0)
+                self.assertEqual(p.sideways(), 0)
+                self.assertEqual(p.serious_axe(), [])
                 self.assertEqual(p.errors, [])
 
     def test_a_write_that_failed_says_why_on_the_documents_step(self) -> None:

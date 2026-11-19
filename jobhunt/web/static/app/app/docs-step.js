@@ -6,7 +6,9 @@
 
    The CV and the letter are each shown beside the PDF Hal will upload, so the person sees the document
    itself and not only the words. An Undo, a Redo or saved letter edits make the PDF again, and its address
-   changes with it, so the preview follows.
+   changes with it, so the preview follows. When the CV sends the person's own file (`docs.cv.original`), the
+   CV tab shows that file as ui/doc-preview.js's `SentPreview` does on My CV: a PDF's own pages, or Hal's
+   reading of a Word or text file with a line saying employers get the file as uploaded.
 
    A CV Hal made with its change list (`docs.cv.schema` 2) is edited in place with My CV's editor in job
    mode (cv/edit-tab.js); it stays mounted while another tab shows, so unsaved changes survive a tab switch,
@@ -41,6 +43,7 @@ import { UncheckedNote } from "../ui/unchecked-note.js";
 import { EditTab } from "../cv/edit-tab.js";
 import { MAIN_CV } from "../cv/job-changes.js";
 import { Marked } from "../cv/marks.js";
+import { SentPreview } from "../ui/doc-preview.js";
 
 const appPath = a => "/applications/" + encodeURIComponent(a.id);
 
@@ -223,9 +226,9 @@ export function DocsStep({ a, reload, onApproved }) {
           : html`<span class="small sub">Undone: your CV's version is used</span><button type="button" class="btn quiet small" onClick=${() => toggle(c, true)}>Redo</button>`}</div>
         ${c.on && html`<div class="ba"><div class="b"><small>Your CV</small>${c.before ? html`<${Marked} text=${c.before} />` : "(not there)"}</div><div class="a"><small>For this job</small>${c.after ? html`<${Marked} text=${c.after} />` : "(changed)"}</div></div>
           ${c.why && html`<div class="small"><b style="color:var(--why)">Why:</b> ${c.why}</div>`}`}</article>`)}
-      </div>${original && d.cv.preview_url && !/\.pdf&/i.test(d.cv.preview_url)
-        ? html`<div class="card"><p class="small">Your file is not a PDF, so it cannot be shown here.</p>
-            <a class="btn small" href=${d.cv.preview_url} download><${Icon} n="download" c="s" />Download your file</a></div>`
+      </div>${original && d.cv.original
+        ? html`<div class="stack s"><${SentPreview} original=${d.cv.original} label="CV preview" />
+            ${d.cv.preview_url && html`<a class="btn small" href=${d.cv.preview_url} download><${Icon} n="download" c="s" />Download your file</a>`}</div>`
         : html`<${Pdf} url=${d.cv.preview_url} label="CV preview" />`}</div>`}
     ${tab === "letter" && html`<div class="docs-split"><div class="stack s">
       <label class="small" for="letter-text"><b>Cover letter</b> <span class="sub">${letter.split(/\s+/).filter(Boolean).length} words</span></label>

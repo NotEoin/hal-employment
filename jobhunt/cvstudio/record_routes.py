@@ -5,8 +5,9 @@
   and "action_id" (the `cv.parse` reading the file, or null). A POST, so the page can follow the reading with
   `run` as My CVs' upload does. A file Hal cannot read, a source that is no CV file, and the last CV in use
   are 400 with plain words; a reading of the same file already under way is 409.
-- `GET .../{id}/preview`: {"version_id", "url", "why", "original_url"}, what the Preview dialog shows: the CV
-  of My CVs read from this file (its version in use, for `DocPreview`), else Hal's quick reading at `url`, or
+- `GET .../{id}/preview`: {"version_id", "original", "url", "why", "original_url"}, what the Preview dialog
+  shows: the CV of My CVs read from this file (its version in use, for `DocPreview`, or its own file's pages
+  while it sends that file, `original`), else Hal's quick reading at `url`, or
   the reader's reason (`why`) and the original file. `.../preview.html` is that quick reading as the page Hal
   prints (400 with the reason when the file cannot be read); its fonts are served beside it, as for the CV
   previews (`look_routes`). `.../original` sends the file as a download, never shown inline, as a record CV
@@ -59,7 +60,8 @@ def use(req: Request) -> dict:
 
 @route("GET", PREFIX + "/{source_id}/preview")
 def preview(req: Request) -> dict:
-    """How to preview a CV of the record: {"version_id", "url", "why", "original_url"} (`record_cvs.preview`)."""
+    """How to preview a CV of the record: {"version_id", "original", "url", "why", "original_url"}
+    (`record_cvs.preview`)."""
     try:
         return record_cvs.preview(req.con, req.params["source_id"])
     except record_cvs.NotUsable as e:

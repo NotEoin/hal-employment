@@ -1,10 +1,19 @@
 /* The preview of a CV or letter: an iframe of the page Hal prints (/cv/versions/{id}/preview.html), so what
    the person sees is the HTML that becomes the PDF. The page is drawn at A4 width and scaled to
    fit its box, and it reloads when the CV changes. The iframe is sandboxed with no scripts; in a thumbnail
-   it is kept out of the tab order, because the card's own button is what the keyboard reaches. */
+   it is kept out of the tab order, because the card's own button is what the keyboard reaches.
+
+   A CV set to send "Your original file" sends that file and never Hal's page, so `SentPreview` shows what
+   employers get: the file's own pages as pictures for a PDF (GET /cv/original/page/{n}, listed by the API as
+   `original.page_urls`); for a Word file or text, which Hal cannot show as pages, Hal's page with a line saying
+   it is Hal's reading and that employers get the file as uploaded. A CV that sends Hal's copy shows Hal's page
+   as before. */
 import { html, useEffect, useRef, useState } from "../core/html.js";
 import { on } from "../core/events.js";
 import { chosenCv } from "../cv/chosen.js";
+import { Note } from "./controls.js";
+
+const KIND_WORDS = { docx: "a Word file", md: "a text file", txt: "a text file" };
 
 const PAGE_W = 794;   // A4 width in CSS pixels at 96 per inch
 const PAGE_H = 1123;  // A4 height in CSS pixels
@@ -58,4 +67,27 @@ export function DocPreview({ src, versionId, look, type, hl = [], label = "CV pr
     <iframe ref=${frame} src=${url} title=${label} sandbox="allow-same-origin" tabindex=${thumb ? "-1" : undefined}
       scrolling=${thumb ? "no" : undefined} style=${style}></iframe>
   </div></div>`;
+}
+
+/** The pages of the person's own PDF as pictures, each with alt text that counts it ("Page 1 of 2 of your CV
+    file"). */
+export function FilePages({ original }) {
+  const n = original.page_urls.length;
+  return html`<div class="stack s file-pages">${original.page_urls.map((u, i) => html`<img key=${u} class="file-page"
+    src=${u} alt=${"Page " + (i + 1) + " of " + n + " of your CV file"} />`)}</div>`;
+}
+
+/** What employers get of a CV: its own PDF's pages while it sends that file (`original`, from the API), Hal's
+    reading of a file that has no pages to show with a line saying so, else Hal's page (`DocPreview`). */
+export function SentPreview({ original, versionId, look, label = "CV preview" }) {
+  if (!original) return html`<${DocPreview} versionId=${versionId} look=${look} label=${label} />`;
+  if (original.page_urls.length) {
+    return html`<div class="stack s sent-preview"><${FilePages} original=${original} />
+      <p class="small sub" style="margin:0">This is your file, ${original.name}, as employers get it.</p></div>`;
+  }
+  const words = original.why ? original.why + " This is Hal's reading of it."
+    : "Employers get your file, " + original.name + ", as you uploaded it. Hal cannot show "
+      + (KIND_WORDS[original.kind] || "this file") + " as pages, so this is Hal's reading of it.";
+  return html`<div class="stack s sent-preview"><${Note} icon=${original.why ? "warn" : "file"} tone=${original.why ? "warn" : undefined}>${words}<//>
+    <${DocPreview} versionId=${versionId || original.version_id} look=${look} label=${label} /></div>`;
 }

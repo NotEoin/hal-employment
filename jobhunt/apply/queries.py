@@ -388,6 +388,15 @@ def _cv_base(con, job_id: str) -> dict | None:
     return choose.shown(con, job_id)
 
 
+def _cv_original(con, job_id: str) -> dict | None:
+    """What the CV tab previews while the CV this application is built from sends its own file
+    (`original.view`): the file's pages for a PDF; None while it sends Hal's copy, or with no CV at all."""
+    from jobhunt.cvstudio import choose, original, store
+
+    doc_id = choose.base_doc(job_id, con) or store.lead_id(con)
+    return original.view(con, doc_id) if doc_id else None
+
+
 def _cv_kept(con, job_id: str) -> dict:
     """`schema` 2 when the application's CV can be edited line by line (`tailor.kept`), else 1, the number
     of the version it was approved as, and `pages`: the CV employers get against its page limit
@@ -496,7 +505,7 @@ def application(con, ref: str) -> dict:
                         "pick": _cv_pick(con, r) if step == 1 and not writing else [],
                         "sent_as": (row["cv_sent_as"] if row is not None else None)
                         or ("original" if documents.original_file(r) else "hal_copy"),
-                        "base": _cv_base(con, job_id)},
+                        "original": _cv_original(con, job_id), "base": _cv_base(con, job_id)},
                  "letter": {"text": letter, "words": len(letter.split()), "tone": notes.get("tone"),
                             "evidence": notes.get("evidence"), "checked": notes.get("checked"),
                             "preview_url": _file_url(files.get("letter"))},

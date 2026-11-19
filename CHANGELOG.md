@@ -15,6 +15,12 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **The preview shows the file employers get.** With **What employers get** set to **Your original file**,
+  the preview on **My CV** still showed Hal's copy, which employers never get. It now shows the pages of your
+  own file when it is a PDF, and says that this is your file as employers get it. A Word file or pasted text
+  cannot be shown as pages, so the preview shows Hal's reading of it and says that employers get your file
+  as you uploaded it. An application's CV tab and the preview of a CV on Your record do the same.
+
 - **Your CV shows every line again.** A CV type's limits, such as three lines for each project or two
   entries under **Education**, used to cut your CV without a word: a project with 8 lines showed 3, and a
   third qualification was left out of the preview, the PDF and the Word file. Now your CV shows every line

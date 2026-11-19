@@ -320,6 +320,17 @@ numbered from 1.
 If you had uploaded several CVs before this version of Hal, each upload is now a CV of its own. The one you
 were using is starred and the others are in the archive.
 
+## What employers get
+
+On **My CV**, **What employers get** chooses what Hal sends with your applications: **Your original file**,
+the file you uploaded, unchanged, or **Hal's copy**, your CV in the look you chose with the changes you
+accepted.
+
+The preview on **Your CV** shows what employers get. With **Your original file** and a PDF, you see the pages
+of your own file. Hal cannot show a Word file or pasted text as pages, so for those you see Hal's reading of
+your file, with a line saying that employers get the file as you uploaded it. An application's CV tab and
+**Preview** on a CV of Your record show the same.
+
 ## How long your CV is
 
 Each CV has its own length. Open **My CV**, **Type and look**, and choose **Keep this CV to**: **No limit**,

@@ -14,7 +14,8 @@ SHA-256, so `store.file_cvs` says which CV of My CVs a record CV is, with no col
 - Turning it off takes it out of use; the store refuses for the last CV in use, in plain words.
 - After either, the lead CV of the record follows (`profile.cvs.settle`): the first CV in use leads the facts.
 - Only a CV of one uploaded file can be used: a folder or zip of files is no one CV file to read.
-- Preview: a CV that is one of My CVs shows that CV's version in use. Any other is read with the rules only
+- Preview: a CV that is one of My CVs shows that CV's version in use, or what employers get while it sends its
+  own file (`original.view`). Any other is read with the rules only
   (`parse.read_rules`, no AI, so it is quick and private) and drawn by the same renderer in the default look;
   it is not added to My CVs. The reading (or the reader's reason it cannot read the file) is kept in memory
   by SHA-256, so the preview's two requests and a second opening read the file once. Kept in memory, not on
@@ -28,7 +29,7 @@ import threading
 from collections import OrderedDict
 from pathlib import PurePath
 
-from jobhunt.cvstudio import parse, render, store
+from jobhunt.cvstudio import original, parse, render, store
 from jobhunt.cvstudio.model import CVDoc
 from jobhunt.sections import registry
 from jobhunt.sections import store as sources
@@ -151,18 +152,19 @@ def _read(sha: str, data: bytes, name: str) -> CVDoc:
 
 
 def preview(con: sqlite3.Connection, source_id) -> dict:
-    """How to preview a CV of the record: {"version_id", "url", "why", "original_url"}.
+    """How to preview a CV of the record: {"version_id", "original", "url", "why", "original_url"}.
 
-    A CV that is one of My CVs shows that CV's version in use (`version_id`, for `DocPreview`); any other is read
+    A CV that is one of My CVs shows that CV's version in use (`version_id`, for `DocPreview`), or, while that CV
+    sends its own file, what employers get of it (`original`, from `original.view`); any other is read
     by the rules only and shown at `url`, and adds nothing to My CVs. `why` is the reader's reason when it cannot
     read the file, with the original at `original_url` to open instead.
     """
     r, data, name = source_file(con, source_id)
     base = f"{PREFIX}/{r['id']}"
-    out = {"version_id": None, "url": None, "why": "", "original_url": f"{base}/original"}
+    out = {"version_id": None, "original": None, "url": None, "why": "", "original_url": f"{base}/original"}
     mine = my_cv(con, r)
     if mine and mine["version_id"]:
-        return {**out, "version_id": mine["version_id"]}
+        return {**out, "version_id": mine["version_id"], "original": original.view(con, mine["id"])}
     try:
         _read(r["sha256"], data, name)
     except parse.CVReadError as e:

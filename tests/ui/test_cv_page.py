@@ -66,6 +66,42 @@ class CvPage(unittest.TestCase):
                 self.assertEqual(p.sideways(), 0)
                 self.assertEqual(p.serious_axe(), [])
 
+    def keep_file(self, name: str) -> None:
+        """The made-up file `name` kept as the lead CV's own file, as an upload keeps it."""
+        store.set_baseline_file(store.add_file((FOLDER / name).read_bytes(), name, role="baseline"))
+
+    def test_sending_your_own_pdf_previews_its_pages_and_hals_copy_comes_back_when_you_switch(self) -> None:
+        # 2026-11-19: with "Your original file" chosen, the preview still drew Hal's copy
+        name = f"{NAMES['technical']}.pdf"
+        self.keep_file(name)
+        for size, scheme in (("narrow", "dark"), ("wide", "light")):
+            with self.subTest(size=size):
+                store.set_send("hal_copy")
+                p = self.page("cv", size, scheme)
+                p.page.wait_for_selector("iframe[title='Your CV']")
+                p.page.click("button[role=radio]:has-text('Your original file')")
+                picture = p.page.wait_for_selector("img[alt='Page 1 of 1 of your CV file']")
+                p.page.wait_for_function("img => img.complete && img.naturalWidth > 0", arg=picture)
+                self.assertEqual(p.page.locator("iframe[title='Your CV']").count(), 0)
+                self.assertIn(f"This is your file, {name}, as employers get it.", p.page.inner_text("#main"))
+                self.assertEqual(p.sideways(), 0)
+                self.assertEqual(p.serious_axe(), [])
+                p.page.click("button[role=radio]:has-text(\"Hal's copy\")")
+                p.page.wait_for_selector("iframe[title='Your CV']")
+                self.assertEqual(p.page.locator("img[alt$='of your CV file']").count(), 0)
+                self.assertEqual(self.errors(p), [])
+
+    def test_sending_your_own_word_file_shows_hals_reading_and_says_so(self) -> None:
+        name = f"{NAMES['changer']}.docx"
+        self.keep_file(name)
+        store.set_send("original")
+        p = self.page()
+        p.page.wait_for_selector("iframe[title='Your CV']")
+        self.assertIn(f"Employers get your file, {name}, as you uploaded it. Hal cannot show a Word file as pages, "
+                      "so this is Hal's reading of it.", p.page.inner_text(".sent-preview"))
+        self.assertEqual(self.errors(p), [])
+        self.assertEqual(p.serious_axe(), [])
+
     def test_with_no_cv_file_your_file_offers_the_upload(self) -> None:
         # My CV said "You have not added a CV file" with no way to add one there
         p = self.page()

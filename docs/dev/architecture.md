@@ -458,8 +458,8 @@ runs: tests use `tests/support/fake_claude/`.
     (so a CV still being read is near the top), then `added`. Children stay under their parent on the page
     (`nested()` in `record/sections.js`).
   - Preview of a record CV (`dialogs/cvpreview.js`, a `.page` dialog sized for A4): `GET
-    /record/sources/{id}/preview` answers the CV of My CVs' version in use (drawn by `DocPreview` as on My
-    CVs) or, for a file new to My CVs, a quick reading: `parse.lines_of` + `parse.read_rules`, no AI, kept in
+    /record/sources/{id}/preview` answers the CV of My CVs' version in use (drawn by `SentPreview` as on My
+    CVs, so a CV that sends its own PDF shows its pages) or, for a file new to My CVs, a quick reading: `parse.lines_of` + `parse.read_rules`, no AI, kept in
     memory by SHA-256 (`record_cvs._read`, `READINGS_KEPT`), served at `.../preview.html` through
     `render.render_cv_html` in `render.DEFAULT_LOOK` with no type. A file the reader refuses answers its
     `CVReadError` words and `.../original` (a download). Letters (`letter` section) get neither the toggle
@@ -532,6 +532,14 @@ runs: tests use `tests/support/fake_claude/`.
   and never removes a version an application or job still points at.
 - Files are kept read-only as `cv/files/<sha256>.<ext>`; `file_bytes` checks the SHA-256 on every read and
   raises `CVError` when it no longer matches. `set_baseline_file` makes a kept file "your original file".
+- Previews of a CV that sends its own file (`send` "original") show that file, never Hal's page:
+  `original.view(con, doc_id)` is None for Hal's copy, else the file's `kind` (from the bytes, as the page
+  route decides it), `name`, `pages`, `page_urls` (one `GET /cv/original/page/{n}?cv=&f=` per page of a
+  PDF, the file id in `f` so a new file is not shown from the browser's copy), `why` when the kept file can
+  no longer be read, and `version_id`, the CV's version in use. It rides on `GET /cv` (`original`), the
+  record's `.../preview` (`original`) and an application's `docs.cv.original` (the CV it is built from, as
+  `documents.original_file` picks it). `SentPreview` in `ui/doc-preview.js` draws the page pictures, or
+  `DocPreview` of `version_id` with a note for a Word file or text, which have no pictures.
 
 ## CV reading (`cvstudio/parse.py`, `parse_actions.py`, `parse_routes.py`)
 

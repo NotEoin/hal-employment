@@ -24,7 +24,7 @@ import importlib
 import logging
 
 from jobhunt.core import activity, settings
-from jobhunt.cvstudio import checks, edit, model, pagelimit, record_cvs, store
+from jobhunt.cvstudio import checks, edit, model, original, pagelimit, record_cvs, store
 from jobhunt.cvstudio.model import CVError
 from jobhunt.web.router import BadRequest, Conflict, NotFound, route
 
@@ -80,8 +80,8 @@ def _glance(con, doc_id: str) -> dict:
 
 def summary(con, doc_id: str | None = None) -> dict:
     """The body of GET /cv for one CV (the lead CV by default): which CV it is and how many there are, route,
-    send, the employers-get line, type, look, version, file, at a glance, the text the import did not find,
-    and the name and contact line."""
+    send, the employers-get line, type, look, version, file, what a preview shows of that file while it is sent
+    (`original.view`), at a glance, the text the import did not find, and the name and contact line."""
     doc_id = store.doc(con, doc_id)["id"]
     vid, doc = store.current(con, doc_id)
     v = store.version(vid, con=con)
@@ -100,7 +100,7 @@ def summary(con, doc_id: str | None = None) -> dict:
             "type": {"id": type_id, "name": _name_of("jobhunt.cvstudio.types", "load", type_id)},
             "look": {"id": d["look_id"], "name": _name_of("jobhunt.cvstudio.render", "look", d["look_id"])},
             "version": {"id": vid, "n": v["n"], "what": v["what"], "when": v["created"]},
-            "baseline": baseline, "glance": _glance(con, doc_id),
+            "baseline": baseline, "original": original.view(con, doc_id), "glance": _glance(con, doc_id),
             "not_found": list(doc.extras.get("not_found") or []), **_profile()}
 
 

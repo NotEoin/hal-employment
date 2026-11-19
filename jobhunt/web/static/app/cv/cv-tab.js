@@ -1,13 +1,15 @@
 /* The Your CV tab: the CV as it stands, your file, what employers get, and a glance at
    the checks and suggestions. The CV is the page Hal prints, in the chosen look (ui/doc-preview.js), so what
-   the person reads here is what an employer gets as Hal's copy. */
+   the person reads here is what an employer gets as Hal's copy. While the CV sends "Your original file", the
+   preview is that file's own pages instead (`SentPreview`), as a page employers never get misled the
+   person (2026-11-19). */
 import { html, useState } from "../core/html.js";
 import { put } from "../core/api.js";
 import { openDialog, toast, invalidate } from "../core/store.js";
 import { dayWords, clock, plural } from "../core/format.js";
 import { Seg, Note } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
-import { DocPreview } from "../ui/doc-preview.js";
+import { SentPreview } from "../ui/doc-preview.js";
 import { Upload } from "./upload.js";
 import { cvUrl } from "./chosen.js";
 
@@ -56,8 +58,8 @@ function Glance({ cv, setT }) {
 export function CvTab({ cv, setT }) {
   if (!cv) return html`<p class="sub">Loading your CV.</p>`;
   return html`<div class="grid2 even">
-    <div><${DocPreview} versionId=${cv.version.id} look=${cv.look.id} label="Your CV" />
-      <p class="small sub" style="margin-top:8px">This is your CV as it stands (version ${cv.version.n}).</p></div>
+    <div><${SentPreview} original=${cv.original} versionId=${cv.version.id} look=${cv.look.id} label="Your CV" />
+      ${!cv.original && html`<p class="small sub" style="margin-top:8px">This is your CV as it stands (version ${cv.version.n}).</p>`}</div>
     <div class="stack">
       ${cv.not_found.length > 0 && html`<${Note} icon="warn" tone="warn"><b>Some of your old CV is not in Hal's copy yet.</b> Check these and add them back if you need them: ${cv.not_found.join("; ")}<//>`}
       <${YourFile} cv=${cv} setT=${setT} /><${Sending} cv=${cv} /><${Glance} cv=${cv} setT=${setT} /></div></div>`;

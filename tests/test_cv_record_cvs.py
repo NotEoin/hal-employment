@@ -179,7 +179,7 @@ class RecordCvRoutes(unittest.TestCase):
         avery = self.to_record("Avery-Quillon-CV.pdf")
         shown = self.preview(avery)
         base = f"/record/sources/{avery}"
-        self.assertEqual(shown, {"version_id": None, "url": base + "/preview.html", "why": "",
+        self.assertEqual(shown, {"version_id": None, "original": None, "url": base + "/preview.html", "why": "",
                                  "original_url": base + "/original"})
         with mock.patch.object(parse, "read_rules", wraps=parse.read_rules) as reads:
             page = self.c.get("/api/v2" + shown["url"])
@@ -196,6 +196,15 @@ class RecordCvRoutes(unittest.TestCase):
         source = self.listed()["Marnie-Quillfeather-CV.txt"]
         version = self.c.get(f"/api/v2/cv?cv={cv}").json()["version"]["id"]
         self.assertEqual(self.preview(source["id"])["version_id"], version)
+        self.assertIsNone(self.preview(source["id"])["original"], "the CV sends Hal's copy")
+
+    def test_a_cv_in_my_cvs_that_sends_its_own_pdf_previews_that_files_pages(self):
+        cv = self.to_my_cvs("Avery-Quillon-CV.pdf")
+        self.assertEqual(self.c.request("PUT", f"/api/v2/cv/send?cv={cv}", {"send": "original"}).status, 200)
+        shown = self.preview(self.listed()["Avery-Quillon-CV.pdf"]["id"])["original"]
+        self.assertEqual(shown["kind"], "pdf")
+        self.assertEqual(len(shown["page_urls"]), shown["pages"])
+        self.assertTrue(all(f"?cv={cv}&" in u for u in shown["page_urls"]), shown["page_urls"])
 
     def test_a_file_hal_cannot_read_says_why_and_offers_the_original(self):
         scanned = self.to_record("Scanned-CV.pdf")
