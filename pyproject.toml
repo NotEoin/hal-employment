@@ -1,6 +1,6 @@
 [project]
 name = "hal-employment"
-version = "2.3.2"
+version = "2.3.3"
 description = "Hal Employment: finds jobs, drafts applications and fills forms for the applicant to review and send."
 readme = "README.md"
 license = "MIT"

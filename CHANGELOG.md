@@ -2,7 +2,7 @@
 
 What changed in each version, in plain words.
 
-## Unreleased
+## 2.3.3 (2026-11-19)
 
 ### What's new
 
