@@ -2,9 +2,10 @@
    the checks and suggestions. The CV is the page Hal prints, in the chosen look (ui/doc-preview.js), so what
    the person reads here is what an employer gets as Hal's copy. While the CV sends "Your original file", the
    preview is that file's own pages instead (`SentPreview`), as a page employers never get misled the
-   person (2026-11-19). */
+   person (2026-11-19). "Read my file again" reads the CV's own file once more into its next version
+   (POST /cv/read-again), because uploading the same file again is answered with the CV it made already. */
 import { html, useState } from "../core/html.js";
-import { put } from "../core/api.js";
+import { put, run } from "../core/api.js";
 import { openDialog, toast, invalidate } from "../core/store.js";
 import { dayWords, clock, plural } from "../core/format.js";
 import { Seg, Note } from "../ui/controls.js";
@@ -12,6 +13,25 @@ import { Icon } from "../ui/icons.js";
 import { SentPreview } from "../ui/doc-preview.js";
 import { Upload } from "./upload.js";
 import { cvUrl } from "./chosen.js";
+
+const AGAIN_WORDS = "Reading your file again";
+
+/** "Read my file again": a new version from the CV's own file, read by today's Hal; the steps show as it reads. */
+function ReadAgain() {
+  const [busy, setBusy] = useState("");
+  const again = async () => {
+    setBusy(AGAIN_WORDS);
+    try {
+      const done = await run(cvUrl("/cv/read-again"), {}, ev => setBusy(ev.text || AGAIN_WORDS), () => invalidate("/cv*"));
+      if (done && done.state && done.state !== "done") throw new Error(done.error || "Hal could not read your file.");
+      invalidate("/cv*");
+      toast(done && done.result && done.result.n ? "Read your file again as version " + done.result.n : "Read your file again");
+    } catch (err) { toast(err.message); }
+    setBusy("");
+  };
+  return html`<button type="button" class="btn small" disabled=${!!busy} onClick=${again}><${Icon} n="refresh" c="s" />Read my file again</button>
+    ${busy && html`<p class="small sub" role="status" style="flex-basis:100%;margin:0">${busy}.</p>`}`;
+}
 
 function YourFile({ cv, setT }) {
   const b = cv.baseline;
@@ -25,6 +45,7 @@ function YourFile({ cv, setT }) {
       <dt>Added</dt><dd>${dayWords(b.added)} at ${clock(b.added)}</dd>${b.pages && html`<dt>Pages</dt><dd>${b.pages}</dd>`}</dl>
     <div style="margin-top:12px"><${Note} icon="lock" tone="lock">Hal never changes your file. Every change is saved as a new version, and you can go back to your file at any time.<//></div>
     <div class="row" style="margin-top:12px"><button type="button" class="btn small" onClick=${() => openDialog("checkread")}><${Icon} n="eye" c="s" />Check what Hal read</button>
+      <${ReadAgain} />
       <button type="button" class="btn small" onClick=${() => setT("versions")}><${Icon} n="upload" c="s" />Upload a new version</button>
       <a class="btn quiet small" href=${"/api/v2" + cvUrl("/cv/original")} download=${b.name}><${Icon} n="download" c="s" />Original</a></div>
 </section>`;

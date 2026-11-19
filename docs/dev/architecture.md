@@ -570,6 +570,10 @@ runs: tests use `tests/support/fake_claude/`.
   the queue. Two uploads of different files are read side by side; the same file asked for again while it is
   read answers that reading's `action_id` (409 when it goes into another CV), so no upload stops another and
   no file is read twice at once (`start_read` holds a lock from its check to the action's start).
+- `POST /cv/read-again` ("Read my file again" on the Your file card) calls `start_read` with the CV's own
+  file and `again`, so the file is read once more into the CV's next version, "Your file read again:
+  <name> (never changed)". A reading fix never rewrites stored versions by a migration, and an upload of
+  the same file answers `duplicate`, so this is how a CV read by an older Hal gets the newer reading.
 - The action asks the AI (`cv_parse`) and, when it gives a reading, puts it in place of the upload version's
   data (`store.replace_reading`: same id and number, so one upload is still one version; the version's page
   count, its `cv_checks` rows and the suggestions waiting on it go, as they were worked out from the old

@@ -308,6 +308,9 @@ numbered from 1.
   already has, Hal shows the CV it made from it instead of making a copy.
 - **Upload a new version of this CV**, in Versions, is for a file you changed outside Hal: it becomes the
   next version of the CV you are looking at.
+- **Read my file again**, on the **Your file** card of **Your CV**, reads the CV's own file once more and
+  keeps that reading as the CV's next version. Use it when Hal read your file wrongly before an update that
+  reads it better. Your earlier versions stay as they were.
 - **Use this for applications** (the button with a star icon) marks the CVs Hal may use for applications.
   A new CV is in use and tried first. **Try this CV first** puts another CV in use at the front. Hal always
   keeps one CV in use, so the last one stays on until you turn on another. The same button is on each CV

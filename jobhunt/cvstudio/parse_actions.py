@@ -17,6 +17,9 @@ request thread. The file becomes the CV's own file (`baseline_file_id`), so "you
   showed as "version 9" of the old one). The rules' reading is that version at first; the AI's reading, when
   there is one, takes its place (`store.replace_reading`, same id and number). Versions the person made
   meanwhile stand. With no AI the rules' reading stays.
+- "Read my file again" (`again`) reads a CV's own file once more into its next version, "Your file read
+  again: <name>", so a CV read before a reading fix gets the fixed reading without a new upload (the same
+  file uploaded again is answered as the CV it made, and stored versions are never rewritten).
 - A new CV is in use for applications, so the record's lead CV may change with it (`record_cvs.settle_lead`).
 - One reading per file at a time (`start_read`, subject `cv.parse:<file id>`), whoever asks: My CVs' upload,
   "Upload a new version", the setup guide, a second tab, or "Use this for applications" in Your record. A
@@ -46,6 +49,7 @@ from jobhunt.cvstudio import parse, record_cvs, store
 log = logging.getLogger(__name__)
 
 UPLOADED_WHAT = "Your file: {name} (never changed)"
+READ_AGAIN_WHAT = "Your file read again: {name} (never changed)"
 LEFT_OUT_STEP = "The AI left out part of {sections}, so Hal kept its own reading there"
 _STARTING = threading.Lock()   # held from the check for a reading to its start: one upload, one version
 BUSY_ELSEWHERE = "Hal is already reading this file for another of your CVs. Wait until it is done, then try again."
@@ -162,14 +166,14 @@ def _follow(file_id: str, doc_id: str | None, cause: Exception | None = None) ->
 
 
 def keep_rules_reading(file_id: str, file: str, reading: parse.Reading, *, doc_id: str | None = None,
-                       last: bool = False) -> tuple[str, str | None]:
+                       last: bool = False, again: bool = False) -> tuple[str, str | None]:
     """Keeps the rules' reading of a kept file as its upload version; (the CV, that version's id).
 
     A new CV without `doc_id` (`store.create_for_file`), else the next version of `doc_id`. The version is
     None when the file made a CV already (that CV is answered). The report is saved for the version now, so
     "Check what Hal read" works while the AI reads; the settings wait for the final reading.
     """
-    what = UPLOADED_WHAT.format(name=file)
+    what = (READ_AGAIN_WHAT if again else UPLOADED_WHAT).format(name=file)
     if doc_id is None:
         doc_id, made = store.create_for_file(file_id, store.name_for(file, reading.doc), reading.doc, what=what,
                                              last=last)
@@ -185,7 +189,7 @@ def keep_rules_reading(file_id: str, file: str, reading: parse.Reading, *, doc_i
     return doc_id, version_id
 
 
-def start_read(file_id: str, file: str, *, doc_id: str | None = None, last: bool = False,
+def start_read(file_id: str, file: str, *, doc_id: str | None = None, last: bool = False, again: bool = False,
                session_id: str | None = None, remote: bool = False) -> str | None:
     """Keeps Hal's quick reading of a kept file at once and starts the AI's (`cv.parse`); returns the action's
     id. When the same file is being read already, the id of that reading, so the second request follows it;
@@ -202,7 +206,7 @@ def start_read(file_id: str, file: str, *, doc_id: str | None = None, last: bool
         data = store.file_bytes(file_id)
         kind, _ = parse.check(data, file)
         reading = parse.read_rules(parse.lines_of(data, kind))
-        cv, version_id = keep_rules_reading(file_id, file, reading, doc_id=doc_id, last=last)
+        cv, version_id = keep_rules_reading(file_id, file, reading, doc_id=doc_id, last=last, again=again)
         if version_id is None:
             return _follow(file_id, doc_id)
         params: dict = {"file_id": file_id, "file": file, "cv": cv, "version_id": version_id}
@@ -210,6 +214,8 @@ def start_read(file_id: str, file: str, *, doc_id: str | None = None, last: bool
             params["doc_id"] = doc_id
         if last:
             params["last"] = True
+        if again:
+            params["again"] = True
         try:
             return runner.start("cv.parse", subject=subject(file_id), params=params, session_id=session_id,
                                 remote=remote)
@@ -223,7 +229,7 @@ def start_read(file_id: str, file: str, *, doc_id: str | None = None, last: bool
 
 @runner.action("cv.parse", area="cv", label="Reading your CV", why="You added {file}", priority=0,
                example=_example)
-def parse_cv(ctx, file_id: str, file: str, doc_id: str | None = None, last: bool = False,
+def parse_cv(ctx, file_id: str, file: str, doc_id: str | None = None, last: bool = False, again: bool = False,
              version_id: str | None = None, cv: str | None = None) -> dict:
     """Reads the file with the rules, then the AI, and keeps the AI's reading in the upload version
     `version_id` that `start_read` made (the first of a new CV, or the next of `doc_id`).
@@ -241,7 +247,7 @@ def parse_cv(ctx, file_id: str, file: str, doc_id: str | None = None, last: bool
     ctx.step("Finding the sections, dates and contact details", total=3)
     reading = parse.read_rules(lines)
     if version_id is None:
-        cv, version_id = keep_rules_reading(file_id, file, reading, doc_id=doc_id, last=last)
+        cv, version_id = keep_rules_reading(file_id, file, reading, doc_id=doc_id, last=last, again=again)
         if version_id is None:
             ctx.changed(f"{file} is your CV \"{store.doc(doc_id=cv)['name']}\" already.")
             current = store.doc(doc_id=cv)["current_version_id"]

@@ -705,6 +705,32 @@ class Upload(unittest.TestCase):
         self.assertEqual(self.client.get(f"/api/v2/cv/original?cv={first['cv']}").body,
                          fixture("technical", "docx")[1])
 
+    def test_a_cvs_own_file_is_read_again_into_its_next_version(self):
+        # 2026-11-19: a CV read before a reading fix could not get the fixed reading: the same file uploaded
+        # again was answered with the CV it made, and stored versions are never rewritten
+        name, data = fixture("humanities", "pdf")
+        first = self.read(name, data)["result"]
+        status, dup = upload(self.hal, self.client, name, data, f"?cv={first['cv']}")
+        self.assertEqual((status, dup["action_id"], dup["duplicate"]["id"]), (200, None, first["cv"]))
+        reply = ai_reply(rules_doc("humanities"), unsure=("Archive Volunteer",))
+        with fake_ai({"cv_parse": reply}):
+            r = self.client.post(f"/api/v2/cv/read-again?cv={first['cv']}", {})
+            self.assertEqual(r.status, 200, r.text)
+            done = runner.wait(r.json()["action_id"], WAIT_S)
+        self.assertEqual(done["state"], "done", done["error"])
+        self.assertEqual((done["result"]["cv"], done["result"]["n"], done["result"]["how"]), (first["cv"], 2, "ai"))
+        newest = self.versions()[-1]
+        self.assertEqual((newest["origin"], newest["by"], newest["what"], newest["n"]),
+                         ("uploaded", "baseline", parse_actions.READ_AGAIN_WHAT.format(name=name), 2))
+        self.assertEqual(newest["file_id"], self.versions()[0]["file_id"])
+        report = self.report()
+        self.assertEqual(report["n"], 2)
+        self.assertIn(parse.UNSURE_WHY, [row["why"] for row in report["rows"]])
+
+    def test_a_cv_with_no_file_cannot_be_read_again(self):
+        store.current()
+        self.assertEqual(self.client.post("/api/v2/cv/read-again", {}).status, 404)
+
     def test_a_file_whose_cv_was_deleted_uploads_again_as_a_new_cv(self):
         """A stale CV could not be deleted, and the same file uploaded again answered with that archived CV, so
         the file could never be added again (owner's report, 2026-11-19)."""

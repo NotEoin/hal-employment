@@ -20,6 +20,11 @@ What changed in each version, in plain words.
   Applications you sent keep the documents that went to the employer, and an application still being
   prepared is built on another CV.
 
+- **Read my file again.** On **My CV**, the **Your file** card has a **Read my file again** button. Hal
+  reads the CV's own file once more and keeps the new reading as the CV's next version, so a CV added before
+  a fix to how Hal reads CVs gets the better reading without uploading anything. Earlier versions stay as
+  they were. Before, adding the same file again only showed the CV it had made.
+
 ### Fixed
 
 - **Hal's AI no longer loses part of your CV.** Hal's AI sometimes read a section of a CV, such as Skills,

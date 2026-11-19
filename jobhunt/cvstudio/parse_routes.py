@@ -10,6 +10,10 @@
   that reading's `action_id`, and 409 when that reading goes into another CV. A file also goes into Your
   record's CVs (once: the same file there already is left as it is), so the record knows the CVs the person
   has.
+- `POST /cv/read-again` is "Read my file again" on the Your file card: the CV's own file is read once more,
+  as an upload is, into the CV's next version. It is the one way to give a CV read by an older Hal the
+  reading of today's Hal, since an upload of the same file answers the CV it made (`duplicate`) and stored
+  versions are never rewritten by a migration. 404 for a CV with no file.
 - `GET /cv/parse-report` is the "Check what Hal read" dialog for one CV: the original on the left (page
   pictures of a PDF, the paragraphs of a Word file or pasted text) and Hal's reading of the CV's newest file
   on the right.
@@ -74,6 +78,23 @@ def upload(req) -> dict:
     if req.files:
         _to_record(req, data, name)
     return {"action_id": action_id, "file_id": file_id, "cv": cv, "duplicate": None}
+
+
+@route("POST", "/api/v2/cv/read-again")
+def read_again(req) -> dict:
+    """Reads the CV's own file again into its next version, as an upload does; 409 while that file is being
+    read into another CV."""
+    doc_id = cv_of(req)
+    file_id = _file_id(doc_id)
+    name = _file_row(file_id)["name"] or "CV"
+    try:
+        action_id = start_read(file_id, name, doc_id=doc_id, again=True, session_id=req.session_id,
+                               remote=req.remote)
+    except parse.CVReadError as e:
+        raise BadRequest(str(e)) from e
+    except RuntimeError as e:
+        raise Conflict(str(e)) from e
+    return {"action_id": action_id, "file_id": file_id, "cv": doc_id, "duplicate": None}
 
 
 def _duplicate(req, file_id: str, had: str) -> dict:

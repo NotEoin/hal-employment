@@ -106,6 +106,25 @@ class CvPage(unittest.TestCase):
         self.assertEqual(self.errors(p), [])
         self.assertEqual(p.serious_axe(), [])
 
+    def test_your_file_is_read_again_into_a_new_version_at_both_sizes(self) -> None:
+        # 2026-11-19: there was no way to read a CV's own file again; the same file uploaded showed the old CV
+        self.enterContext(fake_ai({"cv_parse": LLMUnavailable("The made-up AI is switched off.")}))
+        name = f"{NAMES['humanities']}.pdf"
+        self.keep_file(name)
+        for size, scheme in (("wide", "light"), ("narrow", "dark")):
+            with self.subTest(size=size):
+                before = store.versions(doc_id=store.lead_id())[0]["n"]
+                p = self.page("cv", size, scheme)
+                card = p.page.locator("section.card", has_text="Your file")
+                card.locator("button:has-text('Read my file again')").click()
+                p.page.wait_for_selector(f"text=Read your file again as version {before + 1}", timeout=READ_S * 1000)
+                newest = store.versions(doc_id=store.lead_id())[0]
+                self.assertEqual((newest["n"], newest["what"]),
+                                 (before + 1, f"Your file read again: {name} (never changed)"))
+                self.assertEqual(self.errors(p), [])
+                self.assertEqual(p.sideways(), 0)
+                self.assertEqual(p.serious_axe(), [])
+
     def test_with_no_cv_file_your_file_offers_the_upload(self) -> None:
         # My CV said "You have not added a CV file" with no way to add one there
         p = self.page()
