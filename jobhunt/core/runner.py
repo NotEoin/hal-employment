@@ -506,6 +506,7 @@ class Ctx:
         self._used: list[dict] = []
         self._changed: list[str] = []
         self._ai: dict[str, Any] = {}
+        self._ai_lock = threading.Lock()   # the record readers' worker threads note their calls side by side
         self._polled = time.monotonic()
 
     def _write(self, op: Op, *, status: bool = False) -> None:
@@ -599,25 +600,35 @@ class Ctx:
             (words, raw, aid)), status=True)
         _publish_action(live, "waiting_for_you", text)
 
-    def note_ai(self, *, provider: str, model: str | None, role: str, ms: int) -> None:
-        """Adds one AI call to this action's Activity row (the AI layer calls it)."""
-        ai = self._ai
-        if ai and (ai.get("provider") != provider or ai.get("model") != model):
-            ai["mixed"] = True
-        ai.setdefault("provider", provider)
-        ai.setdefault("model", model)
-        ai.setdefault("role", role)
-        ai["calls"] = ai.get("calls", 0) + 1
-        ai["ms"] = ai.get("ms", 0) + int(ms)
-        raw, aid = json.dumps(ai), self._live.id
-        self._write(lambda con: con.execute("UPDATE activity SET ai = ? WHERE action_id = ?", (raw, aid)))
+    def note_ai(self, *, provider: str, model: str | None, role: str, ms: int, tokens_out: int | None = None,
+                tokens_thinking: int | None = None) -> None:
+        """Adds one AI call to this action's Activity row (`ai.chat` calls it), with the tokens it wrote and
+        thought when the AI reported them."""
+        with self._ai_lock:
+            ai = self._ai
+            if ai and (ai.get("provider") != provider or ai.get("model") != model):
+                ai["mixed"] = True
+            ai.setdefault("provider", provider)
+            ai.setdefault("model", model)
+            ai.setdefault("role", role)
+            ai["calls"] = ai.get("calls", 0) + 1
+            ai["ms"] = ai.get("ms", 0) + int(ms)
+            if tokens_out is not None:
+                ai["tokens"] = ai.get("tokens", 0) + int(tokens_out)
+            if tokens_thinking is not None:
+                ai["thinking"] = ai.get("thinking", 0) + int(tokens_thinking)
+            raw, aid = json.dumps(ai), self._live.id
+            # queued under the lock, so the last row written holds every call
+            self._write(lambda con: con.execute("UPDATE activity SET ai = ? WHERE action_id = ?", (raw, aid)))
 
 
-def note_ai(*, provider: str, model: str | None, role: str, ms: int) -> None:
+def note_ai(*, provider: str, model: str | None, role: str, ms: int, tokens_out: int | None = None,
+            tokens_thinking: int | None = None) -> None:
     """Adds an AI call to the current action's Activity row; a no-op outside any action."""
     ctx = current()
     if ctx is not None:
-        ctx.note_ai(provider=provider, model=model, role=role, ms=ms)
+        ctx.note_ai(provider=provider, model=model, role=role, ms=ms, tokens_out=tokens_out,
+                    tokens_thinking=tokens_thinking)
 
 
 # ------------------------------------------------------------------------------------------- execution

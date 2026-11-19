@@ -1,7 +1,8 @@
-"""Commands for application documents: pack, letter, check, contacts.
+"""Commands for application documents: pack, letter, check, contacts, docs-time.
 
 The bodies moved from `jobhunt/__main__.py`; the parser, its arguments and help stay there, because the
-voice bridge and the /jobs command parse what these commands print. File names that carry the person's
+voice bridge and the /jobs command parse what these commands print. `docs-time`, added in 2.3.2, registers
+itself here (`register`), as the rebuild's other commands do. File names that carry the person's
 name come from `core.naming`. Each command reads and writes the job's numbered application folder,
 and a pack drafted before those folders existed is still found where it was.
 """
@@ -93,3 +94,43 @@ def cmd_contacts(args):
         print(f"{p['name']}  |  {p['role']}  |  {p['source']}{'' if p['sure'] else '  (check)'}")
         print(f"    {p.get('url') or p.get('email') or ''}  {p['why']}")
     print(f"({len(found['people'])} suggested by {found['by']}{'; ' + found['note'] if found['note'] else ''})")
+
+
+def _figure(value) -> str:
+    return "-" if value is None else f"{value:,}"
+
+
+def cmd_docs_time(args):
+    """Handles `jobhunt docs-time`: what the AI did for a job's last document write, by prompt."""
+    from jobhunt.ai import usage
+    with closing(db.connect()) as con:
+        if args.action:
+            found = con.execute("SELECT id, state, started, ended FROM actions WHERE id = ?", (args.action,)).fetchone()
+            if found is None:
+                sys.exit(f"no action {args.action!r}")
+        elif not args.id:
+            sys.exit("name a job, or an action with --action")
+        else:
+            job = _find(con, args.id)
+            found = usage.last_documents(con, job["id"])
+            if found is None:
+                sys.exit(f"{job['id']}: Hal has not finished writing documents for this job")
+        costs = usage.by_prompt(con, found["id"])
+    print(f"action {found['id']} ({found['state']}), {found['started']} to {found['ended']}")
+    print(f"{'prompt':<18} {'effort':<7} {'calls':>5} {'seconds':>8} {'read':>8} {'written':>8} {'thinking':>8}")
+    for c in costs:
+        print(f"{c.purpose:<18} {c.effort or '-':<7} {c.calls:>5} {c.seconds:>8.0f} {_figure(c.tokens_in):>8} "
+              f"{_figure(c.tokens_out):>8} {_figure(c.thinking):>8}")
+    calls, seconds = sum(c.calls for c in costs), sum(c.seconds for c in costs)
+    failed = sum(c.failed for c in costs)
+    model = sum(c.model_seconds for c in costs)
+    print(f"{calls} calls ({failed} failed), {seconds / 60:.1f} minutes of calls, about {model / 60:.1f} minutes of "
+          f"model time at {usage.READ_TOKENS_S} tokens a second read and {usage.WRITE_TOKENS_S} written")
+
+
+def register(sub) -> None:
+    """Adds `docs-time` to the command line's subcommands."""
+    s = sub.add_parser("docs-time", help="show the AI calls, tokens and time of a job's last document write")
+    s.add_argument("id", nargs="?", help="the job, as `list` shows it")
+    s.add_argument("--action", help="an action id instead of a job's last document write")
+    s.set_defaults(fn=cmd_docs_time)

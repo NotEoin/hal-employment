@@ -27,7 +27,10 @@ LEFT_OUT = "(left out: it held one of your private answers)"
 AREA_LABELS = {"find": "Finding jobs", "documents": "Documents", "applying": "Applying", "email": "Email",
                "learning": "Learning", "settings": "Settings", "cv": "CV", "system": "Hal"}
 PROVIDER_WORDS = {"claude": "through your Claude subscription", "ollama": "on this computer",
-                  "fake": "a stand-in model for tests"}
+                  "fake": "a stand-in model for tests",
+                  # the backend names `ai.chat` records (`ai/base.py`)
+                  "claude_cli": "through your Claude subscription", "local": "on this computer",
+                  "hal": "Hal's local model", "openai_compat": "on your other local server"}
 PAGE_LIMIT = 50
 MAX_LIMIT = 200
 UNDO_WHY = "You pressed Undo."
@@ -249,12 +252,19 @@ def ai_words(ai: dict | None) -> tuple[str, str]:
     model = ai.get("model") or provider or "AI"
     calls = int(ai.get("calls") or 0)
     words = model + (f", {PROVIDER_WORDS[provider]}" if provider in PROVIDER_WORDS else "")
+    ms = int(ai.get("ms") or 0)
     if calls > 1:
-        words += f" ({calls} requests)"
+        # a long write says how much of it the AI spent answering, apart from waiting for its turn in Hal's queue
+        spent = f", {took_words(ms)} of AI time" if ms >= MINUTE_S * 1000 else ""
+        words += f" ({calls} requests{spent})"
     if ai.get("mixed"):
         words += ", and others"
     detail = (f"provider {provider}, model {ai.get('model') or '-'}, role {ai.get('role') or '-'}, "
-              f"{calls} calls, {int(ai.get('ms') or 0)} ms")
+              f"{calls} calls, {ms} ms")
+    if ai.get("tokens") is not None:
+        detail += f", {int(ai['tokens'])} tokens written"
+    if ai.get("thinking") is not None:
+        detail += f" ({int(ai['thinking'])} of them thinking)"
     return words, detail
 
 

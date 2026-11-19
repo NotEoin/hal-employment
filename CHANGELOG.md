@@ -22,6 +22,10 @@ What changed in each version, in plain words.
   advert. Reading your record keeps the thinking it had. A new setting, **The most thinking Hal's AI may do
   before each answer**, lets you cap it for everything.
 
+- **How long your documents took.** An application's Activity row now says how much of the time was Hal's
+  AI answering, and its details say how much it wrote and thought. `jobhunt docs-time <job>` prints each
+  step of the last document write: the AI's requests, seconds and tokens.
+
 ### Fixed
 
 - **One dissertation per course.** Pressing **This is my dissertation** on two pieces of coursework one

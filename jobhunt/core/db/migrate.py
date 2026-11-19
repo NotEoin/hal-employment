@@ -36,7 +36,7 @@ from jobhunt.core import backup, filelock
 
 log = logging.getLogger(__name__)
 
-LATEST = 36                               # highest migration in this code; numbers are contiguous
+LATEST = 37                               # highest migration in this code; numbers are contiguous
 PACKAGE = "jobhunt.core.db.migrations"
 FOLDER = Path(__file__).resolve().parent / "migrations"
 FILE_NAME = re.compile(r"^(?P<number>\d{4})_(?P<name>[a-z0-9_]+)\.py$")

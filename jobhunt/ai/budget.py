@@ -160,11 +160,13 @@ def admit(priority: int, purpose: str, backend=None) -> None:
 
 def record(result_or_error: ChatResult | BaseException, *, priority: int, purpose: str, chars_in: int,
            chars_out: int, provider: str = "", model: str = "", role: str = "", ms: int | None = None,
-           job_id: str | None = None, action_id: str | None = None) -> None:
-    """Adds one `ai_usage` row: sizes, timing and the outcome, never the prompt or the reply."""
+           job_id: str | None = None, action_id: str | None = None, effort: str | None = None) -> None:
+    """Adds one `ai_usage` row: sizes, tokens, timing and the outcome, never the prompt or the reply."""
     ok = isinstance(result_or_error, ChatResult)
+    tokens: tuple[int | None, ...] = (None, None, None)
     if ok:
         provider, model, ms = result_or_error.provider, result_or_error.model, result_or_error.ms
+        tokens = (result_or_error.tokens_in, result_or_error.tokens_out, result_or_error.tokens_thinking)
     kind = None if ok else getattr(result_or_error, "kind", "unavailable")
     until = getattr(result_or_error, "until", None) if not ok else None
     if kind == "limit" and until is None:
@@ -173,13 +175,14 @@ def record(result_or_error: ChatResult | BaseException, *, priority: int, purpos
     try:
         with con:
             con.execute("""INSERT INTO ai_usage (at, provider, model, role, priority, purpose, ok, error_kind,
-                                                 limited_until, ms, chars_in, chars_out, action_id, job_id)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                                 limited_until, ms, chars_in, chars_out, action_id, job_id,
+                                                 effort, tokens_in, tokens_out, tokens_thinking)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (clock.iso(), provider or "unknown", model, role, priority, purpose or "unnamed", int(ok), kind,
-                         clock.iso(until) if until else None, ms, chars_in, chars_out, action_id, job_id))
+                         clock.iso(until) if until else None, ms, chars_in, chars_out, action_id, job_id, effort,
+                         *tokens))
     finally:
         con.close()
-
 
 
 def today(provider: str = "claude_cli") -> dict:

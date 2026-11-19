@@ -250,10 +250,25 @@ class _Turns:
 _turns = _Turns()
 
 
+def _action():
+    """The runner's context for the action running in this thread, or None outside one."""
+    from jobhunt.core import runner
+
+    return runner.current()
+
+
 def _record(outcome, req: ChatRequest, be: Backend, model: str, chars_out: int) -> None:
+    """One `ai_usage` row, tied to the running action and its job, and the call added to the action's Activity
+    row; a failure to record is logged, never raised, as the answer is already in hand."""
     try:
+        ctx = _action()
         budget.record(outcome, priority=req.priority, purpose=req.purpose, chars_in=len(req.system) + len(req.user),
-                      chars_out=chars_out, provider=be.name, model=model, role=req.role, job_id=req.job_id)
+                      chars_out=chars_out, provider=be.name, model=model, role=req.role,
+                      job_id=req.job_id or (ctx.job_id if ctx else None), action_id=ctx.action_id if ctx else None,
+                      effort=req.effort)
+        if ctx is not None and isinstance(outcome, ChatResult):
+            ctx.note_ai(provider=outcome.provider, model=outcome.model, role=req.role, ms=outcome.ms,
+                        tokens_out=outcome.tokens_out, tokens_thinking=outcome.tokens_thinking)
     except Exception:
         log.exception("could not record an AI call")
 

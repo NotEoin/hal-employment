@@ -374,7 +374,11 @@ comes from their settings.
    work). The allowance (step 2) and the GPU wait and claim (step 3) still go by the priority alone, which
    is background (2) for calls made in actions, as before classes: the class only orders the queue, so a
    document write never gets past the Claude daily cap or the keep-free hours by being moved.
-5. One `ai_usage` row of sizes only.
+5. One `ai_usage` row of sizes, tokens and the effort sent, never text, with the running action's id and
+   job (`runner.current()`), and the call added to that action's Activity row (`Ctx.note_ai`: calls, time,
+   tokens written and thinking). `jobhunt docs-time <job>` prints a job's last document write by prompt
+   (`ai/usage.py`): calls, seconds, tokens read, written and thought, and model minutes estimated at 500
+   tokens a second read and 55 written (the owner's card, 2026-11-19).
 
 ### Thinking effort (`ai/effort.py`)
 
@@ -397,8 +401,8 @@ story_paragraph and four paragraph_verify), reading about 25,000 tokens (50 s) a
 512 or none come to 11,008 at most, 294 s in all (`tests/test_ai_effort.py` checks the sum). Before, every
 call could think to 8,192 tokens and a median call thought for 1,400 to 1,600 for a 130-token answer, so
 thinking was about 90% of an application's model time. Measured on two real adverts after the change
-(2026-11-19): 24 and 27 calls, 5.1 and 4.6 minutes of calls; the message and the form answers add paragraphs
-beyond the letter's.
+(2026-11-19, `jobhunt docs-time`): 24 and 27 calls, 5.1 and 4.6 minutes of calls; the message and the form
+answers add paragraphs beyond the letter's.
 
 Backends: `ai/ollama.py` (a local model through Ollama), `ai/openai_compat.py` (any local server that speaks
 the OpenAI format), `ai/hal_gateway.py` (the Hal suite's model gateway: the same format plus the owner token

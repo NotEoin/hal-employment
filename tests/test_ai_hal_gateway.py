@@ -44,6 +44,8 @@ class _Gateway(http.server.BaseHTTPRequestHandler):
     slots: ClassVar[int] = 0                 # the `meta.slots` listed for made-up-model; 0 lists none
     bodies: ClassVar[list] = []              # each chat's JSON body
     ran_on: ClassVar[int] = 0                # how many chats in a row end at max_tokens, half-written
+    usage: ClassVar[dict | None] = None      # the `usage` a chat's reply reports; None reports none
+    reasoning: ClassVar[dict] = {}           # extra message fields, such as `reasoning_content`
 
 
     def log_message(self, *args):
@@ -92,7 +94,9 @@ class _Gateway(http.server.BaseHTTPRequestHandler):
             type(self).ran_on -= 1
             self._send(200, {"choices": [{"message": {"content": "made-up half"}, "finish_reason": "length"}]})
             return
-        self._send(200, {"choices": [{"message": {"content": "made-up answer"}, "finish_reason": "stop"}]})
+        reply = {"choices": [{"message": {"content": "made-up answer", **type(self).reasoning},
+                              "finish_reason": "stop"}]}
+        self._send(200, {**reply, **({"usage": type(self).usage} if type(self).usage else {})})
 
 
 def _refuse_budget(self):
@@ -116,6 +120,8 @@ class Gateway(InHome):
         _Gateway.slots = 0
         _Gateway.bodies = []
         _Gateway.ran_on = 0
+        _Gateway.usage = None
+        _Gateway.reasoning = {}
         self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Gateway)
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
         self.addCleanup(self.httpd.server_close)
@@ -200,6 +206,22 @@ class Gateway(InHome):
                                 "project_read": ("high", 8192)}, "a record read keeps the thinking it had")
         self.assertEqual(capped, ("high", 1000), "the cap is the most any request may think")
         self.assertEqual(off, ("none", 0), "a cap of 0 turns thinking off")
+
+    def test_the_tokens_the_gateway_reports_are_kept_with_the_thinking_apart(self):
+        _Gateway.usage = {"prompt_tokens": 1200, "completion_tokens": 400}
+        _Gateway.reasoning = {"reasoning_content": "x" * 42}      # 42 characters of thinking, 14 of answer
+        out = GatewayBackend(self.url, self.token).chat(ai.ChatRequest(system="s", user="u", timeout=5),
+                                                        "made-up-model")
+        self.assertEqual((out.tokens_in, out.tokens_out, out.tokens_thinking), (1200, 400, 300))
+        _Gateway.usage = {"prompt_tokens": 10, "completion_tokens": 40,
+                          "completion_tokens_details": {"reasoning_tokens": 25}}
+        out = GatewayBackend(self.url, self.token).chat(ai.ChatRequest(system="s", user="u", timeout=5),
+                                                        "made-up-model")
+        self.assertEqual(out.tokens_thinking, 25, "a reported count wins over the estimate")
+        _Gateway.usage, _Gateway.reasoning = None, {}
+        out = GatewayBackend(self.url, self.token).chat(ai.ChatRequest(system="s", user="u", timeout=5),
+                                                        "made-up-model")
+        self.assertEqual((out.tokens_in, out.tokens_out, out.tokens_thinking), (None, None, None))
 
     def test_a_server_that_refuses_the_thinking_budget_is_asked_again_without_it(self):
         _Gateway.refuse = None

@@ -80,6 +80,16 @@ class Rows(unittest.TestCase):
         self.assertEqual(set(it) >= {"id", "t", "day", "area", "area_label", "icon", "tone", "text", "running", "why",
                                      "used", "ai_words", "ai_detail", "took", "changed", "undo", "remote"}, True)
 
+    def test_a_document_write_says_how_much_of_its_time_was_the_ais_and_how_much_it_thought(self):
+        new = activity.record("documents", "docs.prepare", "Wrote your documents", "You pressed Apply with Hal",
+                              ai={"provider": "hal", "model": "hal-writer", "role": "writer", "calls": 18,
+                                  "ms": 290_000, "tokens": 9000, "thinking": 6000},
+                              took_ms=420_000)
+        it = activity.one(self.con, new)
+        self.assertEqual(it["ai_words"], "hal-writer, Hal's local model (18 requests, 5 minutes of AI time)")
+        self.assertIn("9000 tokens written (6000 of them thinking)", it["ai_detail"])
+        self.assertEqual(it["took"], "7 minutes")
+
     def test_undo_runs_the_handler_once_and_says_so_in_activity(self):
         undone = []
 

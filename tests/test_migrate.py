@@ -351,7 +351,7 @@ class OldDatabases(Folder):
         con.execute("INSERT INTO job_cvs (job_id, base_version_id, level, changes) "
                     "VALUES ('made-up:1', 'v1-c', 'little', '[]')")
         con.commit()
-        self.assertEqual(self.run_migrate(con), [35, 36])
+        self.assertEqual(self.run_migrate(con), [35, 36, 37])
         self.assertEqual(con.execute("SELECT name, page_limit FROM cv_documents").fetchall(), [("Museum CV", None)])
         self.assertEqual(con.execute("SELECT pages, pages_key FROM cv_versions").fetchall(), [(None, None)])
         self.assertEqual(con.execute("SELECT level, pages, pages_key FROM job_cvs").fetchall(),
@@ -366,9 +366,22 @@ class OldDatabases(Folder):
                     "position) VALUES ('main', 'improve', 'hal_copy', 'humanities_grad', 'modern', 'x', 'x', "
                     "'Museum CV', 1, 0)")
         con.commit()
-        self.assertEqual(self.run_migrate(con), [36])
+        self.assertEqual(self.run_migrate(con), [36, 37])
         self.assertEqual(con.execute("SELECT look_id FROM cv_documents").fetchall(), [("modern",)])
         self.assertEqual(con.execute("SELECT COUNT(*) FROM cv_looks").fetchone()[0], 0)
+
+    def test_an_ai_call_from_before_keeps_its_row_with_no_tokens_at_version_37(self):
+        """A call recorded by 2.3.2 arrives with its sizes and no tokens or effort, which it never had."""
+        con = self.open()
+        up_to_36 = migrate.discover()[:36]
+        with mock.patch.object(migrate, "LATEST", 36), mock.patch.object(migrate, "discover", return_value=up_to_36):
+            self.run_migrate(con)
+        con.execute("INSERT INTO ai_usage (at, provider, priority, purpose, ok, chars_in) "
+                    "VALUES ('2026-11-19T11:00:00Z', 'hal', 1, 'brief', 1, 4000)")
+        con.commit()
+        self.assertEqual(self.run_migrate(con), [37])
+        self.assertEqual(con.execute("SELECT purpose, chars_in, tokens_in, tokens_out, tokens_thinking, effort "
+                                     "FROM ai_usage").fetchall(), [("brief", 4000, None, None, None, None)])
 
     def test_settings_revision_starts_at_zero(self):
         con = self.open()
@@ -381,8 +394,8 @@ class Runner(Folder):
 
     def test_migrations_are_numbered_one_to_latest_with_no_gaps(self):
         numbers = [m.number for m in migrate.discover()]
-        self.assertEqual(numbers, list(range(1, 37)))
-        self.assertEqual(migrate.LATEST, 36)
+        self.assertEqual(numbers, list(range(1, 38)))
+        self.assertEqual(migrate.LATEST, 37)
         self.assertTrue(all(m.title and m.title[0].isupper() for m in migrate.discover()))
 
     def test_no_migration_holds_destructive_sql_but_the_one_allowed(self):

@@ -51,6 +51,9 @@ class ChatResult:
     provider: str
     model: str
     ms: int
+    tokens_in: int | None = None        # what the backend reports, else None
+    tokens_out: int | None = None       # thinking and answer together
+    tokens_thinking: int | None = None  # reported, or the thinking's share of `tokens_out` by characters
 
 
 @dataclass(frozen=True)

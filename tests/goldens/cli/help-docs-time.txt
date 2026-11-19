@@ -1,0 +1,9 @@
+$ jobhunt docs-time --help
+usage: jobhunt docs-time [-h] [--action ACTION] [id]
+
+positional arguments:
+  id               the job, as `list` shows it
+
+options:
+  -h, --help       show this help message and exit
+  --action ACTION  an action id instead of a job's last document write

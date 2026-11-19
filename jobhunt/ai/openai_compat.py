@@ -10,6 +10,9 @@ Every request caps its answer at `MAX_TOKENS`: one CV pack prompt made Gemma 4 w
 full, 508 s and 594 s, so the pack timed out (2026-11-12). An answer cut off at the cap (`finish_reason`
 "length") is never used: it is asked once more at `RETRY_TEMPERATURE`, as a loop at a low temperature tends
 to repeat, then refused in plain words.
+
+Each answer carries the token counts the server reports (`tokens`), which `ai_usage` keeps, so the time an
+application's documents take can be read from the data.
 """
 from __future__ import annotations
 
@@ -117,7 +120,7 @@ class OpenAICompatBackend:
                 raise LLMUnavailable("The local server sent an answer Hal could not read.") from e
             if choice.get("finish_reason") != "length":
                 return ChatResult(text=text or "", provider=self.name, model=model,
-                                  ms=int((time.monotonic() - start) * 1000))
+                                  ms=int((time.monotonic() - start) * 1000), **tokens(out))
             log.warning("%s ran on to %d tokens (try %d)", model, MAX_TOKENS, attempt + 1)
             payload["temperature"] = max(payload["temperature"], RETRY_TEMPERATURE)
         raise LLMUnavailable(RAN_ON)
@@ -166,6 +169,32 @@ class OpenAICompatBackend:
     def embed(self, texts: list[str], model: str) -> list[list[float]]:
         """Not offered: record search by meaning uses Ollama."""
         raise LLMUnavailable("Searching by meaning needs the AI on this computer.")
+
+
+def _count(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
+def tokens(out: dict) -> dict[str, int | None]:
+    """`ChatResult`'s token fields from a reply's `usage`: what it reports, else None.
+
+    Thinking is `completion_tokens_details.reasoning_tokens` when reported; else, when the reply carries the
+    thinking as `reasoning_content` (llama.cpp behind Hal's gateway does, checked 2026-11-19), the thinking's
+    share of the output tokens by characters, an estimate, as both are the same model's text.
+    """
+    usage = out.get("usage") if isinstance(out.get("usage"), dict) else {}
+    tokens_in, tokens_out = _count(usage.get("prompt_tokens")), _count(usage.get("completion_tokens"))
+    details = usage.get("completion_tokens_details")
+    thinking = _count(details.get("reasoning_tokens")) if isinstance(details, dict) else None
+    if thinking is None and tokens_out is not None:
+        try:
+            message = out["choices"][0]["message"]
+        except (KeyError, IndexError, TypeError):
+            message = {}
+        said, thought = len(message.get("content") or ""), len(message.get("reasoning_content") or "")
+        if thought:
+            thinking = round(tokens_out * thought / (thought + said))
+    return {"tokens_in": tokens_in, "tokens_out": tokens_out, "tokens_thinking": thinking}
 
 
 def _refused(e: urllib.error.HTTPError) -> LLMUnavailable:

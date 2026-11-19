@@ -321,6 +321,29 @@ class Runner(unittest.TestCase):
         self.assertEqual(runner.wait(pressed, timeout=SHORT_S)["state"], "running")
         release.set()
 
+    def test_an_ai_call_inside_an_action_is_recorded_against_it_and_its_job(self):
+        """Regression: `ai_usage.action_id` and `job_id` were never filled, so the time one application's
+        documents took could not be read from the data (2026-11-19)."""
+        from jobhunt import ai
+        from jobhunt.ai.base import ChatResult
+        from jobhunt.ai.fake import FakeBackend
+
+        class Counted(FakeBackend):
+            def chat(self, req, model):
+                return ChatResult(text="ok", provider="fake", model=model, ms=1500, tokens_in=900, tokens_out=300,
+                                  tokens_thinking=200)
+
+        self.kinds.add("test.asks", lambda ctx: ai.chat("s", "u", purpose="brief") and "asked")
+        with ai.use(Counted()):
+            done = runner.wait(runner.start("test.asks", job_id="demo:1"))
+        runner.flush()
+        row = self.con.execute("""SELECT action_id, job_id, effort, tokens_in, tokens_out, tokens_thinking
+                                  FROM ai_usage WHERE purpose = 'brief'""").fetchone()
+        self.assertEqual(tuple(row), (done["id"], "demo:1", "none", 900, 300, 200))
+        noted = json.loads(self.con.execute("SELECT ai FROM activity WHERE action_id = ?",
+                                            (done["id"],)).fetchone()[0])
+        self.assertEqual((noted["calls"], noted["ms"], noted["tokens"], noted["thinking"]), (1, 1500, 300, 200))
+
     def test_ai_calls_inside_an_action_add_up_on_its_row(self):
         def ask_twice(ctx):
             runner.note_ai(provider="ollama", model="small-model", role="quick", ms=120)
