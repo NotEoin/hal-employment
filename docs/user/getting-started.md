@@ -51,9 +51,12 @@ The first time you open Hal, the setup guide opens by itself. Each answer is sav
    **Test**. Hal never sees your Claude password. If the Hal assistant is installed, **Use Hal's own AI**
    uses its models through the Hal gateway. **Use another local server instead** takes a server such as
    LM Studio or llama.cpp; put its address in **Settings**, **Hal's brain**. Then press **Test**.
-   There, **How many things Hal's AI works on at once** is 1 to start with: Hal writes one application's
-   documents at a time, so each one is ready sooner. Raise it only if your AI can answer several requests
-   at once.
+   Two settings there decide how fast Hal writes. **How many things Hal's AI works on at once** is 1 to
+   start with: Hal writes one application's documents at a time, so each one is ready sooner. Raise it
+   only if your AI can answer several requests at once. With Hal's own AI, **The most thinking Hal's AI may
+   do before each answer** limits how long it thinks before it answers. Hal already asks for less thinking
+   on quick jobs, such as a short note about the employer; lower the limit to make everything faster, at
+   some cost to quality, or set 0 to turn thinking off.
 7. **Browser helper.** The helper lets Hal fill in forms in your own browser, where you are already signed
    in. Pick your browser and follow the steps on the screen, or see
    [Load the browser helper](../howto/load-the-browser-helper.md).

@@ -39,6 +39,8 @@ class ChatRequest:
     priority: int | None = None         # default: the current action's priority, else 2
     job_id: str | None = None
     temperature: float | None = None    # default: the backend's own (low for JSON); the Claude CLI takes none
+    effort: str | None = None           # `reasoning_effort` for a model that thinks (`ai.effort`); None sends none
+    thinking_budget: int | None = None  # most thinking tokens before the answer (`ai.effort.budget`); None sends none
 
 
 @dataclass(frozen=True)

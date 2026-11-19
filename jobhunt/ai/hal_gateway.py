@@ -21,6 +21,11 @@ The gateway says how many requests a model serves at once (`meta.slots` in its l
 `parallel`), and `slots` passes that on, so Hal sends no more than that at once, and never more than
 `ai.parallel` (`ai.at_once`).
 
+Each request carries the OpenAI field `reasoning_effort` and `thinking_budget_tokens`, chosen for its prompt
+and held under the person's cap (`ai.effort`). The gateway honours both for a model that thinks and ignores,
+in its request log, what a model cannot honour; it never refuses a request for carrying them (the contract
+agreed for 2.3.2, 2026-11-19).
+
 The gateway always listens on a Unix socket in Hal's runtime directory, and on TCP only when
 `[gateway].tcp = true`. With `ai.hal_url` left at its default, this backend talks to that socket when it
 is there, so Hal mode works without turning the TCP listener on. A test run only looks in
@@ -181,8 +186,18 @@ class GatewayBackend(OpenAICompatBackend):
 
     name = "hal"
     # llama.cpp ends thinking at this many tokens and has the model answer (b12121, checked 2026-11-12); normal
-    # calls think for up to about 3,000 tokens, so only a runaway meets it
+    # calls think for up to about 3,000 tokens, so only a runaway meets it. A request with its own budget
+    # (`ChatRequest.thinking_budget`, from `ai.effort`) sends that instead.
     EXTRA: ClassVar[dict[str, int | str]] = {"thinking_budget_tokens": THINKING_BUDGET_TOKENS}
+
+    def extras(self, req: ChatRequest) -> dict[str, int | str]:
+        """The request's thinking budget and effort (`ai.effort`); `EXTRA`'s budget when it names none."""
+        out: dict[str, int | str] = dict(self.EXTRA)
+        if req.thinking_budget is not None:
+            out["thinking_budget_tokens"] = req.thinking_budget
+        if req.effort is not None:
+            out["reasoning_effort"] = req.effort
+        return out
 
     def __init__(self, url: str, token_file: str | Path, batch_token_file: str | Path | None = None) -> None:
         super().__init__(url, None)

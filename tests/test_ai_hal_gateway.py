@@ -173,6 +173,34 @@ class Gateway(InHome):
             be.chat(ai.ChatRequest(system="s", user="u", timeout=5), "made-up-model")
         self.assertIn("ran on", str(caught.exception))
 
+    def test_a_request_sends_its_own_effort_and_thinking_budget(self):
+        GatewayBackend(self.url, self.token).chat(
+            ai.ChatRequest(system="s", user="u", timeout=5, effort="low", thinking_budget=512), "made-up-model")
+        self.assertEqual((_Gateway.bodies[-1]["reasoning_effort"], _Gateway.bodies[-1]["thinking_budget_tokens"]),
+                         ("low", 512))
+
+    def test_each_prompt_is_sent_its_effort_under_the_persons_cap(self):
+        """Before 2.3.2 every request carried one 8,192-token budget and no effort, so 90% of a document write
+        was thinking (2026-11-19)."""
+        settings.set("ai.provider", "hal", by="you")
+        settings.set("ai.model.checker", "made-up-model", by="you")
+        sent = {}
+        with ai.use(GatewayBackend(self.url, self.token)):
+            for purpose in ("fit", "brief", "paragraph_verify", "project_read"):
+                ai.chat("s", "u", purpose=purpose, timeout=5)
+                sent[purpose] = (_Gateway.bodies[-1].get("reasoning_effort"),
+                                 _Gateway.bodies[-1]["thinking_budget_tokens"])
+            settings.set("ai.thinking_cap_tokens", 1000, by="you")
+            ai.chat("s", "u", purpose="project_read", timeout=5)
+            capped = (_Gateway.bodies[-1]["reasoning_effort"], _Gateway.bodies[-1]["thinking_budget_tokens"])
+            settings.set("ai.thinking_cap_tokens", 0, by="you")
+            ai.chat("s", "u", purpose="fit", timeout=5)
+            off = (_Gateway.bodies[-1]["reasoning_effort"], _Gateway.bodies[-1]["thinking_budget_tokens"])
+        self.assertEqual(sent, {"fit": ("medium", 1280), "brief": ("none", 0), "paragraph_verify": ("low", 512),
+                                "project_read": ("high", 8192)}, "a record read keeps the thinking it had")
+        self.assertEqual(capped, ("high", 1000), "the cap is the most any request may think")
+        self.assertEqual(off, ("none", 0), "a cap of 0 turns thinking off")
+
     def test_a_server_that_refuses_the_thinking_budget_is_asked_again_without_it(self):
         _Gateway.refuse = None
         be = GatewayBackend(self.url, self.token)

@@ -39,7 +39,7 @@ import re
 import threading
 from collections.abc import Iterator
 
-from jobhunt.ai import budget, gpu, guard
+from jobhunt.ai import budget, effort, gpu, guard
 from jobhunt.ai.base import (
     Backend,
     ChatRequest,
@@ -265,10 +265,11 @@ def chat(system: str, user: str, *, role: str = "checker", json_out: bool = Fals
     overrides the backend's own for this request."""
     count()
     settings = _settings()
+    level, thinking = effort.budget(purpose, settings.get(effort.CAP_KEY))
     req = ChatRequest(system=system, user=user, role=role_for(role), json_out=json_out,
                       timeout=float(timeout or settings.get("ai.timeout")), ctx=ctx, purpose=purpose,
                       priority=current_priority() if priority is None else priority, job_id=job_id,
-                      temperature=temperature)
+                      temperature=temperature, effort=level, thinking_budget=thinking)
     guard.check(req)
     be = backend()
     budget.admit(req.priority, purpose, be)

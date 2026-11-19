@@ -102,9 +102,10 @@ class OpenAICompatBackend:
                          "messages": [{"role": "system", "content": req.system}, {"role": "user", "content": req.user}]}
         if req.json_out:
             payload["response_format"] = {"type": "json_object"}
-        payload.update({"max_tokens": MAX_TOKENS, **self.EXTRA})
+        extras = self.extras(req)
+        payload.update({"max_tokens": MAX_TOKENS, **extras})
         # what a refusing server is asked again without, one step at a time: the backend's extras first
-        optional = [keys for keys in (tuple(self.EXTRA), ("response_format",)) if keys and keys[0] in payload]
+        optional = [keys for keys in (tuple(extras), ("response_format",)) if keys and keys[0] in payload]
         timeout = req.timeout or DEFAULT_TIMEOUT_S
         start = time.monotonic()
         for attempt in range(TRIES):
@@ -120,6 +121,10 @@ class OpenAICompatBackend:
             log.warning("%s ran on to %d tokens (try %d)", model, MAX_TOKENS, attempt + 1)
             payload["temperature"] = max(payload["temperature"], RETRY_TEMPERATURE)
         raise LLMUnavailable(RAN_ON)
+
+    def extras(self, req: ChatRequest) -> dict[str, int | str]:
+        """The fields this backend adds to `req`'s payload: its `EXTRA`."""
+        return dict(self.EXTRA)
 
     def _post_chat(self, payload: dict, optional: list[tuple[str, ...]], timeout: float) -> dict:
         """The server's reply to `payload`; a 400 or 422 is asked again without each `optional` step in turn

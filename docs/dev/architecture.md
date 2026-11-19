@@ -376,6 +376,30 @@ comes from their settings.
    document write never gets past the Claude daily cap or the keep-free hours by being moved.
 5. One `ai_usage` row of sizes only.
 
+### Thinking effort (`ai/effort.py`)
+
+Every prompt has an effort level in one table, `effort.LEVELS`, with a reason: `none` only where there is
+nothing to reason about (a short note, a name), `low` for writing a paragraph, a check against facts or a
+pick that must judge (thinking off answered a small reasoning question wrongly on Hal's Qwen 3.8 model,
+2026-11-19), `medium` for planning that weighs evidence (`fit`, `evidence_plan`, `story_rank`) and a
+recruiter's read, `high` for reads of the record, which keep the thinking they had (with thinking off a read
+kept 55 facts against 77, 2026-11-12). Each level has a thinking budget (`effort.BUDGETS`: 0, 512, 1,280
+and 8,192 tokens), held under the person's hard cap `ai.thinking_cap_tokens` (default 8,192, so nothing thinks less than its level until the person lowers it;
+0 turns thinking off). `ai.chat` puts both on the request (`ChatRequest.effort`, `thinking_budget`) and Hal's
+gateway sends them as `reasoning_effort` and `thinking_budget_tokens`; other backends send neither. A prompt
+missing from the table is sent no level and the cap.
+
+The budgets come from the five-minute target for one application's documents: calls x (prompt tokens / 500
++ (thinking + answer tokens) / 55) under 300 s on the speeds measured on 2026-11-19. An application asks
+about 20 calls (analyse, brief, fit, evidence_plan, story_rank, motive_pair, letter_frame, about seven
+story_paragraph and four paragraph_verify), reading about 25,000 tokens (50 s) and answering about 2,400
+(45 s). That leaves about 200 s, 11,000 tokens, for thinking: three `medium` calls at 1,280 and the rest at
+512 or none come to 11,008 at most, 294 s in all (`tests/test_ai_effort.py` checks the sum). Before, every
+call could think to 8,192 tokens and a median call thought for 1,400 to 1,600 for a 130-token answer, so
+thinking was about 90% of an application's model time. Measured on two real adverts after the change
+(2026-11-19): 24 and 27 calls, 5.1 and 4.6 minutes of calls; the message and the form answers add paragraphs
+beyond the letter's.
+
 Backends: `ai/ollama.py` (a local model through Ollama), `ai/openai_compat.py` (any local server that speaks
 the OpenAI format), `ai/hal_gateway.py` (the Hal suite's model gateway: the same format plus the owner token
 read from `ai.hal_token_file` at each call; inside `as_batch()`, which a bulk or background record read

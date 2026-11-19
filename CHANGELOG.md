@@ -17,6 +17,11 @@ What changed in each version, in plain words.
   once** is a plain setting in **Settings**, **Hal's brain**, and starts at 1 on a new install; a number you
   chose before is kept.
 
+- **Less thinking on quick jobs.** Hal's own AI is now told how hard to think for each job: little for a
+  short note about the employer or a check of a paragraph, more for weighing your evidence against the
+  advert. Reading your record keeps the thinking it had. A new setting, **The most thinking Hal's AI may do
+  before each answer**, lets you cap it for everything.
+
 ### Fixed
 
 - **One dissertation per course.** Pressing **This is my dissertation** on two pieces of coursework one

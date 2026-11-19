@@ -15,6 +15,7 @@ import sys
 import urllib.error
 import urllib.request
 
+from jobhunt.ai import effort
 from jobhunt.core.settings.catalog._shared import choices, safe, uses_local_ai
 from jobhunt.core.settings.registry import Setting, register
 
@@ -27,6 +28,9 @@ ALLOWANCE_HELP = ("Hal shares your Claude Pro allowance with your own chats. It 
                   "pause when Claude says you have reached a limit, and start again when it resets.")
 PARALLEL_HELP = ("1 writes one application's documents at a time, so each one is ready sooner. Choose more only if "
                  "your AI can answer several requests at once; Hal never sends more than it says it can take.")
+THINKING_HELP = ("Counted in tokens, about three quarters of a word each. Hal's local model thinks before it answers, "
+                 "and Hal already asks for less thinking on quick jobs. Lower this to make everything faster, at "
+                 "some cost to quality; 0 turns thinking off.")
 MAX_DAILY_CAP = 100
 MAX_PARALLEL = 4           # the runner's document threads (`core.runner.DOCUMENT_THREADS`) are this many
 AI_TIMEOUT = 300   # seconds per answer; a local model writing a letter can take minutes
@@ -109,6 +113,9 @@ register(
             help="Keeps everything on this computer. Needs \"Hal's local model\" or \"This computer\"."),
     Setting("ai.parallel", "int", 1, "How many things Hal's AI works on at once", min=1, max=MAX_PARALLEL,
             order=140, help=PARALLEL_HELP),
+    Setting(effort.CAP_KEY, "int", effort.CAP_DEFAULT, "The most thinking Hal's AI may do before each answer",
+            min=0, max=effort.CAP_MAX, unit="tokens", visible_if="ai.provider == 'hal'", order=145,
+            help=THINKING_HELP),
     Setting("ai.timeout", "int", AI_TIMEOUT, "Seconds to wait for an answer", advanced=True, min=10, order=150),
     Setting("ai.gpu_gate", "bool", True, "Wait while the graphics card is busy", advanced=True,
             visible_if="ai.provider == 'local'", order=160),
