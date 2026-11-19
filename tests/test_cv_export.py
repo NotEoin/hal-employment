@@ -103,6 +103,36 @@ class Exports(unittest.TestCase):
         self.assertEqual(sorted(titles, key=words.index), titles)
         self.assertEqual(export.to_docx(view), export.to_docx(view))   # the same CV gives the same bytes
 
+    def test_a_personal_looks_word_file_takes_its_fonts_sizes_and_margins(self):
+        from jobhunt.cvstudio import measures
+
+        person = people.TECHNICAL
+        view = render.view(made_up_cv(person.key), type_for(person.key), profile_of(person))
+        m = measures.validate({"font": "serif", "heading_font": "sans", "size": 9.5, "heading_size": 11,
+                               "name_size": 20, "margin_left": 12.5, "margin_top": 10, "page": "letter"})
+        data = export.to_docx(view, render.personal_look("my-x", "Mine", m))
+        docx_text(data)                                                 # every part still parses
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            styles = ElementTree.fromstring(z.read("word/styles.xml"))
+            document = ElementTree.fromstring(z.read("word/document.xml"))
+        default = styles.find(f"{W}docDefaults/{W}rPrDefault/{W}rPr")
+        self.assertEqual((default.find(f"{W}rFonts").get(f"{W}ascii"), default.find(f"{W}sz").get(f"{W}val")),
+                         ("Georgia", "19"))
+        heading = next(s for s in styles.iter(f"{W}style") if s.get(f"{W}styleId") == "Heading1").find(f"{W}rPr")
+        self.assertEqual((heading.find(f"{W}rFonts").get(f"{W}ascii"), heading.find(f"{W}sz").get(f"{W}val")),
+                         ("Arial", "22"))
+        section = document.find(f"{W}body/{W}sectPr")
+        self.assertEqual(section.find(f"{W}pgSz").get(f"{W}w"), "12240")
+        margins = section.find(f"{W}pgMar")
+        self.assertEqual((margins.get(f"{W}left"), margins.get(f"{W}top")), ("709", "567"))
+        name = next(document.iter(f"{W}r")).find(f"{W}rPr/{W}sz")
+        self.assertEqual(name.get(f"{W}val"), "40")
+
+    def test_a_built_in_looks_word_file_is_as_before(self):
+        person = people.TECHNICAL
+        view = render.view(made_up_cv(person.key), type_for(person.key), profile_of(person))
+        self.assertEqual(export.to_docx(view, render.look("modern")), export.to_docx(view))
+
     def test_the_word_files_relationships_stay_valid_xml_whatever_the_address_holds(self):
         links = export._Links()
         links.id_of("https://example.org/a\x01b?c=1&d=\"2\"")

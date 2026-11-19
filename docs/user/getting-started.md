@@ -360,7 +360,8 @@ one column with the same type and colours, and pictures or icons are left out.
 The look is yours, kept with your data. It is listed after Hal's own looks, so you can pick it for any of
 your CVs, and you can rename it on the card. **Delete** on its card removes it; while a CV uses the look,
 Hal says which CV and asks you to choose another look for it first. Cover letters printed in the look use
-its font, type size and margins.
+its font, type size and margins. A Word file of your CV in the look takes its page size, margins, fonts
+(Arial or Georgia) and type sizes; the rest of a Word file stays plain, so it is easy to edit.
 
 Hal can only measure a PDF. For a Word file, save it as a PDF and upload that as a new version first.
 

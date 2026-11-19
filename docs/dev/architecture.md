@@ -753,6 +753,9 @@ runs: tests use `tests/support/fake_claude/`.
   1.0.0 and `cv.json`. PDFs are cached in `cache/cv-print/` by the page's hash. In Word a line's bold and
   italic are runs (`w:b`, `w:i`) and its links `w:hyperlink`s, each with an external relationship in
   `word/_rels/document.xml.rels`; plain text and JSON Resume give the plain words; `cv.json` keeps the marks.
+  A personal look's Word file (`export._word_style`) takes its page size, margins, font families (Arial or
+  Georgia) and the body, heading and name sizes; one-line entries, colours, rules, spacing and the contact
+  separator stay Word's plain built-in styles. A built-in look's Word file is unchanged.
 
 ## CV suggestions (`cvstudio/suggest.py`, `tailor.py`, `fresh.py`)
 

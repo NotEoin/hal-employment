@@ -53,6 +53,7 @@ WEB_SCHEME = "https://"        # what a link typed as "github.com/name" in your 
 HAS_SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", re.I)          # RFC 3986 section 3.1
 LONG_START = re.compile(r"^(?:https?://)?(?:www\.)?", re.I)     # what a CV leaves off a shown address
 PERSONAL_ORDER = 1000           # personal looks come after every built-in in the gallery
+PERSONAL_NOTE = "Your own look, kept with your data"
 
 
 class UnknownLook(LookupError):
@@ -80,6 +81,7 @@ class Look:
     entry_form: str = "stacked"     # "stacked": heading, place, text on lines of their own; "line": one line
     dates: str = "right"            # "right": at the right of the heading; "inline": in the line, after a comma
     sep: str = " | "                # between the contact line's parts
+    measures: measures.Measures | None = None     # a personal look's measures, for the Word file
 
     def public(self) -> dict:
         """What `GET /cv/looks` sends."""
@@ -90,9 +92,10 @@ def personal_look(look_id: str, name: str, m: measures.Measures, *, note: str = 
     """A look made from a person's measures; its style is written by code from them, never taken from a file."""
     m = measures.validate(m.to_dict())
     family = {"sans": "Source Sans 3", "serif": "Source Serif 4"}
-    return Look(look_id, name, True, note or "Your own layout", tuple(dict.fromkeys((family[m.font],
-                family[m.heading_font]))), 1, PERSONAL_ORDER, personal=True, css=measures.css(m),
-                letter_css=measures.letter_css(m), entry_form=m.entry_form, dates=m.dates, sep=measures.separator(m))
+    fonts = tuple(dict.fromkeys((family[m.font], family[m.heading_font])))
+    return Look(look_id, name, True, note or PERSONAL_NOTE, fonts, 1, PERSONAL_ORDER, personal=True,
+                css=measures.css(m), letter_css=measures.letter_css(m), entry_form=m.entry_form, dates=m.dates,
+                sep=measures.separator(m), measures=m)
 
 
 @functools.cache

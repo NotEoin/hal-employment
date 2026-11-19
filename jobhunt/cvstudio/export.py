@@ -7,6 +7,12 @@ again as a new main CV; keeping an uploaded Word file's own design is cut for no
 are runs with `w:b` and `w:i`, and its links real hyperlinks (a relationship each, in the built-in Hyperlink
 character style), so the file reads back with the same marks. File names come from the `cvdocs.file_name`
 setting through `core.naming`, which strips accents only in the name.
+
+A personal look (`render.Look.measures`) carries its simple measures into Word (`_word_style`): the page size
+and margins, the body and heading font family (Arial or Georgia, since Word has not got Hal's own fonts) and
+the sizes of the body text, the section headings and the name. Word does not follow the rest: one-line
+entries, dates in the line, colours, rules, letter spacing, line height and the contact line's separator
+keep the Word file's plain built-in styles, so it stays easy to edit and read again.
 """
 from __future__ import annotations
 
@@ -29,6 +35,13 @@ JSON_RESUME_SCHEMA = "https://raw.githubusercontent.com/jsonresume/resume-schema
 MONTHS = {m: i + 1 for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct",
                                          "nov", "dec"))}
 NAME_HALF_POINTS = 32         # the name at 16 pt in the Word file
+TWIPS_PER_MM = 1440 / 25.4    # Word measures pages in twentieths of a point
+A4_TWIPS, LETTER_TWIPS = (11906, 16838), (12240, 15840)
+MARGIN_TWIPS = 1020           # 18 mm, as the built-in looks print
+WORD_FONTS = {"sans": "Arial", "serif": "Georgia"}   # the fallbacks the looks name after Hal's own fonts
+DEFAULT_FONT = 'w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"'
+DEFAULT_SIZE = '<w:sz w:val="21"/>'
+HEADING_RUN = '<w:rPr><w:b/><w:sz w:val="26"/></w:rPr>'     # Heading 1's own run style
 FIXED_ZIP_TIME = (2026, 1, 1, 0, 0, 0)   # the same CV always gives the same bytes
 _XML_BAD = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f]")
 FIRST_LINK_ID = 3             # rId1 is the styles part and rId2 the numbering part
@@ -129,8 +142,8 @@ def _line_para(text: str, links: _Links, style: str = "Normal") -> str:
     return f"<w:p>{_props(style)}{''.join(body)}</w:p>"
 
 
-def _docx_body(v: render.View, links: _Links) -> str:
-    out = [_para(v.name, bold=True, size=NAME_HALF_POINTS)]
+def _docx_body(v: render.View, links: _Links, name_size: int = NAME_HALF_POINTS) -> str:
+    out = [_para(v.name, bold=True, size=name_size)]
     if v.headline:
         out.append(_para(v.headline))
     if v.contact:
@@ -218,15 +231,47 @@ def _document_rels(links: _Links) -> str:
             + "".join(rels) + "</Relationships>")
 
 
-def to_docx(v: render.View) -> bytes:
-    """A Word file of the CV, with the same words and order as the printed page."""
+def _twips(mm: float) -> int:
+    return round(mm * TWIPS_PER_MM)
+
+
+def _word_style(look_: render.Look | None) -> tuple[str, str, int]:
+    """(the styles part, the page's size and margins, the name's size in half-points) for a look.
+
+    Only a personal look changes them; a built-in look keeps the Word file as it always was.
+    """
+    styles = DOCX_PARTS["word/styles.xml"]
+    page = (f'<w:pgSz w:w="{A4_TWIPS[0]}" w:h="{A4_TWIPS[1]}"/><w:pgMar w:top="{MARGIN_TWIPS}" '
+            f'w:right="{MARGIN_TWIPS}" w:bottom="{MARGIN_TWIPS}" w:left="{MARGIN_TWIPS}" w:header="0" w:footer="0" '
+            'w:gutter="0"/>')
+    m = look_.measures if look_ is not None else None
+    if m is None:
+        return styles, page, NAME_HALF_POINTS
+    body, heading = WORD_FONTS[m.font], WORD_FONTS[m.heading_font]
+    for old, new in ((DEFAULT_FONT, f'w:ascii="{body}" w:hAnsi="{body}" w:cs="{body}"'),
+                     (DEFAULT_SIZE, f'<w:sz w:val="{round(m.size * 2)}"/>'),
+                     (HEADING_RUN, f'<w:rPr><w:rFonts w:ascii="{heading}" w:hAnsi="{heading}" w:cs="{heading}"/>'
+                                   f'<w:b/><w:sz w:val="{round(m.heading_size * 2)}"/></w:rPr>')):
+        if old not in styles:
+            raise ValueError(f"the Word styles no longer hold {old!r}")
+        styles = styles.replace(old, new, 1)
+    width, height = LETTER_TWIPS if m.page == "letter" else A4_TWIPS
+    page = (f'<w:pgSz w:w="{width}" w:h="{height}"/><w:pgMar w:top="{_twips(m.margin_top)}" '
+            f'w:right="{_twips(m.margin_right)}" w:bottom="{_twips(m.margin_bottom)}" '
+            f'w:left="{_twips(m.margin_left)}" w:header="0" w:footer="0" w:gutter="0"/>')
+    return styles, page, round(m.name_size * 2)
+
+
+def to_docx(v: render.View, look_: render.Look | None = None) -> bytes:
+    """A Word file of the CV, with the same words and order as the printed page; a personal look sets its
+    fonts, sizes and margins (see the module notes)."""
     links = _Links()
+    styles, page, name_size = _word_style(look_)
     document = (f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document {W} {R}><w:body>'
-                f'{_docx_body(v, links)}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>'
-                '<w:pgMar w:top="1020" w:right="1020" w:bottom="1020" w:left="1020" w:header="0" w:footer="0" '
-                'w:gutter="0"/></w:sectPr></w:body></w:document>')
+                f'{_docx_body(v, links, name_size)}<w:sectPr>{page}</w:sectPr></w:body></w:document>')
     parts = [*DOCX_PARTS.items(), ("word/_rels/document.xml.rels", _document_rels(links)),
              ("word/document.xml", document)]
+    parts = [(name, styles if name == "word/styles.xml" else text) for name, text in parts]
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         for name, text in parts:
@@ -308,7 +353,7 @@ def export(fmt: str, doc: Any, type_: Any, look_id: str, profile: dict, *, layou
             cv_pdf(doc, type_, look_id, profile, out, layout=layout, why="You exported your CV")
         data = out.read_bytes()
     elif fmt == "docx":
-        data = to_docx(render.view(doc, type_, profile, layout=layout))
+        data = to_docx(render.view(doc, type_, profile, layout=layout), render.look(look_id))
     elif fmt == "txt":
         data = model.plain_text(doc, profile).encode("utf-8")
     elif fmt == "jsonresume":
