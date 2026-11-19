@@ -134,7 +134,7 @@ def _docx_body(v: render.View, links: _Links) -> str:
     if v.headline:
         out.append(_para(v.headline))
     if v.contact:
-        out.append(_para(" | ".join(v.contact)))
+        out.append(_line_para(" | ".join(v.contact), links))
     for s in v.sections:
         out.append(_para(s.title, "Heading1"))
         if s.text:

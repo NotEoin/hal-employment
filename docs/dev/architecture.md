@@ -697,6 +697,11 @@ runs: tests use `tests/support/fake_claude/`.
   wins. The type's limits are advice, never a cut (see CV types and checks). The page holds no script and carries its own Content-Security-Policy; the preview route sends
   the exact bytes the printer prints. A line's marks become `strong`, `em` and `a` (`inline.html`), so the
   printed PDF has real links; other fields show their stars as typed.
+- The name and contact line come from the `you.*` settings, never from the CV body (`render.contact_parts`).
+  Each part is a line with marks: a link shows its address without the scheme, a leading `www.` or a
+  closing slash (`github.com/name`) and links to the full address (one typed without a scheme links to
+  `https://`), so the preview, the printed PDF and the Word file (`export._line_para`) keep a working link.
+  Hal's simple PDF, used when no browser can print, shows the short words with no link.
 - `printer.to_pdf` prints with Microsoft Edge on Windows, Playwright's Chromium on Linux, and an ordinary
   Chromium, Chrome or Edge only when Playwright is missing; never a snap or flatpak browser, which cannot
   read Hal's temporary files. 60 s timeout, and the whole process tree is ended when it runs out. Every PDF

@@ -117,7 +117,8 @@ def draw_view(view, out: Path) -> Path:
         doc.text(_drawable(view.headline) + " ", b.ML, doc.y, b.F_REG, 9.5, b.META_INK)
     if view.contact:
         doc.y -= 11
-        doc.text(_drawable(" | ".join(view.contact)) + " ", b.ML, doc.y, b.F_REG, b.CONTACT_SIZE, b.META_INK)
+        contact = " | ".join(inline.plain(x) for x in view.contact)     # the words; this PDF draws no links here
+        doc.text(_drawable(contact) + " ", b.ML, doc.y, b.F_REG, b.CONTACT_SIZE, b.META_INK)
     doc.y -= 9
     doc.rule(b.ML, doc.y, b.CW, ink=0.55, thickness=0.7)
     doc.y -= 13

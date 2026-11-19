@@ -14,7 +14,7 @@ from unittest import mock
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support import people
 
-from jobhunt.cvstudio import printer, render, types
+from jobhunt.cvstudio import inline, printer, render, types
 from jobhunt.cvstudio.model import Bullet, CVDoc, Entry, Module, Section
 
 ACCENTED = "Zo\u00eb \u0141ukasiewicz-M\u00fcller"   # a made-up name with Latin-1 and Latin Extended letters
@@ -179,6 +179,21 @@ class CvPages(unittest.TestCase):
         self.assertIn('<h1 class="cv-name">Marnie Quillfeather</h1>', page)
         self.assertIn("marnie.quillfeather@example.org", page)
         self.assertIn("07700 900461", page)
+
+    def test_contact_links_show_their_short_address_and_link_to_the_full_one(self):
+        # 2026-11-19: the contact line showed "https://www.github.com/..." from settings, as plain text
+        profile = {**self.profile, "links": {"website": "https://www.example.org/", "github": "github.com/avery-q",
+                                             "linkedin": "javascript:alert(1)"}}
+        parts = render.contact_parts(profile)
+        self.assertEqual([inline.plain(x) for x in parts][-3:],
+                         ["javascript:alert(1)", "example.org", "github.com/avery-q"])
+        page = render.render_cv_html(self.doc, self.type, "classic", profile)
+        self.assertIn('<a href="https://www.example.org/" target="_blank" rel="noopener noreferrer">example.org</a>',
+                      page)
+        self.assertIn('<a href="https://github.com/avery-q" target="_blank" rel="noopener noreferrer">'
+                      "github.com/avery-q</a>", page)
+        self.assertNotIn('href="javascript', page)
+        self.assertNotIn("https://www.", re.sub(r'href="[^"]*"', "", page))
 
     def test_highlights_mark_only_the_named_parts_and_never_print(self):
         page = self.page(highlight=["s:experience/e:ex-1/b:ex-1-b2"])

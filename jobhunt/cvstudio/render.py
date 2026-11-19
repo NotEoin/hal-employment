@@ -6,7 +6,8 @@ except that a look whose `look.toml` says `columns = 2` puts the side sections i
 decides order and titles when the page is drawn, so one version can be shown under two types without
 changing it. Its entry and line limits are advice on the Checks tab (`types.advice`), never a cut: the page
 shows every line and entry the person has not hidden, up to the person's own limit for a section. The name
-and contact line come from the profile, never from the CV body.
+and contact line come from the profile, never from the CV body. A contact link shows its short address
+(`github.com/name`, as CVs print it) and links to the full one (`contact_parts`).
 
 Fonts are linked by the relative address `fonts/<file>`: the printer copies `FONT_DIR` next to the page it
 prints, and the preview route serves the same files under the preview's own address, so the preview and
@@ -21,6 +22,7 @@ from __future__ import annotations
 
 import functools
 import html
+import re
 import tomllib
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -45,6 +47,9 @@ RANGES = {"latin": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02D
                        "U+2C60-2C7F, U+A720-A7FF"}
 POLICY = "default-src 'none'; style-src 'unsafe-inline'; font-src 'self' file:; img-src 'none'"
 LINK_ORDER = ("linkedin", "website", "github")
+WEB_SCHEME = "https://"        # what a link typed as "github.com/name" in your details opens
+HAS_SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", re.I)          # RFC 3986 section 3.1
+LONG_START = re.compile(r"^(?:https?://)?(?:www\.)?", re.I)     # what a CV leaves off a shown address
 
 
 class UnknownLook(LookupError):
@@ -133,12 +138,31 @@ def profile_from_settings() -> dict:
             "location": get("you.city"), "links": {k: get(f"you.links.{k}") for k in LINK_ORDER}}
 
 
+def short_address(url: str) -> str:
+    """A web address as a contact line shows it: no scheme, no leading `www.`, no closing slash."""
+    return LONG_START.sub("", url.strip()).rstrip("/")
+
+
+def _link_part(url: str) -> str:
+    """One contact link as a line with marks: its short address, linked to the full one when it is a web
+    address (an address typed without a scheme links to `WEB_SCHEME`); otherwise the words as typed."""
+    url = url.strip()
+    href = inline.safe_link(url if HAS_SCHEME.match(url) else WEB_SCHEME + url)
+    if not href or href.lower().startswith("mailto:"):
+        return inline.to_text([inline.Run(url)])
+    return inline.to_text([inline.Run(short_address(url), link=href)])
+
+
 def contact_parts(profile: dict) -> list[str]:
-    """The contact line's parts, in order: email, phone, place, then links."""
+    """The contact line's parts, in order: email, phone, place, then links.
+
+    Each part is a line with marks (`inline`): a link shows its short address and links to the full one, so
+    the preview, the printed PDF and the Word file all keep a working link; other parts are plain words.
+    """
     links = profile.get("links") or {}
     parts = [_p(profile, "email"), _p(profile, "phone"), _p(profile, "location") or _p(profile, "city")]
-    parts += [str(links.get(k) or "").strip() for k in LINK_ORDER]
-    return [x for x in parts if x]
+    out = [inline.to_text([inline.Run(x)]) for x in parts if x]
+    return out + [_link_part(str(links.get(k) or "")) for k in LINK_ORDER if str(links.get(k) or "").strip()]
 
 
 # ----------------------------------------------------------------------------------------------- the view
@@ -176,7 +200,7 @@ class View:
 
     name: str
     headline: str
-    contact: list[str]
+    contact: list[str]                 # lines with marks (`contact_parts`)
     sections: list[ViewSection]
 
 
@@ -327,7 +351,7 @@ def _section_html(s: ViewSection, hl: set[str]) -> str:
 
 
 def _head_html(v: View) -> str:
-    contact = '<span class="sep"> | </span>'.join(f"<span>{_e(x)}</span>" for x in v.contact)
+    contact = '<span class="sep"> | </span>'.join(f"<span>{inline.html(x)}</span>" for x in v.contact)
     return (f'<header class="cv-head"><h1 class="cv-name">{_e(v.name)}</h1>'
             + (f'<p class="cv-headline">{_e(v.headline)}</p>' if v.headline else "")
             + (f'<p class="cv-contact">{contact}</p>' if contact else "") + "</header>")

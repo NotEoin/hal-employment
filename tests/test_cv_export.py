@@ -129,6 +129,31 @@ class Exports(unittest.TestCase):
         self.assertIn("Collections volunteer *A*", heading)         # a heading's stars stay as typed
         self.assertNotIn("**", heading)
 
+    def test_contact_links_are_short_words_and_working_links_in_word_and_the_pdf(self):
+        # 2026-11-19: the contact line showed "https://www." addresses where a CV prints "github.com/name"
+        person = people.HUMANITIES
+        url = "https://www.github.com/avery-q/"
+        profile = {**profile_of(person), "links": {"github": url}}
+        doc, type_ = formatted_cv(), type_for(person.key)
+        data = export.to_docx(render.view(doc, type_, profile))
+        words, _ = docx_text(data)
+        self.assertIn("github.com/avery-q", words)
+        self.assertNotIn("https://", words)
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            root = ElementTree.fromstring(z.read("word/document.xml"))
+            rels = ElementTree.fromstring(z.read("word/_rels/document.xml.rels"))
+        link = next(h for h in root.iter(f"{W}hyperlink")
+                    if "".join(t.text or "" for t in h.iter(f"{W}t")) == "github.com/avery-q")
+        self.assertEqual(next(r for r in rels if r.get("Id") == link.get(f"{R}id")).get("Target"), url)
+        if not browser_tests_on():
+            return
+        out = Path(tempfile.mkdtemp()) / "cv.pdf"
+        export.cv_pdf(doc, type_, "classic", profile, out, simple=False)
+        text = pdfread.text(out)
+        self.assertIn("github.com/avery-q", text)
+        self.assertNotIn("https://", text)
+        self.assertIn(url, [link.url for link in pdfread.links(out)])
+
     def test_word_files_open_in_a_document_reader(self):
         try:
             from markitdown import MarkItDown

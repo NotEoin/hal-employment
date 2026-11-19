@@ -27,6 +27,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Short web addresses on your CV.** The contact line on Hal's copy of your CV and on your letters showed
+  your web addresses in full, such as `https://www.github.com/name/`. It now shows them as CVs usually do,
+  `github.com/name`, and each one is a working link in the preview, the PDF and the Word file.
+
 - **Hal's AI no longer loses part of your CV.** Hal's AI sometimes read a section of a CV, such as Skills,
   as empty, and Hal kept that reading, so the lines were missing from Hal's copy. Now, when the AI leaves
   out a section or a line that Hal's own reading found, Hal keeps its own reading of that section, and
