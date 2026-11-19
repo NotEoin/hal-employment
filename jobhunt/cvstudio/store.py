@@ -1,5 +1,9 @@
 """The CV store: the person's CVs, each a history of numbered versions that never change.
 
+- One exception: an uploaded file is listed at once with Hal's quick rule-based reading as its version, and
+  when the AI's reading arrives it takes that version's place (`replace_reading`), same id and number, so
+  one upload stays one version while the person never waits for the AI to see their CV (2026-11-19).
+
 - Several CVs, one `cv_documents` row each, with a name the person can change, `starred` ("Use this for
   applications"), `archived` and a `position` among the starred ones. Each has its own file, version in use,
   type, look and layout. An install's first CV has the id "main" (`DOC_ID`); later ones get `cv-<hex>`.
@@ -538,6 +542,36 @@ def new_version(doc_: CVDoc, *, origin: str, what: str, by: str, parent: str | N
     _publish("version", target, id=vid)
     log.info("CV %s version %s saved (%s, by %s)", target, n, origin, by)
     return vid
+
+
+def replace_reading(version_id: str, doc_: CVDoc, con: sqlite3.Connection | None = None) -> bool:
+    """Puts the AI's reading of an uploaded file in place of its upload version's data; False when that version
+    is gone. The version keeps its id, number and place in the history, so one upload stays one version.
+
+    Only an `uploaded` version is ever changed (CVError otherwise). Its page count, cached checks and the
+    suggestions still waiting on it were worked out from the old data, so they go with it.
+    """
+    problems = model.validate(doc_)
+    if problems:
+        raise CVError(problems[0])
+    data = model.to_json(_recheck_not_found(doc_))
+    with _conn(con) as c:
+        with writing(c):
+            row = c.execute("SELECT doc_id, origin, data FROM cv_versions WHERE id = ?", (version_id,)).fetchone()
+            if row is None:
+                return False
+            if row["origin"] != "uploaded":
+                raise CVError(f"Version {version_id} is not an uploaded file's reading, so it is never changed.")
+            if row["data"] == data:
+                return True
+            c.execute("UPDATE cv_versions SET data = ?, pages = NULL, pages_key = NULL, scanner_score = NULL "
+                      "WHERE id = ?", (data, version_id))
+            c.execute("DELETE FROM cv_checks WHERE version_id = ?", (version_id,))
+            c.execute("UPDATE cv_suggestions SET status = 'superseded', decided = ? WHERE based_on = ? "
+                      "AND status = 'pending'", (clock.iso(), version_id))
+    _publish("reading", row["doc_id"], id=version_id)
+    log.info("CV %s version %s now holds the AI's reading of its file", row["doc_id"], version_id)
+    return True
 
 
 def _recheck_not_found(doc_: CVDoc) -> CVDoc:

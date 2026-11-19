@@ -444,11 +444,11 @@ runs: tests use `tests/support/fake_claude/`.
   - Your record's CVs and My CVs meet at the file (`cvstudio/record_cvs.py`): a record source of one uploaded
     file has the SHA-256 of a `cv_files` row when a CV of My CVs was read from it, so no column links them.
     `POST /api/v2/record/sources/{id}/use` {on} (`record_routes.py`) uses that CV (restored from the archive,
-    then starred last in the order) or, for a file new to My CVs, checks it (`parse.check`) and starts
-    `cv.parse` with `last` (`parse_actions.start_read`, so a file My CVs is reading already is followed, not
-    read again). The reading makes its CV with `store.create_for_file`, which checks `cv_for_file` again
-    under the write lock and answers the CV the file made meanwhile (put in use with `last`), so one file
-    never becomes two CVs; off
+    then starred last in the order) or, for a file new to My CVs, checks it (`parse.check`) and calls
+    `parse_actions.start_read` with `last`, which makes the CV at once and starts `cv.parse` (a file My CVs is
+    reading already is followed, not read again). The CV is made with `store.create_for_file`, which checks
+    `cv_for_file` again under the write lock and answers the CV the file made meanwhile (put in use with
+    `last`), so one file never becomes two CVs; off
     un-stars it, and the store's `LAST_STAR` refusal is the 400. The source's shape carries `can_use`,
     `in_use` and `my_cv`. On screen the toggle is `cv/cv-list.js` `UseToggle`, shared by both pages, with
     the words "Use this for applications" and no "star" (the words test bans it for the STAR method). Both
@@ -545,14 +545,25 @@ runs: tests use `tests/support/fake_claude/`.
 
 - `POST /cv/upload` does the cheap checks (10 MB, 6 pages, kind, a PDF with no text layer) and keeps the file
   with `store.add_file(..., role="baseline")`. When those bytes already made a CV it answers that CV as
-  `duplicate` and starts nothing; otherwise it starts `cv.parse` (`parse_actions.start_read`, subject
-  `cv.parse:<file id>`). Two uploads of different files are read side by side; the same file asked for again
-  while it is read answers that reading's `action_id` (409 when it goes into another CV), so no upload stops
-  another and no file is read twice at once. The action reads the file with Hal's rules,
-  then asks the AI (`cv_parse`), and keeps one reading, the AI's when there is one, as one version "Your file:
-  <name> (never changed)" with the file as the CV's own. Without `?cv=` that version is version 1 of a new CV
-  (`store.create`, named after the file); with `?cv=<id>` ("Upload a new version of this CV") it is that
-  CV's next version. One upload used to make two versions, so a new CV showed as "version 9" of the old one.
+  `duplicate` and starts nothing; otherwise `parse_actions.start_read` reads the file with Hal's rules in the
+  request (tens of milliseconds on a CV) and keeps that reading at once as one version "Your file: <name>
+  (never changed)" with the file as the CV's own, then starts `cv.parse` (subject `cv.parse:<file id>`) for
+  the AI's reading, and the answer names the CV (`cv`). Without `?cv=` that version is version 1 of a new CV
+  (`store.create_for_file`, named after the file); with `?cv=<id>` ("Upload a new version of this CV") it is
+  that CV's next version. So a new CV is on My CVs at once, even while the AI is busy or the action waits in
+  the queue. Two uploads of different files are read side by side; the same file asked for again while it is
+  read answers that reading's `action_id` (409 when it goes into another CV), so no upload stops another and
+  no file is read twice at once (`start_read` holds a lock from its check to the action's start).
+- The action asks the AI (`cv_parse`) and, when it gives a reading, puts it in place of the upload version's
+  data (`store.replace_reading`: same id and number, so one upload is still one version; the version's page
+  count, its `cv_checks` rows and the suggestions waiting on it go, as they were worked out from the old
+  data). Versions the person made meanwhile stand. With no AI the rules' reading stays. The report is saved
+  for the version in the request and again for the final reading, and `you.*` settings are filled from the
+  final reading only. One upload used to make two versions, so a new CV showed as "version 9" of the old
+  one.
+- `GET /cv/cvs` marks each CV whose file is being read (`reading`, from `parse_actions.reading_cvs`: the
+  queued or running `cv.parse` actions, never a stored flag, so a stopped or failed reading leaves no mark).
+  My CVs shows "Hal is reading this CV" on it and fetches the list again when a `cv.parse` starts or ends.
 - A field says "Check this" when its value is not in the file's normalised text, the AI's confidence is
   under 0.6, the year has two digits, or a field a CV normally has is missing. The AI's reading is put in
   the rules' shape first, so the same file read by rules or AI gives the same ids. With no AI, a

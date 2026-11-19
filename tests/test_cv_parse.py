@@ -72,6 +72,18 @@ def ai_reply(doc, *, org_of: dict[str, str] | None = None, unsure: tuple[str, ..
     return json.dumps({"headline": doc.headline, "contact": dict(doc.contact_snapshot), "sections": sections})
 
 
+def held_ai(entered: threading.Event, release: threading.Event):
+    """Holds the AI's reading of a CV until `release` is set, setting `entered` when it starts: a busy AI."""
+    ai_read = parse.read_with_ai
+
+    def held(lines):
+        entered.set()
+        release.wait(WAIT_S)
+        return ai_read(lines)
+
+    return mock.patch.object(parse, "read_with_ai", held)
+
+
 def rules_doc(key: str, ext: str = "pdf"):
     """The rules' reading of a made-up CV."""
     name, data = fixture(key, ext)
@@ -582,15 +594,8 @@ class Upload(unittest.TestCase):
         """Every upload shared one subject and replaced the reading before it, so that CV was never made
         (2026-11-18); the same file uploaded again while it is read follows that reading."""
         entered, release = threading.Event(), threading.Event()
-        rules = parse.read_rules
-
-        def held(lines):
-            entered.set()
-            release.wait(WAIT_S)
-            return rules(lines)
-
         first, second = fixture("humanities", "pdf"), fixture("technical", "pdf")
-        with fake_ai(NO_AI), mock.patch.object(parse, "read_rules", held):
+        with fake_ai(NO_AI), held_ai(entered, release):
             status, a = upload(self.hal, self.client, *first)
             self.assertEqual(status, 200, a)
             self.assertTrue(entered.wait(WAIT_S), "the first file is being read")
@@ -602,6 +607,77 @@ class Upload(unittest.TestCase):
             done = [runner.wait(x["action_id"], WAIT_S) for x in (a, b)]
         self.assertEqual([d["state"] for d in done], ["done", "done"], [d["error"] for d in done])
         self.assertEqual(len({d["result"]["cv"] for d in done}), 2, "each file made its own CV")
+
+    def listed(self) -> list[dict]:
+        """My CVs' list of the CVs in use."""
+        r = self.client.get("/api/v2/cv/cvs")
+        self.assertEqual(r.status, 200, r.text)
+        return r.json()["cvs"]
+
+    def test_an_upload_is_listed_while_the_ai_reads_it_and_its_reading_takes_that_version(self):
+        """An uploaded CV was not on My CVs until the AI had read it (2026-11-19)."""
+        name, data = fixture("humanities", "docx")
+        reply = ai_reply(rules_doc("humanities", "docx"), org_of={"Bookshop Assistant": INVENTED_EMPLOYER})
+        entered, release = threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+        with fake_ai({"cv_parse": reply}), held_ai(entered, release):
+            status, body = upload(self.hal, self.client, name, data)
+            self.assertEqual(status, 200, body)
+            self.assertTrue(entered.wait(WAIT_S), "the AI is reading the file")
+            self.assertEqual([(c["id"], c["name"], c["n"], c["reading"]) for c in self.listed()],
+                             [(body["cv"], NAMES["humanities"], 1, True)])
+            first = self.versions()
+            self.assertEqual([(v["n"], v["origin"]) for v in first], [(1, "uploaded")])
+            self.assertNotIn(INVENTED_EMPLOYER, first[0]["data"])
+            self.assertEqual(self.report()["version_id"], first[0]["id"], "Check what Hal read works meanwhile")
+            release.set()
+            done = runner.wait(body["action_id"], WAIT_S)
+            self.assertTrue(runner.idle(WAIT_S), "the record's read of the uploaded file has ended")
+        self.assertEqual(done["state"], "done", done["error"])
+        after = self.versions()
+        self.assertEqual([(v["id"], v["n"]) for v in after], [(first[0]["id"], 1)], "one upload is one version")
+        self.assertIn(INVENTED_EMPLOYER, after[0]["data"])
+        self.assertEqual((done["result"]["version_id"], done["result"]["cv"]), (first[0]["id"], body["cv"]))
+        self.assertEqual([c["reading"] for c in self.listed()], [False])
+        self.assertIn(INVENTED_EMPLOYER, {r["value"] for r in self.report()["rows"]}, "the report follows the AI")
+
+    def test_a_new_version_is_listed_at_once_and_a_version_made_meanwhile_stands(self):
+        cv = self.read(*fixture("humanities", "pdf"))["result"]["cv"]
+        name, data = fixture("technical", "pdf")
+        doc = rules_doc("technical")
+        job = next(s for s in doc.sections if s.kind == "experience").entries[0].heading
+        entered, release = threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+        with fake_ai({"cv_parse": ai_reply(doc, org_of={job: INVENTED_EMPLOYER})}), held_ai(entered, release):
+            status, body = upload(self.hal, self.client, name, data, f"?cv={cv}")
+            self.assertEqual((status, body["cv"]), (200, cv), body)
+            self.assertTrue(entered.wait(WAIT_S), "the AI is reading the file")
+            self.assertEqual([(c["n"], c["reading"]) for c in self.listed() if c["id"] == cv], [(2, True)])
+            upload_v = store.doc(doc_id=cv)["current_version_id"]
+            mine = store.new_version(store.get(upload_v), origin="manual", what="You changed your CV", by="you",
+                                     doc_id=cv)
+            release.set()
+            done = runner.wait(body["action_id"], WAIT_S)
+            self.assertTrue(runner.idle(WAIT_S), "the record's read of the uploaded file has ended")
+        self.assertEqual(done["state"], "done", done["error"])
+        self.assertEqual((done["result"]["version_id"], done["result"]["n"]), (upload_v, 2))
+        self.assertIn(INVENTED_EMPLOYER, to_json(store.get(upload_v)))
+        self.assertEqual(store.doc(doc_id=cv)["current_version_id"], mine, "the version you made stays in use")
+        self.assertNotIn(INVENTED_EMPLOYER, to_json(store.get(mine)))
+
+    def test_a_reading_that_fails_leaves_no_mark_and_keeps_the_rules_reading(self):
+        def broken(lines):
+            raise RuntimeError("the made-up AI fell over")
+
+        name, data = fixture("technical", "pdf")
+        with mock.patch.object(parse, "read_with_ai", broken):
+            status, body = upload(self.hal, self.client, name, data)
+            self.assertEqual(status, 200, body)
+            done = runner.wait(body["action_id"], WAIT_S)
+            self.assertTrue(runner.idle(WAIT_S), "the record's read of the uploaded file has ended")
+        self.assertEqual(done["state"], "error")
+        self.assertEqual([(c["id"], c["n"], c["reading"]) for c in self.listed()], [(body["cv"], 1, False)])
+        self.assertEqual([v["origin"] for v in self.versions()], ["uploaded"])
 
     def test_a_scanned_pdf_is_explained_when_it_is_uploaded(self):
         status, body = upload(self.hal, self.client, "Scanned-CV.pdf", (FOLDER / "Scanned-CV.pdf").read_bytes())

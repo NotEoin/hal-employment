@@ -396,7 +396,7 @@ MADE_UP_PAGES = {
             "not_found": [], "name": "Robin Example", "contact": "Leeds"},
     "/cv/cvs": {"cvs": [{"id": "main", "name": "My CV", "starred": True, "archived": None, "position": 0,
                          "lead": True, "current_version_id": "v1-demo", "n": 1, "versions": 1, "file": None,
-                         "type_id": "humanities_grad", "look_id": "classic", "send": "hal_copy",
+                         "type_id": "humanities_grad", "look_id": "classic", "send": "hal_copy", "reading": False,
                          "created": "2026-10-20T09:00:00Z", "updated": "2026-10-20T09:00:00Z"}],
                 "archived": [], "lead": "main"},
     "/cv/versions": [{"id": "v1-demo", "n": 1, "when": "2026-10-20T09:00:00Z", "what": "A made-up CV", "by": "hal",

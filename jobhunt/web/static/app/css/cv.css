@@ -22,6 +22,7 @@
 .cv-pick.on { border-color: var(--primary); background: var(--primary-soft); }
 .cv-name { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; background: none; border: 0; padding: 4px; color: var(--ink); cursor: pointer; text-align: left; min-width: 0; font: inherit; }
 .cv-name b { overflow-wrap: anywhere; }
+.cv-reading { display: flex; align-items: center; gap: 4px; color: var(--ink); }
 .cv-star.on { color: var(--warn); }
 .cv-star.on svg.i { fill: currentColor; }
 .cv-rename { margin-top: 10px; }

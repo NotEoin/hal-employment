@@ -463,6 +463,35 @@ class SeveralCVs(unittest.TestCase):
         self.assertEqual(store.doc(doc_id=museum)["baseline_file_id"], fid)
         self.assertIsNone(store.cv_for_file("f-nothing"))
 
+    def test_the_ais_reading_takes_the_upload_versions_place_and_nothing_counted_from_the_old_one_stays(self):
+        museum = self.other()
+        upload_v = store.doc(doc_id=museum)["current_version_id"]
+        con = db.connect()
+        try:
+            con.execute("UPDATE cv_versions SET pages = 1, pages_key = 'old-page', scanner_score = 70 WHERE id = ?",
+                        (upload_v,))
+            con.execute("INSERT INTO cv_checks (version_id, look_id, at) VALUES (?, 'classic', ?)", (upload_v, DAY0))
+            con.commit()
+        finally:
+            con.close()
+        later = store.new_version(edited(self.doc, "Guide, after the upload."), origin="manual", what="Edit",
+                                  by="you", doc_id=museum)
+        self.assertTrue(store.replace_reading(upload_v, edited(self.doc, "Guide, as the AI read it.")))
+        self.assertEqual(store.version(upload_v)["n"], 1, "the same version, with its number")
+        self.assertIn("as the AI read it", stored(upload_v))
+        self.assertEqual(store.doc(doc_id=museum)["current_version_id"], later, "a version made since stays in use")
+        con = db.connect()
+        try:
+            row = con.execute("SELECT pages, pages_key, scanner_score FROM cv_versions WHERE id = ?",
+                              (upload_v,)).fetchone()
+            checks = con.execute("SELECT count(*) FROM cv_checks WHERE version_id = ?", (upload_v,)).fetchone()[0]
+        finally:
+            con.close()
+        self.assertEqual((tuple(row), checks), ((None, None, None), 0))
+        with self.assertRaises(CVError):
+            store.replace_reading(later, self.doc)
+        self.assertFalse(store.replace_reading("v9-gone", self.doc))
+
 
 class SeveralCVRoutes(unittest.TestCase):
     """The CV list and its changes through the real server; `?cv=` picks the CV every route acts on."""

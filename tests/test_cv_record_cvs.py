@@ -12,7 +12,7 @@ from unittest import mock
 
 from support.actions import warm_document_reader
 from support.api import HalServer
-from test_cv_parse import upload
+from test_cv_parse import held_ai, upload
 from test_sections_routes import ended, form
 
 from jobhunt import record
@@ -84,9 +84,9 @@ class RecordCvRoutes(unittest.TestCase):
                          "a file from a My CVs upload shows in use")
         self.assertIsNone(before["Avery-Quillon-CV.md"]["my_cv"])
         on = self.use(avery, True).json()
-        self.assertIsNone(on["cv"])
         made = ended(on["action_id"])
         self.assertEqual(made["state"], "done", made)
+        self.assertEqual(on["cv"], made["result"]["cv"], "the new CV is one of My CVs before the AI has read it")
         self.idle()
         self.assertEqual(self.starred(), ["Marnie-Quillfeather-CV", "Avery-Quillon-CV"], "a CV turned on goes last")
         now = self.listed()["Avery-Quillon-CV.md"]
@@ -115,25 +115,20 @@ class RecordCvRoutes(unittest.TestCase):
 
     def test_one_file_read_from_my_cvs_and_your_record_at_once_makes_one_cv(self):
         """Turning a CV on in Your record while My CVs read the same file started a second reading, and the file
-        became two identical CVs (2026-11-18)."""
+        became two identical CVs (2026-11-18). The CV is listed before the AI reads it, so the press uses it."""
         entered, release = threading.Event(), threading.Event()
-        rules = parse.read_rules
-
-        def held(lines):
-            entered.set()
-            release.wait(WAIT_S)
-            return rules(lines)
-
+        self.addCleanup(release.set)
         self.to_my_cvs("Marnie-Quillfeather-CV.txt")
-        with mock.patch.object(parse, "read_rules", held):
+        with held_ai(entered, release):
             status, out = upload(self.hal, self.c, "Avery-Quillon-CV.md", fixture("Avery-Quillon-CV.md"))
             self.assertEqual(status, 200, out)
             self.assertTrue(entered.wait(WAIT_S), "My CVs is reading the file")
             source = self.listed()["Avery-Quillon-CV.md"]
-            self.assertIsNone(source["my_cv"])
+            self.assertEqual(source["my_cv"]["id"], out["cv"])
             pressed = self.use(source["id"], True)
-            self.assertEqual((pressed.status, pressed.json()["action_id"]), (200, out["action_id"]),
-                             "the press follows the reading under way")
+            said = pressed.json()
+            self.assertEqual((pressed.status, said["action_id"], said["cv"]), (200, None, out["cv"]),
+                             "the press uses the CV the reading under way made")
             release.set()
             ended(out["action_id"])
         self.idle()

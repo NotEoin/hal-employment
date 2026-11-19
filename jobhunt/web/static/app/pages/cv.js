@@ -23,7 +23,8 @@ import { UncheckedNote } from "../ui/unchecked-note.js";
 const TABS = ["cv", "edit", "sugg", "style", "checks", "versions"];
 // Changes made elsewhere (Your record's "Use this for applications", another window) that change the list.
 const LIST_CHANGES = new Set(["star", "archive", "order", "create", "rename"]);
-const listChanged = [ev => ev.type === "cv" && LIST_CHANGES.has(ev.what)];
+// A CV file's reading starting or ending moves the list's "Hal is reading this CV" mark.
+const listChanged = [ev => ev.type === "cv" && LIST_CHANGES.has(ev.what), ev => ev.type === "action" && ev.kind === "cv.parse"];
 
 function writeTab(t) {
   try { history.replaceState(null, "", "#" + (t === "cv" ? "cv" : "cv-" + t)); } catch (err) { /* a sandboxed frame may refuse */ }

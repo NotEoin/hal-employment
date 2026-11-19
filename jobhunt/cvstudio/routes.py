@@ -24,7 +24,7 @@ import importlib
 import logging
 
 from jobhunt.core import activity, settings
-from jobhunt.cvstudio import checks, edit, model, original, pagelimit, record_cvs, store
+from jobhunt.cvstudio import checks, edit, model, original, pagelimit, parse_actions, record_cvs, store
 from jobhunt.cvstudio.model import CVError
 from jobhunt.web.router import BadRequest, Conflict, NotFound, route
 
@@ -136,7 +136,12 @@ def get_cv(req) -> dict:
 # ------------------------------------------------------------------------------------------------- the CVs
 
 def _cvs(con) -> dict:
-    return {"cvs": store.documents(con), "archived": store.documents(con, archived=True), "lead": store.lead_id(con)}
+    """The list My CVs draws; `reading` marks a CV whose file Hal is reading now (`parse_actions.reading_cvs`)."""
+    reading = parse_actions.reading_cvs(con)
+    def marked(archived: bool) -> list[dict]:
+        return [{**d, "reading": d["id"] in reading} for d in store.documents(con, archived=archived)]
+
+    return {"cvs": marked(False), "archived": marked(True), "lead": store.lead_id(con)}
 
 
 @route("GET", "/api/v2/cv/cvs")

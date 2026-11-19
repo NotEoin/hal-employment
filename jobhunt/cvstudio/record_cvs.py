@@ -6,9 +6,9 @@ read from a file has that file's SHA-256 in `cv_files`, and a record source of o
 SHA-256, so `store.file_cvs` says which CV of My CVs a record CV is, with no column to keep in step.
 
 - Turning it on uses the CV the file already made (restored from the archive when it is there) and puts it
-  last in the order of the CVs in use, as My CVs' own toggle does. A file that made no CV yet is read by the CV
-  reader (`cv.parse`, the rules then the AI) into a new CV named after the file; the request only checks the
-  file (`parse.check`) and starts the action, so the slow part never runs in a request thread. A file being
+  last in the order of the CVs in use, as My CVs' own toggle does. A file that made no CV yet becomes a new CV
+  named after the file at once, with the rules' quick reading, and the CV reader (`cv.parse`) puts the AI's
+  reading in its place, so the slow part never runs in a request thread (`parse_actions.start_read`). A file being
   read already (an upload on My CVs) is not read twice: the request follows that reading
   (`parse_actions.start_read`), and the reading makes one CV however many asked (`store.create_for_file`).
 - Turning it off takes it out of use; the store refuses for the last CV in use, in plain words.
@@ -44,7 +44,7 @@ _lock = threading.Lock()
 NOT_A_CV = "Only a CV in Your CVs can be used for applications."
 NOT_ONE_FILE = "This CV is a folder of files, so Hal cannot read it as one CV. Add the CV file on its own."
 GONE_FILE = "Hal no longer has its copy of this file. Add it again."
-BUSY = "Hal is already reading this CV. It shows in My CVs when it is done."
+BUSY = "Hal is already reading this CV. Try again when it is done."
 
 
 class NotUsable(ValueError):
@@ -93,8 +93,8 @@ def use(con: sqlite3.Connection, source_id, on: bool, *, session_id: str | None 
         remote: bool = False) -> dict:
     """Turns "Use this for applications" on or off for a CV of the record; {"cv", "action_id"}.
 
-    `cv` is the CV of My CVs it is (None while a new one is being read); `action_id` the `cv.parse` reading the
-    file into a new CV, else None. `NotUsable` (and `parse.CVReadError`) say why a file cannot be used,
+    `cv` is the CV of My CVs it is (listed at once, also while the AI reads it); `action_id` the `cv.parse`
+    reading the file into a new CV, else None. `NotUsable` (and `parse.CVReadError`) say why a file cannot be used,
     `model.CVError` why the last CV in use stays in use, `RuntimeError` (`BUSY`) when the file is being read
     into another CV ("Upload a new version") or in another window.
     """
@@ -120,7 +120,7 @@ def use(con: sqlite3.Connection, source_id, on: bool, *, session_id: str | None 
     except RuntimeError as e:
         log.info("not reading %s again: %s", name, e)
         raise RuntimeError(BUSY) from e
-    return {"cv": None, "action_id": action_id}
+    return {"cv": store.cv_for_file(file_id, con=con), "action_id": action_id}
 
 
 # ------------------------------------------------------------------------------------------------ preview

@@ -15,6 +15,12 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **A CV you add shows straight away.** A CV you upload on **My CVs**, or a new version of one, used to
+  appear only once Hal's AI had finished reading it, so it could be missing for a long time while the AI was
+  busy. It is now in the list within a second or two, marked **Hal is reading this CV** until the reading ends. When the
+  AI is done, its reading replaces Hal's first quick reading in the same version, so one file is still one
+  version, and any changes you made in the meantime are kept as later versions.
+
 - **The preview shows the file employers get.** With **What employers get** set to **Your original file**,
   the preview on **My CV** still showed Hal's copy, which employers never get. It now shows the pages of your
   own file when it is a PDF, and says that this is your file as employers get it. A Word file or pasted text

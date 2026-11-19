@@ -302,7 +302,9 @@ and the list at its top shows every CV by name. Press a name to see that CV: eve
 Edit your CV, Suggestions, Type and look, Checks and Versions) is about that CV only, and its versions are
 numbered from 1.
 
-- **Add another CV** reads a new file into a CV of its own, starting at version 1. If you add a file Hal
+- **Add another CV** reads a new file into a CV of its own, starting at version 1. The new CV is in the list
+  straight away, marked **Hal is reading this CV** while Hal's AI checks how it read the file. When the AI
+  is done, its reading takes the place of that version, so it is still version 1. If you add a file Hal
   already has, Hal shows the CV it made from it instead of making a copy.
 - **Upload a new version of this CV**, in Versions, is for a file you changed outside Hal: it becomes the
   next version of the CV you are looking at.

@@ -43,11 +43,13 @@ export const post = (p, b = {}) => api("POST", p, b);
 export const put = (p, b) => api("PUT", p, b);
 export const del = p => api("DELETE", p);
 
-/** Starts an action and follows it: resolves with its final Action, and calls onStep with each step. */
-export async function run(path, body, onStep) {
+/** Starts an action and follows it: resolves with its final Action, and calls onStep with each step.
+    `onStarted` hears the starting reply first, for what the route made before the action ends. */
+export async function run(path, body, onStep, onStarted) {
   const started = await post(path, body);
   const id = started && started.action_id;
   if (!id) return started;
+  if (onStarted) onStarted(started);
   return new Promise((resolve, reject) => {
     let done = false;
     const finish = async () => {

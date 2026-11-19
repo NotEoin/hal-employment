@@ -3,11 +3,13 @@
 - `POST /cv/upload` takes one file (multipart) or `{text}` and makes a new CV from it. With `?cv=<id>` it is
   "Upload a new version of this CV" instead: the reading becomes that CV's next version. The cheap checks
   (size, kind, pages, a PDF that is only a picture) answer at once with words that say what to do; the file
-  is then stored unchanged and `cv.parse` reads it in the background. A file whose bytes already made a CV
-  starts nothing: the answer names that CV (`duplicate`), so the page selects it instead of making a copy.
-  A file being read already answers with that reading's `action_id` (`parse_actions.start_read`), and 409
-  when that reading goes into another CV. A file also goes into Your record's CVs (once: the same file there
-  already is left as it is), so the record knows the CVs the person has.
+  is then stored unchanged, Hal's quick reading is kept as the CV's version at once and `cv.parse` reads it
+  with the AI in the background (`parse_actions.start_read`), so the answer names the CV (`cv`) the page can
+  show while Hal reads. A file whose bytes already made a CV starts nothing: the answer names that CV
+  (`duplicate`), so the page selects it instead of making a copy. A file being read already answers with
+  that reading's `action_id`, and 409 when that reading goes into another CV. A file also goes into Your
+  record's CVs (once: the same file there already is left as it is), so the record knows the CVs the person
+  has.
 - `GET /cv/parse-report` is the "Check what Hal read" dialog for one CV: the original on the left (page
   pictures of a PDF, the paragraphs of a Word file or pasted text) and Hal's reading of the CV's newest file
   on the right.
@@ -25,7 +27,7 @@ from urllib.parse import quote
 from jobhunt.core import settings
 from jobhunt.cvstudio import parse, pdfread, store
 from jobhunt.cvstudio.model import CVError
-from jobhunt.cvstudio.parse_actions import fill_empty_settings, start_read
+from jobhunt.cvstudio.parse_actions import fill_empty_settings, reading_now, start_read
 from jobhunt.cvstudio.routes import cv_of
 from jobhunt.web.router import BadRequest, BytesResponse, Conflict, NotFound, route
 
@@ -49,8 +51,9 @@ def _upload(req) -> tuple[bytes, str]:
 
 @route("POST", "/api/v2/cv/upload")
 def upload(req) -> dict:
-    """Stores the file unchanged and starts reading it into a new CV, or into `?cv=` as its next version; a file
-    Hal cannot read is refused with the reason, and one that already made a CV is answered with that CV."""
+    """Stores the file unchanged, keeps Hal's quick reading as a new CV (or as `?cv=`'s next version) and starts
+    the AI's; a file Hal cannot read is refused with the reason, and one that already made a CV is answered
+    with that CV."""
     into = cv_of(req) if req.query.get("cv") else None
     data, name = _upload(req)
     try:
@@ -59,17 +62,25 @@ def upload(req) -> dict:
         raise BadRequest(str(e), field="file") from e
     file_id = store.add_file(data, name, role="baseline")
     had = store.cv_for_file(file_id, con=req.con)
-    if had is not None and (into is None or had == into):
-        cv = store.doc(req.con, had)
-        return {"action_id": None, "file_id": file_id,
-                "duplicate": {"id": had, "name": cv["name"], "archived": cv["archived"]}}
+    if had is not None and (into is None or had == into) and not reading_now(file_id):
+        return _duplicate(req, file_id, had)
     try:
         action_id = start_read(file_id, name, doc_id=into, session_id=req.session_id, remote=req.remote)
     except RuntimeError as e:
         raise Conflict(str(e)) from e
+    cv = into or store.cv_for_file(file_id, con=req.con)
+    if action_id is None:
+        return _duplicate(req, file_id, cv)
     if req.files:
         _to_record(req, data, name)
-    return {"action_id": action_id, "file_id": file_id, "duplicate": None}
+    return {"action_id": action_id, "file_id": file_id, "cv": cv, "duplicate": None}
+
+
+def _duplicate(req, file_id: str, had: str) -> dict:
+    """The answer for a file that made CV `had` already: nothing is read, the page shows that CV."""
+    cv = store.doc(req.con, had)
+    return {"action_id": None, "file_id": file_id, "cv": had,
+            "duplicate": {"id": had, "name": cv["name"], "archived": cv["archived"]}}
 
 
 def _to_record(req, data: bytes, name: str) -> None:

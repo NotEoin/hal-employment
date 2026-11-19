@@ -2,8 +2,10 @@
    which one the page shows; for the shown CV, Rename, Use first and Move to the archive; "Add another CV"; and
    the archived CVs with Restore. The server keeps one CV starred at all times and says why when the last star
    cannot come off; this list only shows its answer. Every change answers the whole list (GET /cv/cvs), so the
-   list is redrawn from what the server now holds. */
-import { html, cx, useState } from "../core/html.js";
+   list is redrawn from what the server now holds. A CV just added is listed at once and marked "Hal is reading
+   this CV" (`reading`, worked out by the server from the reading under way) until that reading ends; while one
+   is marked the list is fetched again now and then, so the mark goes even if the event that ends it is missed. */
+import { html, cx, useState, useEffect } from "../core/html.js";
 import { put } from "../core/api.js";
 import { toast, invalidate } from "../core/store.js";
 import { Icon } from "../ui/icons.js";
@@ -11,6 +13,8 @@ import { cvUrl } from "./chosen.js";
 import { Upload, duplicateWords } from "./upload.js";
 
 export const USE_WORDS = "Use this for applications";
+export const READING_WORDS = "Hal is reading this CV";
+const READING_POLL_MS = 5000;   // as core/api.js follows an action: a fallback for a missed event
 
 /** The "Use this for applications" toggle, its icon filled while on. `words` shows the words beside the icon
     (Your record's CVs, where `busy` replaces them while Hal reads the file); without them it is the icon
@@ -45,6 +49,12 @@ export function CvList({ list, shown, onShow, onList }) {
   const [adding, setAdding] = useState(false);
   const [archive, setArchive] = useState(false);
   const all = [...list.cvs, ...list.archived];
+  const reading = list.cvs.some(x => x.reading);
+  useEffect(() => {
+    if (!reading) return undefined;
+    const timer = setInterval(() => onList(), READING_POLL_MS);
+    return () => clearInterval(timer);
+  }, [reading]);
   const c = all.find(x => x.id === shown) || list.cvs[0];
   const change = async (fn, said) => {
     try { const out = await fn(); onList(out); invalidate("/cv*"); toast(said); return out; }
@@ -60,10 +70,12 @@ export function CvList({ list, shown, onShow, onList }) {
   const restore = x => change(() => put(cvUrl("/cv/archive", x.id), { on: false }), x.name + " is back in your CVs");
   const first = () => change(() => put("/cv/order", { ids: [c.id, ...list.cvs.filter(x => x.starred && x.id !== c.id).map(x => x.id)] }),
     "Hal tries " + c.name + " first for applications");
+  // A new CV is shown as soon as it is listed (`listed`); when its reading ends the person may be on another
+  // CV, so the end moves them only for a file that made a CV before.
+  const listed = out => { setAdding(false); onList(); if (out.cv) onShow(out.cv); };
   const added = out => {
     setAdding(false);
-    if (out && out.duplicate) toast(duplicateWords(out.duplicate));
-    if (out && out.cv) onShow(out.cv);
+    if (out && out.duplicate) { toast(duplicateWords(out.duplicate)); onShow(out.cv); }
   };
   return html`<section class="card cv-list" aria-labelledby="cv-list-head">
     <div class="row"><h2 class="h2 grow" id="cv-list-head" style="margin:0">Your CVs</h2>
@@ -74,14 +86,15 @@ export function CvList({ list, shown, onShow, onList }) {
     <ul class="cv-picks">${list.cvs.map(x => html`<li key=${x.id} class=${cx("cv-pick", x.id === c.id && "on")}>
       <${Star} c=${x} onStar=${star} />
       <button type="button" class="cv-name" aria-current=${x.id === c.id ? "true" : null} onClick=${() => onShow(x.id)}>
-        <b>${x.name}</b><span class="small sub">${x.n ? "Version " + x.n : "No versions yet"}${x.lead ? ", tried first" : ""}</span></button></li>`)}</ul>
+        <b>${x.name}</b><span class="small sub">${x.n ? "Version " + x.n : "No versions yet"}${x.lead ? ", tried first" : ""}</span>
+        ${x.reading && html`<span class="small cv-reading"><${Icon} n="spark" c="s" />${READING_WORDS}</span>`}</button></li>`)}</ul>
     ${!c.archived && html`<div class="row" style="margin-top:10px">
       <button type="button" class="btn quiet small" aria-expanded=${renaming ? "true" : "false"} onClick=${() => setRenaming(!renaming)}><${Icon} n="edit" c="s" />Rename</button>
       ${c.starred && !c.lead && html`<button type="button" class="btn quiet small" onClick=${first}>Try this CV first</button>`}
       ${list.cvs.length > 1 && html`<button type="button" class="btn quiet small" onClick=${toArchive}><${Icon} n="folder" c="s" />Move to the archive</button>`}</div>`}
     ${renaming && html`<${Rename} key=${c.id} c=${c} onDone=${out => { setRenaming(false); if (out) { onList(out); invalidate("/cv*"); } }} />`}
     ${adding && html`<div style="margin-top:12px"><p class="small sub" style="margin:0 0 8px">A new file becomes a CV of its own, starting at version 1. To update this CV with a new file, use Versions.</p>
-      <${Upload} fresh=${true} onRead=${added} /></div>`}
+      <${Upload} fresh=${true} onStart=${listed} onRead=${added} /></div>`}
     ${archive && list.archived.length > 0 && html`<div class="cv-archive" style="margin-top:12px"><h3 class="h3" style="margin:0 0 6px">Archived CVs</h3>
       <p class="small sub" style="margin:0 0 8px">Hal keeps every version of an archived CV, so applications sent with it still have it.</p>
       ${list.archived.map(x => html`<div class="li" key=${x.id}><div class="grow"><button type="button" class="btn quiet small"

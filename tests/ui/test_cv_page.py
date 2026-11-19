@@ -6,6 +6,7 @@ the "How your CV is made" dialog, and the list of CVs once there are several ("M
 from __future__ import annotations
 
 import contextlib
+import threading
 import unittest
 
 from support.api import HalServer
@@ -13,6 +14,7 @@ from support.fake_ai import fake_ai
 from support.make_cv_fixtures import FOLDER, NAMES
 from support.ui import AppPage, chromium, skip_unless_browser
 from test_cv_import import SITE, lay_out
+from test_cv_parse import held_ai
 
 from jobhunt.ai.base import LLMUnavailable
 from jobhunt.cvstudio import import_v1, store
@@ -20,6 +22,8 @@ from jobhunt.cvstudio import import_v1, store
 # Home's summary, which this test's bare server does not draw.
 NOT_YET = ("/api/v2/home",)
 FAILED_LOAD = "Failed to load resource"
+READ_S = 20                          # long enough for the upload to reach the AI on a loaded machine
+READING = "Hal is reading this CV"   # cv/cv-list.js READING_WORDS
 
 
 @skip_unless_browser
@@ -189,6 +193,25 @@ class CvPage(unittest.TestCase):
         self.assertEqual(p.page.inner_text("#main h1"), "My CVs")
         self.assertEqual([v["n"] for v in store.versions(doc_id=store.lead_id())], [1])
         self.assertEqual(store.versions(doc_id=store.DOC_ID)[0]["n"], 4, "the CV from before keeps its history")
+        self.assertEqual(self.errors(p), [])
+
+    def test_an_added_cv_is_listed_and_marked_while_hal_reads_it(self) -> None:
+        """An uploaded CV was not on My CVs until the AI had read it (2026-11-19)."""
+        entered, release = threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+        self.enterContext(fake_ai({"cv_parse": LLMUnavailable("The made-up AI is switched off.")}))
+        self.enterContext(held_ai(entered, release))
+        p = self.page("cv")
+        p.page.wait_for_selector("text=At a glance")
+        p.page.click("button:has-text('Add another CV')")
+        p.page.locator(".cv-list input[aria-label='Choose your CV']").set_input_files(
+            str(FOLDER / f"{NAMES['technical']}.pdf"))
+        self.assertTrue(entered.wait(READ_S), "the AI is reading the file")
+        p.page.wait_for_selector(f".cv-pick.on:has-text('{NAMES['technical']}') .cv-reading:has-text('{READING}')")
+        self.assertEqual(p.page.locator(".cv-reading").count(), 1, "only the CV being read is marked")
+        release.set()
+        p.page.wait_for_selector(".cv-reading", state="detached")
+        p.page.wait_for_selector(f".cv-pick.on:has-text('{NAMES['technical']}')")
         self.assertEqual(self.errors(p), [])
 
 

@@ -3,9 +3,10 @@
    A file or pasted text goes to POST /cv/upload, which makes a new CV from it; with `into` it goes to
    /cv/upload?cv=<id> instead, as a new version of that CV. The server answers at once when it cannot read the
    file (too big, too long, a picture of a CV), or when the same file already made a CV (`duplicate`), and
-   otherwise starts the reading as an action; this part follows that action, chooses the CV it made (cv/chosen.js)
-   and then shows what Hal found, with "Check what Hal read" and a note for anything Hal was not sure of. In the
-   setup guide Hal speaks for itself ("Check what I read"). */
+   otherwise lists the CV at once with Hal's quick reading and starts the AI's reading as an action. This part
+   chooses that CV as soon as the answer comes (cv/chosen.js), so the list shows it while Hal reads, follows the
+   action, and then shows what Hal found, with "Check what Hal read" and a note for anything Hal was not sure
+   of. In the setup guide Hal speaks for itself ("Check what I read"). */
 import { html, useState } from "../core/html.js";
 import { run } from "../core/api.js";
 import { useApi, openDialog, invalidate } from "../core/store.js";
@@ -60,8 +61,9 @@ export function duplicateWords(dup) {
 
 /** The upload part. `me` makes Hal speak for itself (the setup guide); `fresh` starts at the drop zone even
     when a reading exists; `into` names the CV a file becomes a new version of (else it is a new CV);
-    `onRead` hears each finished reading, and a file that already made a CV as `{ cv, duplicate }`. */
-export function Upload({ me = false, fresh = false, into = null, onRead }) {
+    `onStart` hears the upload's answer as soon as the CV is listed (`{ cv, action_id }`), while the AI still
+    reads it; `onRead` hears each finished reading, and a file that already made a CV as `{ cv, duplicate }`. */
+export function Upload({ me = false, fresh = false, into = null, onStart, onRead }) {
   const { data: report, reload } = useApi(into ? cvUrl("/cv/parse-report", into) : "/cv/parse-report");
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState("");
@@ -71,10 +73,16 @@ export function Upload({ me = false, fresh = false, into = null, onRead }) {
   const [again, setAgain] = useState(fresh);
 
   const read = async body => {
+    let listed = false;
+    const started = out => {
+      if (!into && out.cv) { chooseCv(out.cv); listed = true; }
+      invalidate("/cv*");
+      if (onStart) onStart(out);
+    };
     setProblem("");
     setBusy("Reading your CV");
     try {
-      const done = await run(into ? cvUrl("/cv/upload", into) : "/cv/upload", body, ev => setBusy(ev.text || "Reading your CV"));
+      const done = await run(into ? cvUrl("/cv/upload", into) : "/cv/upload", body, ev => setBusy(ev.text || "Reading your CV"), started);
       if (done && done.duplicate) {
         chooseCv(done.duplicate.id);
         invalidate("/cv*");
@@ -84,7 +92,8 @@ export function Upload({ me = false, fresh = false, into = null, onRead }) {
         return;
       }
       if (done && done.state && done.state !== "done") throw new Error(done.error || "Hal could not read your CV.");
-      if (!into && done && done.result && done.result.cv) chooseCv(done.result.cv);
+      // Chosen once only: the person may have moved to another CV while Hal read this one.
+      if (!into && !listed && done && done.result && done.result.cv) chooseCv(done.result.cv);
       invalidate("/cv*");
       await reload();
       setPasting(false);
