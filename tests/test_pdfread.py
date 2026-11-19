@@ -134,6 +134,26 @@ class Reading(unittest.TestCase):
         self.assertTrue(drawn[0].bold)          # the name, in Helvetica-Bold
         self.assertFalse(drawn[-1].bold)        # the interests line, in Helvetica
 
+    def test_a_font_named_regular_is_not_bold_whatever_weight_it_reports(self):
+        # PDFium reported weight 764 for Source Serif 4 Regular as Chrome prints it, so a page in that font read
+        # as bold from top to bottom (2026-11-19); the descriptor below gives a made-up font the same weight
+        from support.make_cv_fixtures import _pdf, _stream
+
+        def page(font: bytes) -> bytes:
+            return _pdf([b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [4 0 R] /Count 1 >>",
+                         b"<< /Type /Font /Subtype /Type1 /BaseFont /BAAAAA+" + font
+                         + b" /Encoding /WinAnsiEncoding /FontDescriptor 6 0 R >>",
+                         b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R "
+                         b">> >> /Contents 5 0 R >>",
+                         _stream(b"BT /F1 10 Tf 50 700 Td (Plain words) Tj ET"),
+                         b"<< /Type /FontDescriptor /FontName /BAAAAA+" + font + b" /Flags 34 /FontWeight 764 "
+                         b"/ItalicAngle 0 /Ascent 900 /Descent -200 /CapHeight 700 /StemV 80 "
+                         b"/FontBBox [0 -200 1000 900] >>"])
+
+        self.assertFalse(pdfread.chars(page(b"MadeSerif-Regular"))[0].bold)
+        self.assertTrue(pdfread.chars(page(b"MadeSerif"))[0].bold, "with no style in its name the weight decides")
+        self.assertTrue(pdfread.chars(page(b"MadeSerifLight-SemiBold"))[0].bold)
+
     def test_a_file_that_is_not_a_pdf_reads_as_empty(self):
         broken = Path(tempfile.mkdtemp()) / "image.pdf"
         broken.write_bytes(b"%PDF-1.4\n%%EOF\n")

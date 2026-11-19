@@ -13,11 +13,13 @@ the record's scans work wherever Hal installs. Poppler stays a developer referen
 - `page_png` encodes the picture with a few lines of `zlib`, so no imaging library is needed.
 - Each character says whether its font is bold or italic, from the font's name first (a browser's subset fonts
   are named like `AAAAAA+Arimo-Bold` and report no useful weight: Chrome's Arimo-Bold reads as weight 380,
-  checked 2026-11-18), then its flags and weight. A slanted character counts as italic too: a browser
-  slants the regular face when a page asks for italic and has no italic font, which Hal's own CV fonts do
-  not have (Chrome's slant is a quarter of the height, checked 2026-11-18). Its `index` is its place in
-  PDFium's text order, which includes the spaces PDFium works out from the gaps, so a reader can ask whether
-  a space lies between two characters instead of guessing from their gap.
+  checked 2026-11-18), then its flags and weight. A name that says the face is regular (`-Regular`, `Book`,
+  `Roman`, `Light`) is not bold whatever its weight: PDFium reported weight 764 for Hal's own Source Serif 4
+  Regular as Chrome prints it, which read a whole page as bold (checked 2026-11-19). A slanted character
+  counts as italic too: a browser slants the regular face when a page asks for italic and has no italic font,
+  which Hal's own CV fonts do not have (Chrome's slant is a quarter of the height, checked 2026-11-18). Its
+  `index` is its place in PDFium's text order, which includes the spaces PDFium works out from the gaps, so a
+  reader can ask whether a space lies between two characters instead of guessing from their gap.
 """
 from __future__ import annotations
 
@@ -56,6 +58,7 @@ MARKER_MAX = 8.0        # points: a marker is under a type size across; a bigger
 MARKER_RATIO = 2.0      # a marker is about as tall as it is wide; a rule under a heading is not
 MARKER_DEPTH = 5        # how deep into nested form objects to look for markers
 BOLD_NAMES = ("bold", "black", "heavy", "demi", "semibold")
+REGULAR_NAMES = ("regular", "book", "roman", "light", "thin", "normal")
 ITALIC_NAMES = ("italic", "oblique")
 SLANT_MIN = 0.1         # a shear this share of the height or more is a slanted (italic) letter; upright is 0
 
@@ -161,7 +164,9 @@ def _style(textpage: pdfium.PdfTextPage, i: int, styles: dict[tuple[str, int, in
     if key not in styles:
         # the part after "+" is the real name; the six letters before it only mark a subset
         base = key[0].rsplit("+", 1)[-1].lower()
-        bold = any(w in base for w in BOLD_NAMES) or bool(flags.value & FLAG_FORCE_BOLD) or weight >= BOLD_WEIGHT
+        named_regular = any(w in base for w in REGULAR_NAMES)
+        bold = any(w in base for w in BOLD_NAMES) or (not named_regular and (
+            bool(flags.value & FLAG_FORCE_BOLD) or weight >= BOLD_WEIGHT))
         italic = any(w in base for w in ITALIC_NAMES) or bool(flags.value & FLAG_ITALIC)
         styles[key] = (bold, italic)
     return styles[key]
