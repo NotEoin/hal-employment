@@ -442,7 +442,7 @@ wheels = [
 
 [[package]]
 name = "hal-employment"
-version = "2.3.0"
+version = "2.3.1"
 source = { editable = "." }
 dependencies = [
     { name = "keyring" },

@@ -2,7 +2,7 @@
 
 What changed in each version, in plain words.
 
-## Unreleased
+## 2.3.1 (2026-11-19)
 
 ### What's new
 
@@ -18,8 +18,8 @@ What changed in each version, in plain words.
 
 - **Your CV file's bold, italic and links are kept.** When Hal reads a CV you add, it keeps the bold and
   italic words inside a line, as your Word file, PDF or Markdown file shows them, and their links to web
-  pages and email addresses. A line that is bold from start to end, such as a job title, stays a heading as before.
-  Hal 2.3.0 left these out of Markdown files.
+  pages and email addresses. A line that is bold from start to end, such as a job title, stays a heading as
+  before. Hal 2.3.0 left these out of Markdown files.
 
 - **Choose how long each CV is.** On **My CV**, **Type and look**, the new **Length** card has **Keep this
   CV to**: no limit, one page or two pages, for each CV on its own. Until you choose, a CV follows its CV
@@ -50,8 +50,9 @@ What changed in each version, in plain words.
   or downloaded as a PDF. It now prints however long it is.
 
 - **Your choice of CV for an application stays chosen.** If you pressed **Change CV** while Hal was still
-  adjusting or writing that application's documents, Hal could finish afterwards and put back the CV it had chosen. Hal now
-  finishes one before it starts the other, so your choice is the one kept.
+  adjusting or writing that application's documents, Hal could finish afterwards and put back the CV it had
+  chosen. Now your choice is the one kept: when Hal finishes, it makes the job's CV again from the CV you
+  chose.
 
 - **Pages open with fewer connections.** Hal's window now reuses a few connections for the whole page
   instead of opening one for each of its parts, and when you reload a page, the parts that have not changed
