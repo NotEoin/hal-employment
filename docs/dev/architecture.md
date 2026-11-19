@@ -435,7 +435,22 @@ runs: tests use `tests/support/fake_claude/`.
     the only CV in use cannot be archived. Each reads the CV and the counts it checks under the write lock, so
     a change another request made just before is seen (a CV archived meanwhile is not turned on). A `reorder`
     that does not list every starred CV (the page's list is out of date) is refused with `STALE_ORDER`, words
-    for the toast. Archive is the delete: nothing in an archived CV is removed.
+    for the toast. Archive removes nothing in a CV.
+  - `store.delete(doc_id)` removes an archived CV for good in one write (CVError `NOT_ARCHIVED` for one in use,
+    `BEING_READ` while `cv.parse` reads its file). With it go its versions (per-job ones too), their
+    `cv_checks` and `cv_parse_reports`, its `cv_suggestions` (by `doc_id` or `based_on`), `cv_preferences`,
+    the `cv_suggest_reviewed:<doc>` mark in `meta`, the `cv_files` rows no CV, version or report uses any more,
+    and their files under `cv/files/` once no row names the path (Your record keeps its own copies under
+    `record-sources/`). In memory, `choose.forget` drops the versions' embedding vectors; the page-count and
+    print caches are keyed by the printed page, not the version, and are left. Applications built from,
+    approved with or sent with one of its versions: one Hal still writes for (`rewrite.WRITABLE`, not sent)
+    and not approved loses its `job_cvs` row and gets `docs_need_redraft` and an Activity line, so its page
+    names the lead CV and Make documents again chooses among the CVs in use; one approved and not sent refuses
+    the delete (`APPROVED_WITH`, naming the job), since the form may be filled with that CV; one sent or closed
+    loses its `job_cvs` row and keeps its folder, `files` and `app_documents`. `applications.cv_version_id`,
+    `app_documents.cv_version_id` and `job_requirements.cv_version_id` pointing at a deleted version are set
+    to NULL. As only an archived CV can go and the only CV in use cannot be archived, an install always keeps
+    one CV. It publishes `cv` with `what` "delete".
   - `store.create(name, first, ...)` makes a CV and its version 1 in one write; a starred new CV goes first in
     the order, and a CV that is empty or holds only the untouched starter from the settings is archived.
     `store.cv_for_file(file_id)` finds the CV a kept file already made, so an upload of the same bytes picks
@@ -452,7 +467,7 @@ runs: tests use `tests/support/fake_claude/`.
     un-stars it, and the store's `LAST_STAR` refusal is the 400. The source's shape carries `can_use`,
     `in_use` and `my_cv`. On screen the toggle is `cv/cv-list.js` `UseToggle`, shared by both pages, with
     the words "Use this for applications" and no "star" (the words test bans it for the STAR method). Both
-    lists reload on the `cv` events `star`, `archive`, `order`, `create` and `rename`.
+    lists reload on the `cv` events `star`, `archive`, `order`, `create`, `rename` and `delete`.
   - `sections.store.listing(con, "cv")` lists the record's CVs in `cv_order`: those in use first, in the
     starred order (`profile.cvs.in_use`), then the rest newest first by `dated`, else the month in `added`
     (so a CV still being read is near the top), then `added`. Children stay under their parent on the page
@@ -482,7 +497,8 @@ runs: tests use `tests/support/fake_claude/`.
   an unknown id), the lead CV without it, so the setup guide and older clients keep working; a route that
   names a version acts on that version's CV. `GET /cv/cvs` answers `{cvs, archived, lead}`; `PUT /cv/star`
   (`{on}`), `PUT /cv/archive` (`{on}`, false restores), `PUT /cv/name` (`{name}`), `PUT /cv/order` (`{ids}`)
-  and `DELETE /cv` (archives) answer the same list. The page keeps the chosen CV in `cv/chosen.js`, and
+  and `DELETE /cv` (`store.delete`, 409 with its reason) answer the same list; the delete adds `deleted`
+  {name, redraft, kept_sent} for the toast. The page keeps the chosen CV in `cv/chosen.js`, and
   `cvUrl()` adds it to every My CV call, so each CV's answers are cached under their own address and every
   tab and dialog acts on the CV the list at the top shows (`cv/cv-list.js`). The page and the menu say "My
   CVs" once there are several, counted by `GET /cv/cvs` and Home's `cv_count`.

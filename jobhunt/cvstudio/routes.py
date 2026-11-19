@@ -6,9 +6,9 @@ versions, the bin and the sections.
   rather than a path part, so the many existing `/cv/...` paths keep their shape. Routes that name a version
   act on the CV that version belongs to.
 - `GET /cv/cvs` lists the CVs, in use and archived; star, archive (and restore), rename and the starred
-  order have routes of their own, and `DELETE /cv` archives: an application may point at a CV, so a CV is
-  never deleted. Each of these may change which CV leads Your record's facts, so each ends by letting the
-  record follow (`record_cvs.settle_lead`).
+  order have routes of their own, and `DELETE /cv` deletes an archived CV for good (`store.delete`, 409 with
+  the store's reason when it cannot go). Each of these may change which CV leads Your record's facts, so each
+  ends by letting the record follow (`record_cvs.settle_lead`).
 - Every edit is a new version in the store; nothing here changes a version in place.
 - A document or layout that does not fit schema 2 answers 400 with the field path (`CVError`). Only a save of
   the editor's changes (`PATCH /cv/document`) answers 409, when the version it was made on is no longer in
@@ -184,8 +184,19 @@ def put_archive(req) -> dict:
 
 @route("DELETE", "/api/v2/cv")
 def delete_cv(req) -> dict:
-    """Deleting a CV archives it: applications may point at it, so nothing in it is removed."""
-    return _change(req, lambda d: store.archive(d, True, con=req.con), "Moved {name} to the archive")
+    """Deletes `?cv=` for good (`store.delete`), which must be in the archive; 409 saying why when it cannot go.
+    Answers the list, with `deleted`: {name, redraft, kept_sent} for the page's toast."""
+    if not req.query.get("cv"):
+        raise BadRequest("Say which CV.", field="cv")
+    doc_id = cv_of(req)
+    try:
+        gone = store.delete(doc_id, con=req.con)
+    except CVError as e:
+        raise Conflict(str(e)) from e
+    n = gone["versions"]
+    _note(f"Deleted {gone['name']}, with {n} {'version' if n == 1 else 'versions'}", kind="cv.cvs")
+    record_cvs.settle_lead(req.con)
+    return {**_cvs(req.con), "deleted": {k: gone[k] for k in ("name", "redraft", "kept_sent")}}
 
 
 @route("PUT", "/api/v2/cv/name")

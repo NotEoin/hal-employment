@@ -13,6 +13,13 @@ What changed in each version, in plain words.
   Certificate or the International Baccalaureate, which it used to call part of your degree. A degree stays
   **Part of my degree**, and a choice you made yourself is kept.
 
+- **Delete a CV.** On **My CVs**, a CV in the archive can now be deleted for good, with its versions and
+  Hal's suggestions for it. Hal asks first, and only a CV you moved to the archive can go. Before, an old CV
+  could only be archived, and as Hal remembered its file, adding that same file again showed the old CV
+  instead of making a new one. Once the CV is deleted, the file can be added again as a new CV.
+  Applications you sent keep the documents that went to the employer, and an application still being
+  prepared is built on another CV.
+
 ### Fixed
 
 - **A CV you add shows straight away.** A CV you upload on **My CVs**, or a new version of one, used to

@@ -317,7 +317,14 @@ numbered from 1.
   cards, and your other CVs only fill gaps.
 - **Rename** changes a CV's name. Hal names a new CV after its file.
 - **Move to the archive** puts a CV away. Hal keeps all of its versions, so an application you sent with it
-  still has it. Open **Archived CVs** and press **Restore** to bring it back. Hal never deletes a CV.
+  still has it. Open **Archived CVs** and press **Restore** to bring it back.
+- **Delete** (under **Archived CVs**, or **Delete this CV** on an archived CV) removes a CV for good, with its
+  versions and Hal's suggestions for it. Only a CV in the archive can be deleted, and Hal asks first. Your
+  file goes too, unless another CV uses it, so you can add the same file again later as a new CV.
+  Applications you sent keep the documents that went to the employer. An application Hal is still preparing
+  with that CV is built on a CV in use instead, and Home asks you to make its documents again. If you approved
+  an application with that CV and have not sent it yet, Hal keeps the CV and says which application: send it,
+  or press **Change the documents** on it, first.
 
 If you had uploaded several CVs before this version of Hal, each upload is now a CV of its own. The one you
 were using is starred and the others are in the archive.

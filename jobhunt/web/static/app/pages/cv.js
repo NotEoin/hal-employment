@@ -16,13 +16,13 @@ import { SuggTab } from "../cv/sugg-tab.js";
 import { StyleTab } from "../cv/style-tab.js";
 import { ChecksTab } from "../cv/checks-tab.js";
 import { VersionsTab } from "../cv/versions-tab.js";
-import { CvList } from "../cv/cv-list.js";
+import { CvList, deleteCv } from "../cv/cv-list.js";
 import { chosenCv, chooseCv, cvUrl } from "../cv/chosen.js";
 import { UncheckedNote } from "../ui/unchecked-note.js";
 
 const TABS = ["cv", "edit", "sugg", "style", "checks", "versions"];
 // Changes made elsewhere (Your record's "Use this for applications", another window) that change the list.
-const LIST_CHANGES = new Set(["star", "archive", "order", "create", "rename"]);
+const LIST_CHANGES = new Set(["star", "archive", "order", "create", "rename", "delete"]);
 // A CV file's reading starting or ending moves the list's "Hal is reading this CV" mark.
 const listChanged = [ev => ev.type === "cv" && LIST_CHANGES.has(ev.what), ev => ev.type === "action" && ev.kind === "cv.parse"];
 
@@ -39,7 +39,8 @@ function Archived({ cv }) {
     catch (err) { toast(err.message); }
   };
   return html`<${Note} icon="folder" tone="warn"><b>${cv.cv.name} is in the archive.</b> Hal does not use it for applications.
-    <button type="button" class="btn small" style="margin-left:8px" onClick=${restore}>Restore</button><//>`;
+    <button type="button" class="btn small" style="margin-left:8px" onClick=${restore}>Restore</button>
+    <button type="button" class="btn quiet small" style="margin-left:8px" onClick=${() => deleteCv(cv.cv)}><${Icon} n="trash" c="s" />Delete this CV</button><//>`;
 }
 
 /** The page: header, the CV list, the employers-get line, and the tabs of the chosen CV. */

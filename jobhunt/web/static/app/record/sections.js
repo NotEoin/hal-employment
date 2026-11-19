@@ -43,7 +43,7 @@ const PROJECT_WAYS = [["github_account", "Your GitHub account", "Your GitHub use
   ["manual", "Add one by hand", "The project's name"]];
 const reloadOn = [ev => (ev.type === "action" && ev.kind === KIND) || ev.type === "profile"];
 // The changes on My CVs that change what the CVs list shows (cvstudio/store.py publishes them as "cv").
-const MY_CVS_CHANGES = new Set(["star", "archive", "order", "create", "rename", "file"]);
+const MY_CVS_CHANGES = new Set(["star", "archive", "order", "create", "rename", "file", "delete"]);
 const cvReloadOn = [...reloadOn, ev => ev.type === "cv" && MY_CVS_CHANGES.has(ev.what)];
 const READING = "Reading your CV";
 

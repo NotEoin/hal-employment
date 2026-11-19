@@ -590,6 +590,26 @@ class Upload(unittest.TestCase):
         self.assertEqual(self.client.get(f"/api/v2/cv/original?cv={first['cv']}").body,
                          fixture("technical", "docx")[1])
 
+    def test_a_file_whose_cv_was_deleted_uploads_again_as_a_new_cv(self):
+        """A stale CV could not be deleted, and the same file uploaded again answered with that archived CV, so
+        the file could never be added again (owner's report, 2026-11-19)."""
+        name, data = fixture("humanities", "pdf")
+        first = self.read(name, data)["result"]["cv"]
+        self.read(*fixture("technical", "pdf"))
+        self.client.request("PUT", f"/api/v2/cv/archive?cv={first}", {"on": True})
+        status, dup = upload(self.hal, self.client, name, data)
+        self.assertEqual((status, dup["duplicate"]["id"], dup["duplicate"]["archived"] is not None),
+                         (200, first, True))
+        record_files = sorted(p for p in (paths.data_dir() / "record-sources").rglob("*") if p.is_file())
+        self.assertTrue(record_files, "the upload added the file to Your record too")
+        gone = self.client.request("DELETE", f"/api/v2/cv?cv={first}")
+        self.assertEqual(gone.status, 200, gone.text)
+        again = self.read(name, data)["result"]
+        self.assertNotEqual(again["cv"], first)
+        self.assertEqual((store.doc(doc_id=again["cv"])["name"], again["n"]), (NAMES["humanities"], 1))
+        self.assertEqual(sorted(p for p in (paths.data_dir() / "record-sources").rglob("*") if p.is_file()),
+                         record_files, "Your record's copy of the file stays")
+
     def test_a_second_upload_while_one_is_read_never_stops_the_first(self):
         """Every upload shared one subject and replaced the reading before it, so that CV was never made
         (2026-11-18); the same file uploaded again while it is read follows that reading."""

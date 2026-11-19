@@ -56,7 +56,8 @@ function ReadCard({ report, me }) {
 /** The words for a file that already made a CV: which one, and where it is when it is archived. */
 export function duplicateWords(dup) {
   return "You added this file before, as \"" + dup.name + "\"."
-    + (dup.archived ? " It is in the archive: restore it from Archived CVs to use it again." : " Hal shows it now.");
+    + (dup.archived ? " It is in the archive: restore it from Archived CVs to use it again, or delete it there to add "
+      + "this file as a new CV." : " Hal shows it now.");
 }
 
 /** The upload part. `me` makes Hal speak for itself (the setup guide); `fresh` starts at the drop zone even

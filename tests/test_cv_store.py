@@ -341,13 +341,13 @@ class Routes(unittest.TestCase):
         self.assertIn(("Changed your CV's sections (version 2)", "You changed it on My CV"), [tuple(r) for r in rows])
 
 
-def add_job(job_id: str = "made-up:1") -> None:
+def add_job(job_id: str = "made-up:1", title: str = "Archivist", status: str = "ready") -> None:
     """A made-up saved job, so a per-job version has a job to belong to."""
     con = db.connect()
     try:
         con.execute("INSERT OR IGNORE INTO jobs (id, source, title, company, url, first_seen, last_seen, status) "
-                    "VALUES (?, 'made-up', 'Archivist', 'Made-up Trust', 'https://example.org/1', '2026-10-01', "
-                    "'2026-10-01', 'ready')", (job_id,))
+                    "VALUES (?, 'made-up', ?, 'Made-up Trust', 'https://example.org/1', '2026-10-01', "
+                    "'2026-10-01', ?)", (job_id, title, status))
         con.commit()
     finally:
         con.close()
@@ -493,6 +493,151 @@ class SeveralCVs(unittest.TestCase):
         self.assertFalse(store.replace_reading("v9-gone", self.doc))
 
 
+def rows(sql: str, *args) -> list[tuple]:
+    """The rows a query answers, as tuples."""
+    con = db.connect()
+    try:
+        return [tuple(r) for r in con.execute(sql, args)]
+    finally:
+        con.close()
+
+
+def run(sql: str, *args) -> None:
+    """Runs one write and commits it."""
+    con = db.connect()
+    try:
+        con.execute(sql, args)
+        con.commit()
+    finally:
+        con.close()
+
+
+class DeleteCV(unittest.TestCase):
+    """Deleting an archived CV for good: everything of its own goes, what applications sent stays."""
+
+    def setUp(self):
+        self.enterContext(cv_home())
+        self.enterContext(mock.patch.object(store, "type_in_use", return_value="technical_grad"))
+        with at(DAY0):
+            _, self.doc = store.current()
+        self.main = store.doc()["id"]
+        store.new_version(edited(self.doc, "Archive volunteer."), origin="manual", what="Edit", by="you")
+        self.fid = store.add_file(b"%PDF made-up museum CV", "Museum CV.pdf", role="baseline")
+        self.museum = store.create("Museum CV", edited(self.doc, "Museum guide."), origin="uploaded",
+                                   what="Your file: Museum CV.pdf", by="baseline", file_id=self.fid)
+        self.v1 = store.doc(doc_id=self.museum)["current_version_id"]
+        self.kept = paths.data_dir() / store.file_row(self.fid)["rel"]
+
+    def archived(self) -> None:
+        store.archive(self.museum)
+
+    def test_an_archived_cv_goes_with_everything_of_its_own(self):
+        from jobhunt.cvstudio import choose, suggest
+
+        add_job()
+        job_v = store.new_version(edited(self.doc, "Museum guide for archives."), origin="tailored",
+                                  what="For one job", by="hal", job_id="made-up:1", doc_id=self.museum)
+        run("INSERT INTO cv_checks (version_id, look_id, at) VALUES (?, 'classic', ?)", self.v1, DAY0)
+        run("INSERT INTO cv_parse_reports (version_id, file_id, found, items) VALUES (?, ?, 'a CV', '[]')",
+            self.v1, self.fid)
+        run("""INSERT INTO cv_suggestions (id, doc_id, based_on, target, op, kind, title, why, trigger, evidence,
+               afters, status, fingerprint, created) VALUES ('s-1', ?, ?, 's:summary/text', 'replace', 'Wording',
+               'Shorter', 'Reads better', '{}', '[]', '[]', 'pending', 'fp', ?)""", self.museum, self.v1, DAY0)
+        run("INSERT INTO cv_preferences (kind, target, text, created, doc_id) VALUES ('lock_line', 't', 'x', ?, ?)",
+            DAY0, self.museum)
+        run("INSERT INTO meta (k, v) VALUES (?, ?)", suggest.META_REVIEWED.format(doc=self.museum), self.v1)
+        choose._VECTORS[(self.v1, "made-up-model")] = [1.0]
+        self.archived()
+        gone = store.delete(self.museum)
+        self.assertEqual((gone["name"], gone["versions"], gone["files"]), ("Museum CV", 2, 1))
+        for table, col in (("cv_versions", "doc_id"), ("cv_suggestions", "doc_id"), ("cv_preferences", "doc_id")):
+            self.assertEqual(rows(f"SELECT * FROM {table} WHERE {col} = ?", self.museum), [], table)
+        for table in ("cv_checks", "cv_parse_reports"):
+            self.assertEqual(rows(f"SELECT * FROM {table} WHERE version_id IN (?, ?)", self.v1, job_v), [], table)
+        self.assertEqual(rows("SELECT * FROM meta WHERE k = ?", suggest.META_REVIEWED.format(doc=self.museum)), [])
+        self.assertEqual(rows("SELECT * FROM cv_files WHERE id = ?", self.fid), [])
+        self.assertFalse(self.kept.exists(), "the kept file went with its last CV")
+        self.assertNotIn((self.v1, "made-up-model"), choose._VECTORS)
+        with self.assertRaises(store.NoSuchCV):
+            store.doc(doc_id=self.museum)
+        self.assertEqual([d["id"] for d in store.documents(archived=None)], [self.main])
+        self.assertEqual([v["n"] for v in store.versions(doc_id=self.main)], [2, 1], "the other CV is untouched")
+
+    def test_a_cv_in_use_is_refused_and_keeps_everything(self):
+        with self.assertRaises(CVError) as caught:
+            store.delete(self.museum)
+        self.assertEqual(str(caught.exception), store.NOT_ARCHIVED)
+        self.assertEqual(store.doc(doc_id=self.museum)["current_version_id"], self.v1)
+        self.assertTrue(self.kept.exists())
+        with self.assertRaises(store.NoSuchCV):
+            store.delete("cv-nothere")
+
+    def test_a_kept_file_another_cv_uses_stays(self):
+        store.create("Museum CV copy", edited(self.doc, "Museum guide."), origin="uploaded", what="Your file",
+                     by="baseline", file_id=self.fid)
+        self.archived()
+        self.assertEqual(store.delete(self.museum)["files"], 0)
+        self.assertTrue(self.kept.exists())
+        self.assertEqual(len(rows("SELECT * FROM cv_files WHERE id = ?", self.fid)), 1)
+
+    def test_an_application_being_prepared_on_it_opens_and_has_a_cv_in_use_again(self):
+        from jobhunt.apply import queries
+
+        add_job()
+        run("INSERT INTO applications (job_id, stage, updated) VALUES ('made-up:1', 'documents', ?)", DAY0)
+        run("INSERT INTO job_cvs (job_id, base_version_id, level, changes) VALUES ('made-up:1', ?, 'no', '[]')",
+            self.v1)
+        self.archived()
+        gone = store.delete(self.museum)
+        self.assertEqual(gone["redraft"], ["Archivist"])
+        self.assertEqual(rows("SELECT * FROM job_cvs"), [])
+        self.assertEqual(rows("SELECT docs_need_redraft FROM applications"), [(1,)])
+        self.assertIn((f"Documents for Archivist need making again, because {store.REDRAFT_WHY}",),
+                      rows("SELECT text FROM activity WHERE job_id = 'made-up:1'"))
+        con = db.connect()
+        self.addCleanup(con.close)
+        page = queries.application(con, "made-up:1")
+        self.assertEqual(page["docs"]["cv"]["base"]["doc_id"], self.main, "built on the CV in use now")
+        self.assertIsNone(page["docs"]["cv"]["version_n"])
+
+    def test_an_approved_application_not_sent_refuses_and_names_the_job(self):
+        add_job(title="Collections Assistant")
+        run("INSERT INTO job_cvs (job_id, base_version_id, level, changes, approved) "
+            "VALUES ('made-up:1', ?, 'no', '[]', ?)", self.v1, DAY0)
+        self.archived()
+        with self.assertRaises(CVError) as caught:
+            store.delete(self.museum)
+        self.assertIn("Collections Assistant at Made-up Trust", str(caught.exception))
+        self.assertEqual(len(rows("SELECT * FROM job_cvs")), 1)
+        self.assertEqual(store.doc(doc_id=self.museum)["current_version_id"], self.v1)
+
+    def test_a_sent_application_keeps_its_documents(self):
+        from jobhunt.apply import queries
+
+        add_job(status="applied")
+        job_v = store.new_version(edited(self.doc, "Museum guide for archives."), origin="tailored",
+                                  what="For one job", by="hal", job_id="made-up:1", doc_id=self.museum)
+        run("""INSERT INTO applications (job_id, stage, updated, approved_at, sent_at, cv_version_id, cv_sent_as)
+               VALUES ('made-up:1', 'submitted', ?, ?, ?, ?, 'hal_copy')""", DAY0, DAY0, DAY0, job_v)
+        run("INSERT INTO job_cvs (job_id, base_version_id, version_id, level, changes, approved) "
+            "VALUES ('made-up:1', ?, ?, 'no', '[]', ?)", self.v1, job_v, DAY0)
+        run("INSERT INTO files (id, root, rel, kind, job_id, created) VALUES ('file-1', 'applications', "
+            "'0001 Made-up Trust/CV.pdf', 'cv_pdf', 'made-up:1', ?)", DAY0)
+        run("INSERT INTO app_documents (job_id, kind, file_id, cv_version_id, approved_at, updated) "
+            "VALUES ('made-up:1', 'cv_pdf', 'file-1', ?, ?, ?)", job_v, DAY0, DAY0)
+        self.archived()
+        gone = store.delete(self.museum)
+        self.assertEqual((gone["redraft"], gone["kept_sent"]), ([], 1))
+        self.assertEqual(rows("SELECT file_id, cv_version_id, approved_at FROM app_documents"),
+                         [("file-1", None, DAY0)])
+        self.assertEqual(len(rows("SELECT * FROM files WHERE id = 'file-1'")), 1)
+        self.assertEqual(rows("SELECT sent_at, cv_version_id, cv_sent_as, docs_need_redraft FROM applications"),
+                         [(DAY0, None, "hal_copy", 0)])
+        con = db.connect()
+        self.addCleanup(con.close)
+        self.assertEqual(queries.application(con, "made-up:1")["docs"]["cv"]["sent_as"], "hal_copy")
+
+
 class SeveralCVRoutes(unittest.TestCase):
     """The CV list and its changes through the real server; `?cv=` picks the CV every route acts on."""
 
@@ -519,11 +664,25 @@ class SeveralCVRoutes(unittest.TestCase):
         refused = self.c.request("PUT", f"/api/v2/cv/star?cv={self.main}", {"on": False})
         self.assertEqual(refused.status, 400)
         self.assertIn("stays in use", refused.json()["error"]["message"])
-        gone = self.c.request("DELETE", "/api/v2/cv" + q).json()
-        self.assertEqual([d["id"] for d in gone["archived"]], [self.museum])
+        archived = self.c.request("PUT", "/api/v2/cv/archive" + q, {"on": True}).json()
+        self.assertEqual([d["id"] for d in archived["archived"]], [self.museum])
         back = self.c.request("PUT", "/api/v2/cv/archive" + q, {"on": False}).json()
         self.assertEqual(sorted(d["id"] for d in back["cvs"]), sorted([self.main, self.museum]))
         self.assertEqual(self.c.request("PUT", "/api/v2/cv/star", {"on": True}).status, 400)
+
+    def test_delete_answers_404_for_no_cv_409_for_one_in_use_and_the_list_once_gone(self):
+        q = f"?cv={self.museum}"
+        self.assertEqual(self.c.request("DELETE", "/api/v2/cv?cv=cv-nothere").status, 404)
+        refused = self.c.request("DELETE", "/api/v2/cv" + q)
+        self.assertEqual((refused.status, refused.json()["error"]["message"]), (409, store.NOT_ARCHIVED))
+        self.c.request("PUT", "/api/v2/cv/archive" + q, {"on": True})
+        gone = self.c.request("DELETE", "/api/v2/cv" + q)
+        self.assertEqual(gone.status, 200, gone.text)
+        self.assertEqual(([d["id"] for d in gone.json()["cvs"]], gone.json()["archived"], gone.json()["lead"]),
+                         ([self.main], [], self.main))
+        self.assertEqual(gone.json()["deleted"], {"name": "Museum roles", "redraft": [], "kept_sent": 0})
+        self.assertIn(("Deleted Museum roles, with 1 version",), rows("SELECT text FROM activity"))
+        self.assertEqual(self.c.get("/api/v2/cv" + q).status, 404)
 
     def test_every_tab_follows_the_chosen_cv(self):
         q = f"?cv={self.main}"

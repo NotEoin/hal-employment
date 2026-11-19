@@ -181,6 +181,33 @@ class CvPage(unittest.TestCase):
                          + [e for e in p.errors if not e.startswith(FAILED_LOAD)], [])
         self.assertEqual(p.serious_axe(), [])
 
+    def test_an_archived_cv_is_deleted_only_after_a_plain_question_at_phone_width(self) -> None:
+        _, doc = store.current()
+        museum = store.create("Museum roles", doc, origin="uploaded", what="Your file: museum.pdf", by="baseline")
+        store.archive(museum)
+        p = self.page("cv", "narrow", "dark")
+        p.page.click("button:has-text('Archived CVs (1)')")
+        delete = "button[aria-label='Delete Museum roles']"
+        p.page.focus(delete)
+        p.page.keyboard.press("Enter")
+        box = p.page.wait_for_selector("[role=dialog]:has-text('Delete Museum roles?')")
+        self.assertIn("all of its versions and Hal's suggestions for it", box.inner_text())
+        self.assertIn("This cannot be undone.", box.inner_text())
+        self.assertEqual(p.sideways(), 0)
+        self.assertEqual(p.serious_axe(), [])
+        p.page.keyboard.press("Escape")
+        p.page.wait_for_selector("[role=dialog]", state="detached")
+        self.assertEqual(p.focused(), "button:Delete Museum roles", "focus goes back to the button")
+        self.assertTrue(store.doc(doc_id=museum)["archived"], "kept when the person says no")
+        p.page.keyboard.press("Enter")
+        p.page.locator("[role=dialog] button:has-text('Delete this CV')").press("Enter")
+        p.page.wait_for_selector("text=Museum roles is deleted.")
+        p.page.wait_for_selector("button:has-text('Archived CVs')", state="detached")
+        with self.assertRaises(store.NoSuchCV):
+            store.doc(doc_id=museum)
+        self.assertEqual(self.errors(p), [])
+        self.assertEqual(p.sideways(), 0)
+
     def test_adding_another_cv_makes_a_new_cv_at_version_one(self) -> None:
         self.enterContext(fake_ai({"cv_parse": LLMUnavailable("The made-up AI is switched off.")}))
         p = self.page("cv")

@@ -1,20 +1,40 @@
 /* The list of the person's CVs on top of My CV: each CV's name, its star ("Use this for applications") and
    which one the page shows; for the shown CV, Rename, Use first and Move to the archive; "Add another CV"; and
-   the archived CVs with Restore. The server keeps one CV starred at all times and says why when the last star
+   the archived CVs with Restore and Delete. Delete asks first (`deleteCv`, also on an archived CV's own note in
+   pages/cv.js), and only an archived CV can be deleted, so losing a CV takes two steps. The server keeps one CV starred at all times and says why when the last star
    cannot come off; this list only shows its answer. Every change answers the whole list (GET /cv/cvs), so the
    list is redrawn from what the server now holds. A CV just added is listed at once and marked "Hal is reading
    this CV" (`reading`, worked out by the server from the reading under way) until that reading ends; while one
    is marked the list is fetched again now and then, so the mark goes even if the event that ends it is missed. */
 import { html, cx, useState, useEffect } from "../core/html.js";
-import { put } from "../core/api.js";
+import { put, del } from "../core/api.js";
 import { toast, invalidate } from "../core/store.js";
 import { Icon } from "../ui/icons.js";
+import { ask } from "../ui/dialog.js";
 import { cvUrl } from "./chosen.js";
 import { Upload, duplicateWords } from "./upload.js";
 
 export const USE_WORDS = "Use this for applications";
 export const READING_WORDS = "Hal is reading this CV";
 const READING_POLL_MS = 5000;   // as core/api.js follows an action: a fallback for a missed event
+export const DELETE_WORDS = "This deletes the CV, all of its versions and Hal's suggestions for it. "
+  + "Applications you sent keep the documents that went to the employer. This cannot be undone.";
+
+/** Asks, then deletes the archived CV `c` ({id, name}); the list the server answers with, or null when the
+    person keeps it or the server says why it cannot go (shown as a toast). */
+export async function deleteCv(c) {
+  const yes = await ask({ title: "Delete " + c.name + "?", text: DELETE_WORDS, icon: "trash", danger: true,
+    yes: "Delete this CV", no: "Keep it" });
+  if (!yes) return null;
+  try {
+    const out = await del(cvUrl("/cv", c.id));
+    invalidate("/cv*");
+    const n = out.deleted.redraft.length;
+    toast(c.name + " is deleted." + (n ? " Hal makes the documents again for " + n
+      + (n === 1 ? " application" : " applications") + " that used it." : ""));
+    return out;
+  } catch (err) { toast(err.message); return null; }
+}
 
 /** The "Use this for applications" toggle, its icon filled while on. `words` shows the words beside the icon
     (Your record's CVs, where `busy` replaces them while Hal reads the file); without them it is the icon
@@ -68,6 +88,12 @@ export function CvList({ list, shown, onShow, onList }) {
     if (out) onShow(out.lead);
   };
   const restore = x => change(() => put(cvUrl("/cv/archive", x.id), { on: false }), x.name + " is back in your CVs");
+  const remove = async x => {
+    const out = await deleteCv(x);
+    if (!out) return;
+    onList(out);
+    if (x.id === c.id) onShow(out.lead);
+  };
   const first = () => change(() => put("/cv/order", { ids: [c.id, ...list.cvs.filter(x => x.starred && x.id !== c.id).map(x => x.id)] }),
     "Hal tries " + c.name + " first for applications");
   // A new CV is shown as soon as it is listed (`listed`); when its reading ends the person may be on another
@@ -96,9 +122,10 @@ export function CvList({ list, shown, onShow, onList }) {
     ${adding && html`<div style="margin-top:12px"><p class="small sub" style="margin:0 0 8px">A new file becomes a CV of its own, starting at version 1. To update this CV with a new file, use Versions.</p>
       <${Upload} fresh=${true} onStart=${listed} onRead=${added} /></div>`}
     ${archive && list.archived.length > 0 && html`<div class="cv-archive" style="margin-top:12px"><h3 class="h3" style="margin:0 0 6px">Archived CVs</h3>
-      <p class="small sub" style="margin:0 0 8px">Hal keeps every version of an archived CV, so applications sent with it still have it.</p>
+      <p class="small sub" style="margin:0 0 8px">Hal keeps every version of an archived CV, so applications sent with it still have it. Delete removes a CV for good.</p>
       ${list.archived.map(x => html`<div class="li" key=${x.id}><div class="grow"><button type="button" class="btn quiet small"
           aria-current=${x.id === c.id ? "true" : null} onClick=${() => onShow(x.id)}>${x.name}</button>
         <span class="small sub">${x.n ? "Version " + x.n : ""}</span></div>
-        <button type="button" class="btn small" onClick=${() => restore(x)}>Restore</button></div>`)}</div>`}</section>`;
+        <button type="button" class="btn small" onClick=${() => restore(x)}>Restore</button>
+        <button type="button" class="btn quiet small" aria-label=${"Delete " + x.name} onClick=${() => remove(x)}><${Icon} n="trash" c="s" />Delete</button></div>`)}</div>`}</section>`;
 }

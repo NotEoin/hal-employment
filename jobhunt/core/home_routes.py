@@ -71,8 +71,8 @@ def own_needs(con: sqlite3.Connection) -> list[dict]:
                             WHERE a.docs_need_redraft = 1 AND j.status IN ('ready', 'applying')"""):
         out.append({"id": f"redraft:{r['id']}", "icon": "file", "tone": "warn",
                     "title": f"Documents for {r['title']} need making again",
-                    "detail": f"{r['company']}. An older job used the same folder, so Hal makes them again for this "
-                              "advert.", "due": "",
+                    "detail": f"{r['company']}. What they were made from changed, so Hal makes them again for this "
+                              "advert. Activity says what changed.", "due": "",
                     "act": {"label": "Make documents again", "action": f"/applications/{r['id']}/documents/redo"},
                     "urgency": URGENCY["redraft"]})
     for t in con.execute("""SELECT * FROM todos WHERE done IS NULL ORDER BY priority, coalesce(due, '9999'), id

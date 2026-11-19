@@ -11,7 +11,17 @@
   order, else the most recently changed one not archived. With one CV that is the CV, so tailoring, the pack
   writer and exports behave as they did before there were several. While any CV exists one is starred: the
   last star cannot be taken off, and archiving the last starred CV stars the most recent one left.
-- Archive is the delete: an archived CV keeps every version, so an application sent with one still has it.
+- Archive keeps everything: an archived CV keeps every version, so an application sent with one still has it.
+- Delete (`delete`) removes an archived CV for good, archive first so one slip never loses a CV (2026-11-19: a
+  stale CV could not be removed, and as its file's SHA-256 named it, the same file could not be added again).
+  It goes in one write with its versions (per-job ones too), their checks, reading reports and page counts,
+  its suggestions, line preferences and "nothing more" mark, and the kept files nothing else uses.
+  Applications that rested on it: one still being prepared loses its job's CV (`job_cvs`) and is marked to
+  make its documents again, so it is built on a CV in use; one approved and not sent refuses the delete, naming
+  the job, as its approved CV may be in a form being filled (reopening it, or sending it, lets the delete go
+  ahead); one sent or closed keeps its documents and files, as employers may have them, and only loses its
+  link to the deleted versions. Only archived CVs can be deleted and the only CV in use cannot be archived, so
+  a delete never leaves an install with no CV.
 - Version numbers count one CV's own versions from 1. A per-job version (with `job_id`) takes none of them: it
   is kept with the CV it was made from, with `n` below zero (its own count, only there for the table's
   UNIQUE (doc_id, n)), and `version()` shows its `n` as None. It never becomes a CV's version in use.
@@ -71,6 +81,11 @@ LAST_STAR = ("Hal needs one CV to use for applications, so this one stays in use
 LAST_ACTIVE = "This is your only CV in use, so it cannot go to the archive. Add another CV first."
 STALE_ORDER = "Your list of CVs changed since this page opened. Reload the page and try again."
 ARCHIVED = "This CV is in the archive. Restore it first."
+NOT_ARCHIVED = "Only a CV in the archive can be deleted. Move it to the archive first."
+APPROVED_WITH = ("Your application for {job} was approved with this CV and is not sent yet, so Hal keeps the CV. "
+                 "Send it, or press \"Change the documents\" on it, then delete this CV.")
+BEING_READ = "Hal is reading this CV. Delete it when the reading has finished."
+REDRAFT_WHY = "the CV they were built from was deleted"
 STARTER_WHAT = "A starting CV made from your settings"
 PASTED_NAME = "Pasted CV.txt"      # the file name pasted text is kept under
 PAGE_LIMITS = (0, 1, 2, 3, 4)      # "Keep this CV to" (`cv_documents.page_limit`), as far as a type's `MAX_PAGES`
@@ -282,6 +297,117 @@ def archive(doc_id: str, on: bool = True, con: sqlite3.Connection | None = None)
                 c.execute("UPDATE cv_documents SET archived = NULL, updated = ? WHERE id = ?", (clock.iso(), doc_id))
     _publish("archive", doc_id, on=bool(on))
     return doc(con, doc_id)
+
+
+def _resting_on(con: sqlite3.Connection, marks: str, vids: list[str]) -> list[sqlite3.Row]:
+    """The applications built from, approved with or sent with one of `vids`, with their job's title and state."""
+    return con.execute(f"""SELECT j.id, j.title, j.company, j.status, jc.approved, a.approved_at, a.sent_at,
+                                  a.job_id IS NOT NULL AS has_app
+                           FROM jobs j LEFT JOIN job_cvs jc ON jc.job_id = j.id
+                                LEFT JOIN applications a ON a.job_id = j.id
+                           WHERE jc.base_version_id IN ({marks}) OR jc.version_id IN ({marks})
+                              OR a.cv_version_id IN ({marks})""", (*vids, *vids, *vids)).fetchall()
+
+
+def _unused_files(con: sqlite3.Connection, file_ids: set[str]) -> list[tuple[str, str]]:
+    """(id, rel) of the kept files among `file_ids` no CV, version or reading report refers to any more."""
+    out = []
+    for fid in sorted(file_ids):
+        used = con.execute("""SELECT 1 FROM cv_documents WHERE baseline_file_id = ?
+                              UNION ALL SELECT 1 FROM cv_versions WHERE file_id = ?
+                              UNION ALL SELECT 1 FROM cv_parse_reports WHERE file_id = ? LIMIT 1""",
+                           (fid, fid, fid)).fetchone()
+        row = con.execute("SELECT rel FROM cv_files WHERE id = ?", (fid,)).fetchone()
+        if used is None and row is not None:
+            out.append((fid, row["rel"]))
+    return out
+
+
+def _remove_kept(con: sqlite3.Connection, rels: list[str]) -> int:
+    """Removes the kept files at `rels` that no `cv_files` row names any more; returns how many went."""
+    gone = 0
+    for rel in rels:
+        if con.execute("SELECT 1 FROM cv_files WHERE rel = ?", (rel,)).fetchone():
+            continue
+        path = paths.data_dir() / rel
+        if path.parent != _files_dir():
+            log.warning("kept CV file %s is outside %s, so Hal leaves it alone", rel, _files_dir())
+            continue
+        try:
+            os.chmod(path, stat.S_IWRITE | stat.S_IREAD)   # Windows refuses to remove a read-only file
+            path.unlink()
+            gone += 1
+        except FileNotFoundError:
+            log.info("kept CV file %s was gone already", rel)
+    return gone
+
+
+def delete(doc_id: str, con: sqlite3.Connection | None = None) -> dict:
+    """Deletes an archived CV for good, in one write; returns {id, name, versions, redraft, kept_sent, files}.
+
+    `redraft` lists the titles of the applications being prepared whose job's CV went (made again on a CV in
+    use), `kept_sent` counts the sent or closed ones that keep their documents, and `files` the kept files
+    removed from disk. `NoSuchCV` for no such CV; CVError, in words for the page, for a CV not in the archive
+    (`NOT_ARCHIVED`), one Hal is reading (`BEING_READ`), or one an approved application not sent yet was
+    built from (`APPROVED_WITH`). It commits, so it cannot run inside a caller's transaction (RuntimeError).
+    """
+    from jobhunt.apply.rewrite import WRITABLE
+    from jobhunt.core import activity
+    from jobhunt.cvstudio import choose, parse_actions, suggest
+
+    with _conn(con) as c:
+        if c.in_transaction:
+            raise RuntimeError("store.delete saves its own write, so it runs outside any transaction")
+        if doc_id in parse_actions.reading_cvs(c):
+            raise CVError(BEING_READ)
+        with writing(c):
+            d = doc(c, doc_id)
+            if not d["archived"]:
+                raise CVError(NOT_ARCHIVED)
+            name = d["name"] or DEFAULT_NAME
+            vids = [r["id"] for r in c.execute("SELECT id FROM cv_versions WHERE doc_id = ?", (doc_id,))]
+            marks = ",".join("?" * len(vids)) or "NULL"
+            apps = _resting_on(c, marks, vids)
+            live = [a for a in apps if a["status"] in WRITABLE and not a["sent_at"]]
+            for a in live:
+                if a["approved"] or a["approved_at"]:
+                    raise CVError(APPROVED_WITH.format(job=f"{a['title']} at {a['company']}"))
+            files = {r[0] for r in c.execute(f"""SELECT file_id FROM cv_versions
+                                                 WHERE doc_id = ? AND file_id IS NOT NULL
+                                                 UNION SELECT file_id FROM cv_parse_reports
+                                                 WHERE version_id IN ({marks}) AND file_id IS NOT NULL""",
+                                             (doc_id, *vids))}
+            if d["baseline_file_id"]:
+                files.add(d["baseline_file_id"])
+            jobs = [a["id"] for a in apps]
+            c.executemany("DELETE FROM job_cvs WHERE job_id = ?", [(j,) for j in jobs])
+            for a in live:
+                if not a["has_app"]:
+                    continue
+                c.execute("UPDATE applications SET docs_need_redraft = 1 WHERE job_id = ?", (a["id"],))
+                activity.record("documents", "cv.deleted_base",
+                                f"Documents for {a['title']} need making again, because {REDRAFT_WHY}",
+                                f"You deleted {name} on My CVs", job_id=a["id"], icon="file", tone="warn", con=c)
+            for table, col in (("applications", "cv_version_id"), ("app_documents", "cv_version_id"),
+                               ("job_requirements", "cv_version_id")):
+                c.execute(f"UPDATE {table} SET {col} = NULL WHERE {col} IN ({marks})", vids)
+            for table, col in (("cv_checks", "version_id"), ("cv_parse_reports", "version_id")):
+                c.execute(f"DELETE FROM {table} WHERE {col} IN ({marks})", vids)
+            c.execute(f"DELETE FROM cv_suggestions WHERE doc_id = ? OR based_on IN ({marks})", (doc_id, *vids))
+            c.execute("DELETE FROM cv_preferences WHERE doc_id = ?", (doc_id,))
+            c.execute("DELETE FROM meta WHERE k = ?", (suggest.META_REVIEWED.format(doc=doc_id),))
+            c.execute("DELETE FROM cv_versions WHERE doc_id = ?", (doc_id,))
+            c.execute("DELETE FROM cv_documents WHERE id = ?", (doc_id,))
+            unused = _unused_files(c, files)
+            c.executemany("DELETE FROM cv_files WHERE id = ?", [(fid,) for fid, _ in unused])
+            _star_someone(c)
+        removed = _remove_kept(c, [rel for _, rel in unused])
+    choose.forget(vids)
+    _publish("delete", doc_id)
+    log.info("deleted CV %s: %d versions, %d applications made again, %d kept files", doc_id, len(vids),
+             len(live), removed)
+    return {"id": doc_id, "name": name, "versions": len(vids), "redraft": [a["title"] for a in live],
+            "kept_sent": len(apps) - len(live), "files": removed}
 
 
 def rename(doc_id: str, name: str, con: sqlite3.Connection | None = None) -> dict:

@@ -210,6 +210,14 @@ def _vectors(advert: str, texts: dict[str, str]) -> tuple[list[float], dict[str,
     return got[0], {**have, **dict(zip(missing, got[1:], strict=True))}
 
 
+def forget(version_ids) -> None:
+    """Drops the vectors kept in memory for these versions, as when their CV is deleted (`store.delete`)."""
+    gone = set(version_ids)
+    with _VECTORS_LOCK:
+        for key in [k for k in _VECTORS if k[0] in gone]:
+            del _VECTORS[key]
+
+
 def _lead(con: sqlite3.Connection, cvs: list[dict]) -> tuple[str, str]:
     """(the lead CV's id, its version in use), making the first CV when there is none."""
     if cvs:
