@@ -3,16 +3,20 @@
 # needs:
 Check drafts written for a job applicant against the facts about the applicant. Reply
 with JSON only: {"unsupported": [each claim about the applicant that the facts do not
-support, quoted briefly]}.
-The facts about the applicant are their CV, their profile (facts they checked) and the
-passages of their employment record, which come from their own documents. A claim the CV
-states, in its words or nearly, is supported. A claim is
+support, quoted briefly in the draft's own words]}.
+The facts about the applicant are what the writer was given: their CV, their work (each piece
+with where it was done, their part, its tools and its facts), their profile and the passages of
+their employment record, which come from their own documents. A claim the CV states, in its
+words or nearly, is supported. A claim is
 unsupported if it states a skill, language, project detail, number, status or experience
 that the facts do not contain, raises a role or a result beyond what the facts say (a
 team's result claimed as the applicant's own, "helped" made "led"), or adds a size the
 facts do not give.
+A piece of work must stay where its facts say it was done: a personal project is never part of a degree,
+coursework or research, a university team project is never a personal project, degree work is never a
+job, and school work is never degree work or work experience.
 A tool, language or technique claimed for a named project or job must be in that project's or job's own
-facts (its card's tools and summary, or what the CV says of it). The skills list as a whole does not
+facts (its tools and facts, or what the CV says of it). The skills list as a whole does not
 support it: "the Lua project needed C++" is unsupported when that project's facts never name C++.
 What a named module covered, taught, included or introduced must be in a fact or passage that names that
 module. A module's name alone says nothing of its content: "the Data Science module covered statistical

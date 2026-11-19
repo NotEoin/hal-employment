@@ -47,6 +47,9 @@ Design decisions, each with its reason:
   least `LIFT_CONTENT` own words, fails a sentence about the person's work, unless the person's facts hold
   every one of those words. A sentence about the employer or the role (`about_employer`: "you", "your", "this
   role", the employer's name or the job title) may use the advert's words.
+- A degree the person's education does not hold (`unheld_degrees`) and a team's work told as the person's
+  alone (`solo_claims`) are claims too: each was checked a paragraph at a time until 2026-11-19, and moved
+  here when each document came to be written whole, so no guard against invented facts was dropped.
 """
 from __future__ import annotations
 
@@ -428,14 +431,14 @@ CV_SHARE = 0.8             # share of a claim's own words one CV line must hold 
 CV_MIN_WORDS = 3           # a claim needs this many own words before the CV can be said to state it
 
 
-def stated_in(claim: str, cv_text: str) -> bool:
-    """True when one line or sentence of the CV holds at least `CV_SHARE` of a claim's own words: the CV
+def stated_in(claim: str, cv_text: str, share: float = CV_SHARE) -> bool:
+    """True when one line or sentence of the CV holds at least `share` of a claim's own words: the CV
     states it, so it is supported (a CV sentence was flagged as unsupported, 2026-11-07)."""
     own = {w for w in _tokens(claim) if w not in LITTLE_WORDS}
     if len(own) < CV_MIN_WORDS:
         return False
     parts = [set(_tokens(p)) for p in re.split(r"\n|(?<=[.!?;])\s+", cv_text or "") if p.strip()]
-    return any(len(own & part) >= CV_SHARE * len(own) for part in parts)
+    return any(len(own & part) >= share * len(own) for part in parts)
 
 
 # A form question asking why the person fits the job: graders saw a coursework expense tracker given as the fit
@@ -452,3 +455,76 @@ def fit_question(question: str) -> bool:
 def why_question(question: str) -> bool:
     """True for a form question that asks why the person wants this job or employer."""
     return bool(WHY_QUESTION.search(question or ""))
+
+
+# A degree a sentence names, short ("MSc") or long ("master's"), and the long names a qualification may hold:
+# a README's "developed as an MSc dissertation" was told as the person's MSc, though they hold a BSc (2026-11-12).
+# Short names match only in their own capitals, and "LLM" is left out, as a draft means a language model by it.
+DEGREE_RX = re.compile(r"\b(BSc|BA|BEng|BEd|LLB|MSc|MA|MEng|MRes|MPhil|MEd|MBA|PhD|DPhil|PGCE)\b|"
+                       r"\b((?i:master'?s|doctorate|doctoral))\b")
+LONG_DEGREES = {"bachelor of science": "BSc", "bachelor of arts": "BA", "bachelor of engineering": "BEng",
+                "bachelor of education": "BEd", "master of science": "MSc", "master of arts": "MA",
+                "master of engineering": "MEng", "master of research": "MRes", "master of philosophy": "MPhil",
+                "master of education": "MEd", "master of business administration": "MBA",
+                "doctor of philosophy": "PhD"}
+MASTERS = {"MSc", "MA", "MEng", "MRes", "MPhil", "MEd", "MBA"}
+DOCTORATES = {"PhD", "DPhil"}
+DEGREE_SAID = "names a {degree}, which your education does not hold"
+
+
+def held_degrees(degrees: list[str] | tuple[str, ...]) -> set[str]:
+    """The short names of the degrees the person's qualifications name ("BSc (Hons)", "Master of Science")."""
+    text = " ".join(degrees)
+    held = {m.group(1).upper() for m in re.finditer(DEGREE_RX.pattern, text, re.I) if m.group(1)}  # "Bsc" too
+    held |= {short.upper() for long, short in LONG_DEGREES.items() if long in text.lower()}
+    return held
+
+
+def unheld_degrees(draft: str, degrees: list[str] | tuple[str, ...]) -> list[str]:
+    """The sentences of a draft naming a degree the person's education (`degrees`) does not hold, each with why;
+    [] with no education on record, as nothing can then be checked."""
+    if not degrees:
+        return []
+    held, out = held_degrees(degrees), []
+    for sentence in check.sentences(draft):
+        for m in DEGREE_RX.finditer(sentence):
+            short = m.group(1)
+            family = MASTERS if not short and m.group(2).lower().startswith("master") else DOCTORATES
+            if (short and short.upper() not in held) or (not short and not {d.upper() for d in family} & held):
+                out.append(f"{sentence} ({DEGREE_SAID.format(degree=short or m.group(2))})")
+                break
+    return out
+
+
+# "I built X" and its kin: the whole of a piece of work claimed by one person.
+SOLO = re.compile(r"\bI (?:have |had )?(?:single-handedly |alone |myself |personally )?(built|designed|led|developed|"
+                  r"created|wrote|made|implemented|programmed|coded|engineered|delivered|architected|produced|"
+                  r"ran|launched|founded)\b", re.I)
+# Words that say the work was shared, or name the person's part of it.
+SHARED = re.compile(r"\b(we|our|us|team|teams|group|together|jointly|classmates|teammates|colleagues|others|"
+                    r"as part of|part of a|contributed|my part|my role|my share|alongside)\b", re.I)
+PART_SHARE = 0.5          # share of the person's part's own words a sentence must hold to name that part
+ALONE_SAID = "says you did {card} alone; it was a team's work{part}"
+
+
+def _names_part(sentence: str, role: str) -> bool:
+    """True when a sentence holds the person's part: at least `PART_SHARE` of the role's own words."""
+    own = {w for w in check.words_of(stage.TEAM_WORDS.sub("", role)) if w not in LITTLE_WORDS}
+    return bool(own) and len(own & set(check.words_of(sentence))) >= PART_SHARE * len(own)
+
+
+def solo_claims(draft: str, cards: list[dict]) -> list[str]:
+    """The sentences that name one card of a team's work and say the person did it whole ("I built ...") with no
+    word of the team or of their own part, each with why: local models wrote team work as solo (2026-11-07)."""
+    out = []
+    for sentence in check.sentences(draft):
+        named = named_cards(sentence, [c for c in cards if c.get("name", "").strip()])
+        if len(named) != 1:
+            continue
+        card, role = named[0], str(named[0].get("role") or "")
+        team = card.get("context") == stage.TEAM or bool(stage.team_words(role))
+        if not team or not SOLO.search(sentence) or SHARED.search(sentence) or _names_part(sentence, role):
+            continue
+        part = next((p for p in role.split("; ") if p and not stage.team_words(p)), "")
+        out.append(f"{sentence} ({ALONE_SAID.format(card=card['name'], part=f'; your part: {part}' if part else '')})")
+    return out

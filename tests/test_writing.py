@@ -66,11 +66,6 @@ class Codes(unittest.TestCase):
         self.assertEqual(check.unsupported_numbers("I scored 2031 points.", "Software Engineering 70"), ["2031"],
                          "a number on its own is still checked")
 
-    def test_a_paragraphs_numbers_leave_codes_out_too(self):
-        from jobhunt.writing import paragraphs
-
-        self.assertEqual(paragraphs.numbers("CSC2031/23 gave me 12 labs."), {"12"})
-
 
 class Checker(unittest.TestCase):
     def test_a_plain_specific_letter_passes(self):

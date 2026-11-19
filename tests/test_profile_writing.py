@@ -448,9 +448,9 @@ class Listings(unittest.TestCase):
 
         kept = (f"[{DOSSIER} > Tide gauge]\n(Kind: personal project)\nThe Tide gauge logs river levels.\n\n"
                 f"[{DOSSIER} > Sniffer]\n(Kind: personal project)\nIt listens for probe requests.")
-        found = plan.sources("", kept, list(self.cards.values()), writing.listings(self.con))
-        self.assertEqual([(s.text, s.card["name"]) for s in found], [("The Tide gauge logs river levels.",
-                                                                       "Tide gauge")])
+        given = plan.without_listings(kept, list(self.cards.values()), writing.listings(self.con))
+        self.assertEqual(given, f"[{DOSSIER} > Tide gauge]\n(Kind: personal project)\n"
+                                "The Tide gauge logs river levels.")
 
 
 class OwnFiles(unittest.TestCase):

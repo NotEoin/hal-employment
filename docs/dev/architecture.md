@@ -385,7 +385,7 @@ comes from their settings.
 Every prompt has an effort level in one table, `effort.LEVELS`, with a reason: `none` only where there is
 nothing to reason about (a short note, a name), `low` for writing a paragraph, a check against facts or a
 pick that must judge (thinking off answered a small reasoning question wrongly on Hal's Qwen 3.8 model,
-2026-11-19), `medium` for planning that weighs evidence (`fit`, `evidence_plan`, `story_rank`) and a
+2026-11-19), `medium` for weighing evidence (`fit`), writing the whole letter in one go (`letter`) and a
 recruiter's read, `high` for reads of the record, which keep the thinking they had (with thinking off a read
 kept 55 facts against 77, 2026-11-12). Each level has a thinking budget (`effort.BUDGETS`: 0, 512, 1,280
 and 8,192 tokens), held under the person's hard cap `ai.thinking_cap_tokens` (default 8,192, so nothing thinks less than its level until the person lowers it;
@@ -393,16 +393,17 @@ and 8,192 tokens), held under the person's hard cap `ai.thinking_cap_tokens` (de
 gateway sends them as `reasoning_effort` and `thinking_budget_tokens`; other backends send neither. A prompt
 missing from the table is sent no level and the cap.
 
-The budgets come from the five-minute target for one application's documents: calls x (prompt tokens / 500
-+ (thinking + answer tokens) / 55) under 300 s on the speeds measured on 2026-11-19. An application asks
-about 20 calls (analyse, brief, fit, evidence_plan, story_rank, motive_pair, letter_frame, about seven
-story_paragraph and four paragraph_verify), reading about 25,000 tokens (50 s) and answering about 2,400
-(45 s). That leaves about 200 s, 11,000 tokens, for thinking: three `medium` calls at 1,280 and the rest at
-512 or none come to 11,008 at most, 294 s in all (`tests/test_ai_effort.py` checks the sum). Before, every
-call could think to 8,192 tokens and a median call thought for 1,400 to 1,600 for a 130-token answer, so
-thinking was about 90% of an application's model time. Measured on two real adverts after the change
-(2026-11-19, `jobhunt docs-time`): 24 and 27 calls, 5.1 and 4.6 minutes of calls; the message and the form
-answers add paragraphs beyond the letter's.
+The budgets come from the time one application's documents may take: calls x (prompt tokens / 500 +
+(thinking + answer tokens) / 55), on the speeds measured on 2026-11-19, at most five minutes and ideally
+about two (owner, 2026-11-19). An application asks seven calls (analyse, brief, fit, letter, message,
+answers, verify), reading about 29,000 tokens; with every call thinking its whole budget (4,608 tokens in
+all) they come to at most about 174 s, and a redraft of each document adds about 85 s, 258 s in all
+(`tests/test_ai_effort.py` checks both). Before, every call could think to 8,192 tokens and a median call
+thought for 1,400 to 1,600 for a 130-token answer. Measured on three real adverts on a copy of real data
+through Hal's gateway (2026-11-19, from the gateway's replies): 9 to 10 calls, 139 to
+167 s of calls and 38,000 to 42,000 tokens read, the letter and most other documents redrafted once (the
+writing rules or the check found something in nearly every first draft); two of the adverts took 24 and 27
+calls and 308 and 274 s before.
 
 Backends: `ai/ollama.py` (a local model through Ollama), `ai/openai_compat.py` (any local server that speaks
 the OpenAI format), `ai/hal_gateway.py` (the Hal suite's model gateway: the same format plus the owner token
@@ -866,9 +867,9 @@ runs: tests use `tests/support/fake_claude/`.
 
 ## Documents (`cvstudio/context.py`, `pack/`, `docs/write_*.py`)
 
-- `pack/` is split by concern: `reading` (the advert reading, the record passages, the evidence plan),
-  `fitmap`, `checks` (what every draft is checked against), `drafting` (shared requests, the paragraph
-  scope, the story ranking), `hiring` (contacts), `letter`, `others` (the message and the answers) and
+- `pack/` is split by concern: `reading` (the advert reading, the record passages), `fitmap`, `drafting`
+  (the one request each document is written from, `Given`), `checks` (the one check and its redraft,
+  `settle`), `hiring` (contacts), `letter`, `others` (the message and the answers) and
   `markdown`. `jobhunt.pack` exports every name of its parts, so callers and the `pack.<name>` references
   below need no submodule. The drafts share one frozen `pack.Brief` (the job, `person`, the advert
   reading, the company brief, the CV facts and the record passages) instead of passing them one by one.
@@ -900,210 +901,82 @@ runs: tests use `tests/support/fake_claude/`.
   `doc_type`; an index of another `record.INDEX_VERSION` is read again in full on the next sync, and until
   then its passages are not used. `record.ask` still searches every passage. Requests label the passages
   `record.OWN_DOCUMENTS` ("from the applicant's own documents"), never "true".
-- The evidence plan (`writing/plan.py`, prompt `evidence_plan`): before the letter is written,
-  `pack.evidence_plan` asks once for up to `plan.MAX_ITEMS` (8) quotes from numbered sources
-  (`plan.sources`: each CV line, each Profile block line and each record passage of `kept`). A list-shaped
-  line is one source per entry, its heading kept on each (`writing/atoms.py`, `atoms.split`: "Second year
-  modules (overall 73.3): Ferry Studies 86" from a CV line of every module and its mark; a skills list; a
-  list of achievements), and a pick from an entry is the whole entry. A line is a list when a short heading
-  with no comma is followed by entries of at most `atoms.ENTRY_WORDS` words, at least `atoms.LIST_MIN` of
-  them, or two under a heading naming modules or skills or when each ends in a mark, so "Project, Ferry
-  planner (Lua, SQL): ..." stays whole. A whole module line as one source let a sentence about one module
-  cite another's "Team Project" (2026-11-08). A pick is kept
-  only when its source exists and its quote is in that source word for word, spaces and case aside, and the
-  text kept is the source's own (`plan.quoted`). Each item (`plan.Item`, E1, E2, ...) carries the card its
-  source is about (a Project or Job line of the Profile block, a CV line naming one card, a passage of one of
-  the card's `files`, or a passage of a listing that names one card; a listing's passage naming none is no
-  source), the card's context (`profile.contexts.current`, never the reply's) and the person's
-  part (`profile.writing.card_role`: the card's Role field and its team words, `stage.team_words`). A pick
-  from a skills list (`plan.skills_line`: a Profile "Skill:" line, a CV line labelled "Skills:",
-  "Languages:", "Tools:" and the like, or a label and a list of three or more) is tied to no card and marked
-  (`Item.skills`), as it says what the person knows, never which project used it. A pick whose quote is a
-  plan (`writing.planned.planned`, from its words or its passage's file) is marked (`Item.planned`) and
-  says so in the request; a story lists such quotes apart (`Story.planned`), and a paragraph naming a tool
-  only a plan gives fails unless it says the tool was planned (`paragraphs.PLANNED_SAID`). A
-  draft or fit row may name a card's planned tool only in words of a plan (`drafts.misplaced_tools`,
-  `drafts.evidence_checked`). The
-  letter's Evidence line names the plan's quotes, else the record passages as before. The pack picks one
-  plan for the letter, the message and the answers (with `COMMON_QUESTIONS`); `docs.change` picks one for
-  the message and answers. Each pick also says what in the job it can help with (`Item.use`, the prompt's
-  `use`), in the model's own words.
-- Stories (`plan.stories`, `plan.Story`): the plan's items grouped into the pieces of work a draft tells, one
-  per card (its items' quotes first, then the card's own `quotes` from `profile.writing.quotes`: the
-  person's own sources only, never an older CV's, a plan's or one naming a tool `for_writing` drops, with
-  the sentences of the card's own repository or project notes; `writing/quotes.py` keeps only sentences
-  about the work, `quotes.about_work`: no table row, bare link, credit, rating, heading or line under
-  `quotes.MIN_WORDS` (6) words with no verb, no command line (`quotes.COMMAND`: a command word and a flag,
-  a `--` flag or a ` # ` comment), no dependency pinned to a version (`quotes.PINNED`), no file statistics
-  (`quotes.STATS`), no line about the repository or its docs (`quotes.META`) and no sentence's tail
-  starting in lower case (`quotes.FRAGMENT`); `quotes.sentences` skips code blocks, joins hard-wrapped
-  lines into their paragraph or list item and drops a last sentence cut off with no full stop; and
-  `quotes.ranked` puts those with a result or a number first, then those saying how (`quotes.HOW`);
-  `plan.STORY_FACTS` (12) in all), one per passage's file and one per other item; a skills list is never a
-  story. `Story.block` is what a request gives: the name and tag, where it was done, the person's part,
-  what it is, its tools, its facts as plain lines, what is planned and what it can help with, never an
-  evidence id. `plan.choose(stories, n, used)` takes the `n` the pack has told least, best first. Each
-  story has a `kind` (`plan.PROJECT`, `JOB`, `MODULE`, `OTHER`): a pick of the degree itself (`plan.DEGREE`) is
-  never a story (nor a card named as the degree, "First-Class Honours"), as the opening gives it, and a
-  module line (`plan.module_of`) is a module story of its own,
-  named after its module. A passage of a project's own file (it has a "(Kind: ...)" line) tied to no card is
-  a project story named after its file (`profile.owners.file_name`), and `paragraphs.problems` requires
-  every named story, card or not, to be named in its first sentence (`paragraphs._names`).
-  Which work is told comes from one AI ranking per pack (`writing/rank.py`, prompt `story_rank`,
-  `pack.story_ranking`): `rank.make` offers every project and job card that is not archived (with its
-  `profile.writing.cards` `tier`, "core" marked, and its summary, else its first quote, else the person's
-  part, `rank._line`) and the plan's named project stories with no card (`rank.candidates`), with the job's
-  title, summary, requirements and the company brief (`rank.Job`). The prompt says core is the work the
-  person counts as their best and asks for every piece of work ranked by fit. `rank.checked` keeps the
-  reply's names that are among them (matched by their words, a trailing tag or a card's aliases aside),
-  each once, with a one-line reason (`rank.Ranked`), and `rank.with_core` adds every core card the reply
-  left out, last, so core work is always ranked (one core project was missing from 3 graded rankings,
-  2026-11-08). `rank.order` puts the ranked stories in the order `rank.led` gives: the core ones in the
-  ranking's top half, then the others in its top `rank.TOP_PLACES` (3), then the other core ones, then the
-  rest, each in ranking order (a core AI assistant came 13th behind first-year coursework, 2026-11-08). It
-  gives the letter the first `plan.LETTER_STORIES` project or job stories with facts in that order (modules
-  and other lines only below `plan.MIN_PROJECTS`), and the message and answers every story in that order,
-  the plan's unranked stories last (`rank.Told`). The pack
-  log has the ranking and its reasons. `write_letter` makes the call unless given a `ranking`, and the pack
-  passes the letter's to `write_others`, so a pack ranks once. Word overlap led with weak projects in 15
-  graded packs (2026-11-08). When the call gives no usable name (or the AI is unavailable for it), the word
-  count chooses as before: `plan.letter_stories`, the plan's project and job stories, then cards no story
-  tells whose words share at least `plan.RELEVANT_MIN` (2) words with the job's requirements
-  (`plan.relevance`, `plan.fitting`, core work first at an equal count), up to `plan.LETTER_STORIES`;
-  modules and other lines only below `plan.MIN_PROJECTS` (2) of those. A CV or Profile
-  line's sentences saying what the person is looking for (`plain.GOAL`) are taken out before it is a
-  source (`plan.without_goal`), and `plain.problems` finds one in a draft (`plain.GOAL_SAID`). The modules
-  the job's requirements name and no paragraph shows, best mark first (`plan.relevant_modules`, at most
-  `plan.MODULE_CLAUSE` (2), from `profile.writing.marked_modules`), go to the opening's request
-  (`frame.Facts.modules`) for one clause.
-- A story's tools (`plan.own_tools`) are its card's tools that its facts, name or summary name, or all of
-  them when they name none: a LIDAR project was drafted "using Lua and Python" when only the card's tool
-  list gave Python (2026-11-08), so a tool no fact names is not the story's and a paragraph naming it is
-  drafted again.
-- Paragraphs (`writing/paragraphs.py`): a letter whose plan tells any story is `pack._story_letter`: up to
-  `plan.LETTER_STORIES` (3) stories, each drafted in its own call from its own story alone (prompt
-  `story_paragraph`, shape `paragraphs.letter(cvdocs.letter_words, n)`: 3 to 4 sentences, a share of the
-  letter's length after `paragraphs.FRAME_WORDS` (70) and never under 60 to 90 words, the work named in the
-  first) and settled
-  by `paragraphs.write_paragraph`. The checks with no AI (`paragraphs.problems`, `sentence_problems`) read the
-  paragraph against its story only, through `paragraphs.Scope` (`pack.paragraph_scope`: every story and
-  card, `pack.known_tools`, the employer's words and the stage line, the person's names and settings
-  wording): a number or a known tool its facts lack (numbers in words read whole by `paragraphs.numbers`:
-  "twenty-three" is 23 and "one hundred and thirteen" is 113, as "twenty-three" read as 20 dropped a true
-  paragraph, 2026-11-08), named as another card's when that card holds it
-  (`CROSSED_TOOL`) or as a plan's (`PLANNED_SAID`); another card's name (`CROSSED_NAME`, with
-  `drafts.named_cards`, so "Quill Employment" never names "Quill"); `drafts.crossed`; degree or own-time
-  words against its context; "I built" of a team's work without the person's part; `stage.ended_course`;
-  `plain.problems` (with `plain.STOCK`: "aligns with", "resonates with", "directly supports", "satisfies the
-  requirement", "the role requires", "matters for the role", "demonstrates my ability to", "matches my",
-  "fits my", "suits my", "in line with my"); a sentence
-  echoing the advert (`drafts.echoes`); a sentence the paragraph already said (`repeats.same`); the part as
-  a label ("As the owner, ..."); `paragraphs.LIST_TOOLS` (4) tools in one sentence; a tool given a purpose
-  the work's facts do not hold (`writing/purpose.py`, `purpose.unbacked`: "<tool> to/for <purpose>", with at most
-  `purpose.GAP_WORDS` (2) words between, or "the <thing> in/with/using <tool>"; the purpose's content words,
-  `purpose.GENERAL` words, tool names and the work's name aside, compared by their first `purpose.STEM` (6)
-  letters, must be at least `purpose.PURPOSE_SHARE` (half) in the story's facts or in its name and summary,
-  and a part of a system (`purpose.LAYER`: backend, deployment, database ...) must be in a fact naming the
-  tool: Docker "to package the application" was an agent sandbox, 2026-11-08; and a purpose a fact gives to
-  another known tool by name, when no fact naming the sentence's tool holds it, fails citing that tool,
-  `purpose.other_tool_for_purpose`, `purpose.CROSSED`: "GPT-SoVITS to transcribe utterances" when
-  faster-whisper transcribed); `taught`'s module checks; the work unnamed in the first sentence; too few
-  sentences; and the writing rules' high hits.
-  A letter paragraph ends on why the work matters for the job only when a fact clearly fits; no check asks
-  for that last sentence, as a check that redrafted paragraphs until their last sentence named a word of the
-  advert left generic ties ("This experience in building precise.") and raised generic sentences from 7 to
-  19 in 15 graded packs (2026-11-08). The request carries `paragraphs.BRIEF_CHARS` (1500) of the company
-  brief beside the advert (`pack.paragraph_scope`), so a message's question can name the employer's work.
-  When they find nothing and the paragraph says more than its facts' own words (`paragraphs.restates`),
-  one AI call checks it against its story (`verify`, prompt `paragraph_verify`); quoted words its facts or
-  the employer's words hold, word for word or by their roots, are dropped. A paragraph with a problem is
-  drafted once more with the problems listed; one still failing loses its failing sentences, each whole,
-  when the rest still reads (`flow.reads_without`, and the shape's least sentences and name kept). A
-  sentence is never cut in part: cutting one clause left sentences such as "That experience in building
-  precise." in 11 of 15 graded packs (2026-11-08). Else it is dropped and "Check before sending" says so
-  (`Paragraph.listed`), unless it is a module's or the degree's story dropped for having nothing to say (`paragraphs.education`). A sentence fixed or cut is never listed. A paragraph
-  that passes every check with no AI and fails only `verify` is never dropped (`paragraphs._doubted`): the
-  sentences the AI flagged are cut when the rest still reads, else it is kept whole and listed
-  (`Paragraph.checks`, `paragraphs.DOUBTED`), in a letter, the message and the answers alike
-  (`pack._story_others` lists them too, as a message kept a crossed timing claim while the pack said
-  "Nothing to check", 2026-11-08); a redraft that fails a check with no AI and cannot be cut falls
-  back to a first draft that failed `verify` alone. A letter came out at 56 words when three paragraphs were
-  dropped, two over claims the record supports (2026-11-08). `pack._letter_bodies` then tries the next
-  project or job story with facts of `rank.Told.others`, up to `pack.LETTER_TRIES` (3), while fewer
-  paragraphs stand than were chosen or they and `paragraphs.FRAME_WORDS` come to under `pack.SHORT_MIDDLE`
-  (half) of `cvdocs.letter_words` (`pack._short_middle`). The
-  opening and closing are one call (`writing/frame.py`, `frame.write_frame`, prompt `letter_frame`) from `frame.Facts`
-  (`pack.letter_frame`: the name, `opening.described`, the role, the motivation pairing, the stories the
-  middle tells and today), checked the same way with the role and the institution required. The opening's
-  reason is one concrete thing about the employer: the request gives the pairing's employer fact alone, never
-  its item, and with a pairing the opening needs one specific word of that fact; it never names a card of the
-  person's or the work the middle tells (`frame.motive_problems`, `frame.NAMES_WORK`), as openings told a
-  project a paragraph then told again (5 cases in 15 graded packs, 2026-11-08). Neither paragraph retells the
-  middle (`frame.retold` against `frame.Facts.middle`, the paragraphs' names and texts: a sentence
-  `repeats.same` as one of theirs, sharing `frame.RETOLD_RUN` (4) own words in a row with one, names, role and
-  employer aside, or giving one of its numbers). The pair is drafted once more when either fails; an opening still failing is `opening.Opening`'s built sentence and a closing
-  still failing is left out. Paragraphs and the frame are drafted at `paragraphs.DRAFT_TEMPERATURE`. The
-  message and the answers are told the same way (`pack._story_others`, through `pack.write_others`): the
-  message is `opening.Opening` and one story in shape `paragraphs.message` (one or two sentences, then one
-  question about the employer's own work: `paragraphs.question_problems` requires it to name a word of the
-  advert or the brief (`paragraphs.job_terms`, by its first `paragraphs.LINK_STEM` (5) letters, little words,
-  `motive.GENERIC` and `purpose.GENERAL` words, the title, the employer's name and known tools aside) beyond
-  the work's own name (`paragraphs.linked`), and to share no content word with the work's summary and
-  facts that the advert and the brief do not hold, unless `rank.fits` places the work in the ranking's top
-  half (`Shape.fits`); one redraft with `QUESTION_OFF` or `QUESTION_OWN`, as graders saw "cross-platform
-  window management" asked of a consultancy, 2026-11-08); an answer is one story, or two when its question asks for more than one
-  example (`plan.examples_wanted`), in shape `paragraphs.answer`, and a question asking why this employer
-  (`drafts.why_question`) is one story in shape `paragraphs.why`, from the letter's motivation pairing and,
-  among the stories the ranking places in its top half (`pack._fitting`, `rank.fits`; all of them with no
-  ranking), its item's story (`pack._story_of`) while the pack has told that story no more than any other,
-  else the story told least, counted as told either way (`pack._why_story`): a project the letter told was
-  told again in the "why here" answer while other work was untold, and graders saw a device-tracking
-  sniffer offered to an ML employer (2026-11-08). A question asking why the person fits (`drafts.fit_question`)
-  takes its stories from the same top half, as a coursework expense tracker was given as the fit. Every one of these shapes but `why` names its work in its first
-  sentence (`Shape.name`, `paragraphs.NOT_NAMED`), as a letter paragraph does, and is drafted again once when
-  it does not: answers and messages opened "I wrote a 113-test suite ..." in 12 of 15 graded packs
-  (2026-11-08). A `why` answer is at least `paragraphs.WHY_LEAST` (2) sentences: the reason about the
-  employer from the pairing's fact, then one sentence tying it to its story (with the pairing's reason only
-  when the story is the pairing's item's): its first sentence must say "you" or "your", name the employer,
-  or share a specific word (`motive.STEM` (5) letters) of the fact (`Shape.employer`, `motive.addresses`,
-  `paragraphs.NOT_EMPLOYER`), and is drafted again once when it does not, as four graded answers said only
-  "because I built <project>" (2026-11-08). A first sentence restating the advert (`motive.restated`) or no
-  later sentence naming the story (`paragraphs.NOT_TIED`) asks for that one redraft too, but never cuts or
-  drops the answer (`paragraphs.untied`). The message, then the answers, take the stories the letter (`told`:
-  its paragraphs' stories), the message and earlier answers told
-  least (`plan.choose`), best first in the ranking's order (`rank.Told.others`), so they tell the next work
-  the letter did not. When an answer's or the message's paragraphs are all dropped the next story is
-  tried, up to `pack.STORY_TRIES` (3) stories (`pack._story_answer`, `pack._story_message`), then the
-  whole-draft path writes what is still empty (`write_others`' `whole_answers`, asking `answers` for the
-  blank questions alone, and `whole_message`); only a question still blank is listed (`pack.NO_ANSWER`), with
-  its dropped paragraphs. A message body must ask a question (`Shape.question`, `paragraphs.NO_QUESTION`)
-  and never say the built opening's degree again (`paragraphs.message(opening)`, `Shape.after`,
-  `paragraphs.says_again`: a sentence `repeats.same` as the opening, or one matching `plan.DEGREE` with at
-  least `paragraphs.DEGREE_SHARED` (2) of the opening's own words; `paragraphs.SAID_AGAIN`). Every starred
-  card with a quote or a summary is a story too (`plan.with_showcase`, `plan.card_story`, from the card's own
-  facts), whether or not the plan picked anything of it, so only a draft with no plan story and no starred
-  card is drafted whole as below.
-- What replaced sentence checks (2026-11-08): a grader capped every graded pack at 2 of 5 for readability
-  across four designs that drafted against evidence ids ("[E2]") and checked, rewrote, cut and smoothed each
-  sentence, named projects with "For <card>, " and cut the advert's lead-ins with no AI. Those modules
-  (`writing/cites.py`, `writing/grounded.py`), their prompts (`sentence_check`, `sentence_fix`,
-  `paragraph_check`, `paragraph_smooth`, `paragraph_add`), the second letter draft and the cross-draft
-  repeat rewrite are gone; one story a paragraph tells each piece of work once instead.
-  `tests/fixtures/paragraph_flags.json` holds the sentences of each kind a local model wrote, each tied to
-  the story its paragraph tells, and `tests/test_writing_paragraphs.py` requires each judged right with no
-  AI, and the ones only the AI can see left to it. Calls per pack, counted with the fake AI of
-  `tests/test_pack.py` (`test_a_whole_pack_keeps_each_projects_tools_to_itself_within_about_thirty_calls`:
-  two look-alike projects, a letter, a message and two answers, no fix needed): 17, the ranking among them. A real pack made about
-  55 with sentence checks. `pack.build` logs each pack's count ("pack for job <id>: <n> model calls",
-  through `ai.counted`, a context variable that counts this thread's `ai.chat` and `ai.chat_json`
-  calls; blocks nest), so the count on a real model can be measured. "Check before sending" lists the paragraphs left out, the questions no story
-  answers, the eligibility lines, cut-offs and the checks with no AI on style; the verify call is not made
-  for a draft told by stories. The section is in every pack, saying `pack.NOTHING_TO_CHECK` when it lists
-  nothing (`pack.add_company_check` replaces that line with its flags), since packs without it gave no sign
-  of a broken letter (2026-11-07). It also lists a letter under `flow.LENGTH_FLOOR` (0.8) of
-  `cvdocs.letter_words` (`pack.SHORT_FLAG`), and a paragraph of the letter or the message that opens by
-  pointing back ("This", "It", "That", "These" and a noun) at nothing the paragraph before says
-  (`flow.dangling`, `pack.DANGLING_FLAG`).
+- One request, one writing call a document (2026-11-19). `pack.build` reads the advert (`analyse`), writes
+  the employer note (`brief`) and the fit map (`fit`), then `drafting.given(brief, fit, history)` assembles,
+  with no AI, what every document of the job is written from (`drafting.Given`): the job's part (the role as
+  `titles.of_job` says it, the summary, the advert's needs and nice-to-haves from the reading, and
+  `drafting.ABOUT_CHARS` (1,500) of the employer note), the fit map's rows (at most `drafting.FIT_ROWS`, 12)
+  and its gaps, given as a guide to what to argue and never as a fact, and the applicant's part (today and
+  their stage, who is writing from `opening.described`, earlier applications to the employer, the work
+  chosen below, the modules the job's needs name, the CV and the passages of their own documents). The
+  advert's own sentences are not in the request, as letters given them gave them back as the reason.
+  `Given.request(kind)` adds the field's conventions (`fields.block`), the person's voice excerpts for a
+  letter (`sections.letters.voice_excerpts`, while `cvdocs.voice` is on), the message's built opening or
+  the questions, and the change the person asked for; its size is logged ("letter request: about N
+  tokens"). The letter (prompt `letter`, at `medium`), the message (`message`) and the answers (`answers`,
+  all questions in one call) are each one call at `drafting.DRAFT_TEMPERATURE` (0.4). Two real adverts took
+  24 and 27 calls and about 5 minutes with an evidence plan, a ranking of the work, a motivation pairing,
+  a frame call and a call and a check per paragraph, and the letters all read alike: an opening, three
+  paragraphs each "I built <project>, a personal project that ...", each ending on a sentence claiming
+  relevance, then a stock closing (2026-11-19). Those modules (`writing/paragraphs.py`, `frame.py`,
+  `motive.py`, `rank.py`, `purpose.py`) and their prompts (`evidence_plan`, `story_rank`, `motive_pair`,
+  `letter_frame`, `story_paragraph`, `paragraph_verify`) are gone.
+- The letter prompt asks for an argument, not a list: the middle is organised by what the employer needs,
+  weaves two or three pieces of evidence (one paragraph may draw on two pieces of work), never gives one
+  project per paragraph, never ends a paragraph on a sentence saying the work is relevant, opens no two
+  paragraphs the same way and at most one with "I", and stays near `cvdocs.letter_words`. The house rules
+  stay: only the facts given, where each piece of work was done and the person's part kept, the CV type's
+  banned words, plain words and the person's spelling.
+- The work given (`writing/plan.py`): `plan.chosen(cards, wanted, cited)` picks up to `plan.WORK_GIVEN` (4)
+  of the cards a draft may tell (`plan.story_cards`: every job, the starred projects once any project is
+  starred, else all; a CV-only project while any card is starred, and a project done as the dissertation
+  when the dissertation has its own card, left out), each with something of its own to say. A starred job
+  leads; then the score, `plan.relevance` (words shared with the job's needs) plus `plan.FIT_WEIGHT` (3)
+  for each fit row citing the card (`plan.fit_names`, a strong row twice); core work first at a tie; a
+  CV-only project and an unstarred job only older CVs give come last. `plan.card_story(card)` is the card as
+  a request gives it (`Story.block`): "Project:" or "Job:" and the name (with its tag when another card's
+  name is like it), where it was done (`stage.CONTEXT_WORDS`, or "a job"), the dissertation, CV-only and
+  older-CV notes, the person's part, what it is, its own tools (`plan.own_tools`: those its facts, name or
+  summary name, or all when they name none, as a LIDAR project was drafted "using Lua and Python" when only
+  the card's list gave Python, 2026-11-08), a tool only a plan gives as planned, never used
+  (`plan.PLANNED_WORDS`), and its own quotes (`profile.writing.quotes`, at most `plan.STORY_FACTS`, 12), so
+  one project's tools and facts never sit under another's name. `plan.relevant_modules` gives the modules
+  whose names share a word with the job's needs and none with the work given, best mark first, at most
+  `plan.MODULE_CLAUSE` (2). `plan.without_listings` takes out a passage of a file that lists projects
+  (`profile.owners.Files.listings`) unless it names exactly one card.
+- One check, at most one redraft each (`checks.settle`): one `verify` call (at `low`) reads every draft of
+  the job at once ("Letter:", "Message:", "Answers:") against `Given.checked()`, the facts the writer had,
+  the fit map aside, with the advert and the employer note fenced as the employer's own words. A claim the
+  AI quotes is put to every draft that still makes it (`checks.still_says`: its words, or `KEPT_SHARE` (0.6)
+  of its own words in one sentence), else to the draft sharing most of its words; one that a line of the
+  writer's facts states (`drafts.stated_in`, `CV_SHARE` of its own words) is dropped, as the check flagged
+  sentences the CV states nearly word for word (2026-11-19). Each draft is then redrafted once, with its first draft and
+  every problem in one note: the check's claims, the claims found with no AI (`checks.code_claims`: `stage.ended_course`,
+  `drafts.misplaced_tools`, `drafts.wrong_context`, `drafts.crossed`, `drafts.unheld_degrees`,
+  `drafts.solo_claims`, `strengths.studied_claims`, `taught.unsupported`, `taught.tooled`) and an advert
+  phrase told as the person's work (`checks.lifted_claims`), the writing rules' high hits, the wording
+  `plain.problems` finds (a stock tie to the job such as "aligns with"), sentences restating the advert (`drafts.echoes`: the letter's first paragraph, the "why
+  here" answers), a later answer repeating an earlier one (`repeats.repeated`), and for the letter a length
+  under `flow.LENGTH_FLOOR` of the setting or paragraphs opening alike (`flow.alike_openings`: the same first
+  `flow.OPENING_WORDS` (2) words as an earlier paragraph, or a second paragraph opening "I") or a middle
+  paragraph ending on a sentence that only claims relevance (`flow.relevance_closers`). The redraft
+  is not read by the AI again; the checks with no AI run on it, and a claim of the check it still makes is
+  listed. A pack checks its letter, message and answers in that one call; `write_letter` (form time,
+  `docs.rewrite_letter`) and `write_others` (`docs.change`) check theirs the same way. Calls for a pack
+  needing no redraft: 7 (analyse, brief, fit, letter, message, answers, verify; `tests/test_pack.py`,
+  `OneRequest`), at most 10 with a redraft of each, and one more for a reply cut off mid-sentence.
+- "Check before sending" lists what is still wrong after the redraft: claims, numbers no source holds
+  (the writer's facts included), the writing rules, sentences still restating the advert, answers still
+  repeating, a letter still short (`pack.SHORT_FLAG`), a paragraph that opens by pointing back ("This",
+  "It", "That", "These" and a noun) at nothing the paragraph before says (`flow.dangling`,
+  `pack.DANGLING_FLAG`), a question left with no answer (`pack.NO_ANSWER`), cut-offs and the eligibility
+  lines. Paragraphs opening alike or ending on a claim of relevance are never listed, as a matter of style.
+  The section is in every pack, saying `pack.NOTHING_TO_CHECK` when it lists nothing
+  (`pack.add_company_check` replaces that line with its flags), since packs without it gave no sign of a
+  broken letter (2026-11-07). The letter's notes say
+  "Hal rewrote it once to take out claims" (`pack.SOFTENED`) or "Hal revised it once" (`pack.REVISED`) when
+  it was redrafted, and its Evidence line names the work given that the letter names, else the record
+  passages, else the fit map's strong rows.
 - Plain first-person writing (`writing/plain.py`): `plain.problems` finds a sentence opening with the
   advert's requirement ("For the requirement to ...", "Regarding the need for ...", "As required ...", "The
   advert requires ...", "The role asks for ...", "Regarding <X>, ...", "In terms of <X>, ...", "Your
@@ -1112,9 +985,8 @@ runs: tests use `tests/support/fake_claude/`.
   work to the job with a stock phrase (`plain.STOCK`), pointing at the CV ("My CV lists ...", "as listed in
   my CV"), speaking of the person in the third person ("the applicant", "the candidate", their name with a
   verb) or pasting a setting's wording (`plain.settings_labels`: the right-to-work choices' labels, and
-  `you.work_status` unless it is a sentence in the first person). It is one of each paragraph's problems
-  with no AI (`paragraphs.sentence_problems`, through `paragraphs.Scope.person` and `labels`), so its
-  paragraph is drafted again; what is left in any draft is listed by `pack.check_drafts`. A lead-in is never
+  `you.work_status` unless it is a sentence in the first person). A draft holding one is redrafted once
+  (`checks.settle`), and what it still says is listed by `pack.check_drafts`. A lead-in is never
   cut out with no AI, as cutting one left garbled text (2026-11-08). `plain.tidy` is applied to the letter,
   the message and the answers before they are returned: no stray evidence id (`plain.STRAY_ID`, as a
   "[E4,M]" reached a form answer), straight quotes and apostrophes, no space before a line's first word,
@@ -1123,16 +995,14 @@ runs: tests use `tests/support/fake_claude/`.
   right to work in `cv.WORK_WORDS` (shared with form filling) and the nationality the person gave, never
   `you.work_status`, after a letter said "as a British or Irish citizen" for a UK and Irish citizen
   (2026-11-07).
-- The claim check, `pack.unsupported_claims` (prompt `verify`), checks drafts with no story to tell, and form
-  answers, against the CV, the checked
-  profile and the passages of the person's own documents. The advert and the company brief go in a fenced
+- The claim check for form filling, `pack.unsupported_claims` (prompt `verify`, and `checks.code_claims`),
+  checks form answers against the CV, the checked profile and the passages of the person's own documents; a
+  pack's drafts are checked by `checks.settle` (above). The advert and the company brief go in a fenced
   `EMPLOYER` block as the employer's own words, never flagged for being restated; the fit map is not a
   fact, as the AI wrote it. A claim the AI quotes that one CV line or sentence states (`drafts.stated_in`:
   `CV_SHARE` of the claim's own words) is dropped. `tests/fixtures/check_flags.json` holds made-up
   sentences of each kind the checks flagged, rightly and wrongly, and `tests/test_writing.py` requires
-  every one judged right. `pack.fix_claims` rewrites the letter, the message and the answers (all of them
-  in one call) once each when the check finds a claim, then checks again; only claims still there are
-  listed under "Check before sending", and the letter's Checked line starts with `pack.SOFTENED`. Form
+  every one judged right. Form
   filling (`autofill.check_written`) runs the numbers check on each AI answer of `CHECKED_WORDS` or more
   and one claim check per form, with the advert as the employer's words; a flagged answer gets a "Hal is
   unsure; check this: ..." note and is not rewritten. Answers and letters drafted for the job earlier
@@ -1174,9 +1044,8 @@ runs: tests use `tests/support/fake_claude/`.
   when a CV line states it, "from your skills", or "from your record"; a row met by where the person lives
   says "from your settings".
 - A tool only an older CV gives a project card (`profile.writing.older_cv_only`) is off the card's `tools`
-  and kept as its `older_cv`. `pack.known_tools` includes those tools, so `paragraphs._tool_problems` fails a
-  sentence giving one to the card (`OLDER_CV_SAID`), and `drafts.misplaced_tools` and fit rows take it out,
-  saying it is only on another of your CVs.
+  and kept as its `older_cv`. `pack.known_tools` includes those tools, so `drafts.misplaced_tools` and fit
+  rows take one given to the card out, saying it is only on another of your CVs.
 - Checks with no AI on finished drafts (`writing/drafts.py`): a letter or message whose last line is a
   sentence with no closing punctuation is asked for once more with room to finish (`pack.CUT_NOTE`, a
   wider `ROOM_CTX`); if that one stops too it is kept to its last full sentence and listed (`CUT_FLAG`).
@@ -1201,15 +1070,15 @@ runs: tests use `tests/support/fake_claude/`.
   letter's Evidence line) a kind of project ("personal projects", `drafts.CONTEXT_PHRASE`) that does not fit a
   named card's context (`drafts.PHRASE_FITS`) is taken out and each card's own context words follow its name
   (`drafts.own_contexts`). A card named only inside a longer
-  named card's name ("Quill" in "Quill Employment") is not named (`drafts.named_cards`). Both go into the one
-  rewrite per draft that `pack.fix_claims` asks for, and what is left is listed.
+  named card's name ("Quill" in "Quill Employment") is not named (`drafts.named_cards`). Both go into a
+  draft's one redraft (`checks.settle`), and what is left is listed.
 - Similar names (`profile.writing.similar`): project cards with the same first word of at least
   `STEM_MIN` letters (not a word in `NOT_STEMS`), or one name inside the other, each carry a `tag`, the first
   `TAG_WORDS` words of their own summary up to a comma or a word such as "for", "with" or "that" ("Quill
   (offline assistant over personal notes)", "Quill Employment (job-search helper)"), on their Profile line,
-  in `cards` (`tag`, `similar`) and in each plan item about them (`plan.Item.tag`). `drafts.crossed` finds a
+  in `cards` (`tag`, `similar`) and in the request's work (`Story.block`). `drafts.crossed` finds a
   sentence naming one of them with a tool, or a word of the tag (not `NOT_PURPOSE`), that only the other's
-  card holds; it is one of each sentence's checks with no AI and part of `pack.unsupported_claims`. Drafts
+  card holds; it is one of the checks with no AI (`checks.code_claims`). Drafts
   gave a local assistant its namesake's purpose and stack in every graded run (2026-11-08).
 - `writing/taught.py`: `unsupported(draft, modules, sources)` turns a sentence that says a named module
   (one of `profile.writing.module_names`, the modules of the education facts the person checked, or any
@@ -1225,53 +1094,26 @@ runs: tests use `tests/support/fake_claude/`.
   the modules of a list in the sources (`modules_listed`) count as named. `tooled(draft, modules, sources,
   known)` finds a sentence naming a module with a known tool or language its own entry and name never name
   ("Algorithm Design & Analysis gave me the specific C++ knowledge", 2026-11-08); a listed entry that is a
-  tool's name is never a module. All three are among each paragraph's checks with no AI
-  (`paragraphs.sentence_problems`), so they run on letter paragraphs, answers and messages alike, and
-  `unsupported` and `tooled` on whole drafts (`pack.unsupported_claims`).
+  tool's name is never a module. `unsupported` and `tooled` are among the checks with no AI
+  (`checks.code_claims`), on the letter, the message and the answers alike.
 - `drafts.echoes(sentence, advert, brief, names)` finds a sentence that restates the employer: at least
   `ECHO_SHARE` (half) of its own words sit in runs of `ECHO_RUN` (three) words found in the advert or the
   brief, with little words and the words of the job title and employer's name (`names`) never counted, and
   at least `ECHO_MIN_WORDS` such words. It reads the letter's first paragraph (`first_paragraph`) and the
-  answers whose question asks why this job or employer (`why_question`). `pack.fix_echoes` rewrites the
-  letter, or all the answers in one call, once with the instruction to tie one specific thing of the
-  applicant's to one specific thing about the employer, before the claim check; a sentence still echoing
-  is listed as `pack.ECHO_FLAG`. The letter and answers prompts ask for this up front. Every paragraph a
-  story tells (letter, answer, message) is also checked with `drafts.lifted(sentence, advert, brief, names,
-  own)`: a run of `ECHO_RUN` (three) or more words found in the advert or the brief holding at least
-  `drafts.LIFT_CONTENT` (2) own words, not all of them (by their first `drafts.LIFT_STEM` (5) letters) in the
-  story's facts, fails a sentence about the person's work (`paragraphs.LIFTED_SAID`, drafted again once).
-  A sentence about the employer or the role (`drafts.about_employer`: "you", "your", "this role", the
-  employer's name or the job title) may use them. "low-latency systems" and "AI agents for customer
-  support" became the person's claims in sentences mostly their own (2026-11-08).
-- The letter's reason for the employer (`writing/motive.py`, prompt `motive_pair`): with a plan,
-  `pack.write_letter` asks once (`motive.make`) for one fact of the company brief or the advert (the brief
-  given first and read first: what the company makes, for whom, its product or mission), one plan item and a
-  one-line reason. `motive.checked` keeps the pairing only when the fact is in the brief or the advert word
-  for word (`plan.quoted`, the brief's words when both hold it), at least `MIN_SPECIFIC` (2) of its own words are not words any
-  employer uses of itself (`GENERIC`, the little words, the job title and the employer's name), the item
-  is the plan's, there is a reason, and the fact is not a duty or requirement of the job (`motive.duty`,
-  `motive.DUTY`: "write and improve ...", "experience of ...", "you will ...", as openings led in with "Your
-  requirement to write and improve SQL queries ...", 2026-11-08; "Your ..." too), not one person's words
-  (`motive.testimonial`: in the first person, or from a quoted line), and not a list of what the job asks
-  (`motive.requirements`: a word of `motive.REQUIRES`, or `motive.LIST_ITEMS` (3) items of the advert), as
-  all 15 graded "why here" answers restated the advert ("Your focus on ownership and working with
-  stakeholders ..."), paraphrased a testimonial or gave no reason (2026-11-08). A sentence of the opening
-  that speaks of the employer (`motive.addresses`) and a "why here" answer's first sentence fail when they
-  restate the advert (`motive.restated`: a run of `motive.RUN_WORDS` (5) words with it, or more than
-  `motive.SENTENCE_SHARE` (60%) of at least `motive.RESTATED_MIN` (3) own words in one advert sentence, the
-  title's and employer's words aside), with one redraft each. The letter's opening (`writing.frame`) is
-  drafted from the pairing's fact alone and a "why here" answer (`paragraphs.why`) from the fact and its item,
-  or each is told there is none and to give no reason beyond the role; a letter with no story gets the
-  pairing in its request (`motive.block`, or `motive.NONE_SAID`). The pairing is offered every plan item
-  tied to a card (`motive.offered`), as the opening names no project, of the cards the ranking places in its
-  top half when there are any (`pack.fitting_names`).
+  answers whose question asks why this job or employer (`why_question`); such a sentence asks for the
+  draft's one redraft, with the instruction to tie one specific thing of the applicant's to one specific
+  thing about the employer, and one still echoing is listed as `pack.ECHO_FLAG`. The letter and answers
+  prompts ask for this up front. Every draft is also read with `drafts.lifted(sentence, advert, brief, names,
+  own)` (`checks.lifted_claims`): a run of `ECHO_RUN` (three) or more words found in the advert or the brief
+  holding at least `drafts.LIFT_CONTENT` (2) own words, not all of them (by their first `drafts.LIFT_STEM`
+  (5) letters) in the writer's facts, is a claim about the person's work (`checks.LIFTED_SAID`). A sentence
+  about the employer or the role (`drafts.about_employer`: "you", "your", "this role", the employer's name
+  or the job title) may use them. "low-latency systems" and "AI agents for customer support" became the
+  person's claims in sentences mostly their own (2026-11-08).
 - `writing/repeats.py`: `repeated(answers)` finds each sentence of a later form answer whose own words
-  (at least `REPEAT_MIN_WORDS`) are `REPEAT_SHARE` in a sentence of an earlier answer. `pack.fix_repeats`
-  rewrites the answers once, in one call, asking for other evidence in the later ones, after the echo
-  rewrite and before the claim check; one still repeating is listed as `pack.REPEAT_FLAG`. `repeats.same`
-  also finds a sentence a paragraph says twice (`paragraphs.REPEAT_SAID`). Told by stories, a pack tells each
-  piece of work once by how it is drafted (`plan.choose`), so no sentence is compared across drafts. The fit
-  map's gaps are kept once each (`unique_gaps`: the same words, case, order and "(no evidence found)"
+  (at least `REPEAT_MIN_WORDS`) are `REPEAT_SHARE` in a sentence of an earlier answer; it asks for the
+  answers' one redraft with other evidence in the later ones, and one still repeating is listed as
+  `pack.REPEAT_FLAG`. The fit map's gaps are kept once each (`unique_gaps`: the same words, case, order and "(no evidence found)"
   aside).
 - `writing/eligibility.py`: `blockers(must_haves, person())` finds, with no AI, a degree level above the
   person's highest (checked education and `you.education.degree`), more years than
@@ -1313,8 +1155,8 @@ runs: tests use `tests/support/fake_claude/`.
   (2026-11-07). Anything else reads "No reliable match found" with no sections to read. `tests/test_reputation.py` fakes every lookup.
 - One letter path, `pack.write_letter` (advert, record, fit map, letter, checks), serves the pack, the letter
   drafted at form time and the writing actions. The letter and the message are drafted at
-  `pack.DRAFT_TEMPERATURE` (`paragraphs.DRAFT_TEMPERATURE`, 0.4), cooler than other prose, and drafted once:
-  only a failing paragraph or frame is drafted again, once. The pack's `## Letter notes` section says Tone,
+  `pack.DRAFT_TEMPERATURE` (0.4), cooler than other prose, and redrafted at most once (`checks.settle`).
+  The pack's `## Letter notes` section says Tone,
   Length, Evidence and Checked; the application page reads them back.
 - The advert reading keeps only the questions the advert writes out, so a model's own note about questions
   is never answered. When the advert states no requirement, its main duties stand in, so the fit map is
@@ -1370,8 +1212,8 @@ runs: tests use `tests/support/fake_claude/`.
   over 35 words, a letter sentence copied nearly word for word from a whole CV line (`VERBATIM_SHARE`),
   greeting and sign-off pairing ("Dear" and a name with "Yours sincerely", a team or "Sir or Madam" with
   "Yours faithfully"), numbers no source holds and length limits. A code (`check.CODE`: capitals then
-  digits, such as a module code "CSC2031/23") is no number to check (`check.without_codes`, also in
-  `paragraphs.numbers`), as one person's module code and year were listed in every pack (2026-11-08).
+  digits, such as a module code "CSC2031/23") is no number to check (`check.without_codes`), as one person's
+  module code and year were listed in every pack (2026-11-08).
   An `-ing` tail (L5) counts only when its
   verb is followed by a quality or significance word (`SIGNIFICANCE`) or by "how", "that" or "why", so a
   factual tail (", ensuring each record keeps its own ID") is not flagged. It replaced `pack.CLICHES`; every word that list flagged is still flagged. An L10 hit
@@ -1798,12 +1640,9 @@ people). Readers only take facts out of a source, within that frame.
   and give no facts. `letters.voice_samples(con, n)` returns the words of the `n` newest letters that were
   read (by their own date, then when added), from the kept files rather than the notes.
   `letters.voice_excerpts(con, n=2)` cuts each to its own prose (`excerpt`: no heading, date, greeting or
-  sign-off) of at most `EXCERPT_WORDS` (150) words, ending at a sentence. `pack.paragraph_scope` puts them in
-  `paragraphs.Scope.voice` for a letter only, while `cvdocs.voice` is on, and `paragraphs.voice_block` adds
-  them, under "How this person writes ... never copy a fact or a phrase from it", to every paragraph request
-  and to the frame request (`frame.Facts.request`). No check reads them: `paragraph_verify` and the checks
-  with no AI see the story's facts alone, so a number or name found only in an excerpt is flagged when
-  drafted.
+  sign-off) of at most `EXCERPT_WORDS` (150) words, ending at a sentence. `drafting.given` gives them to a
+  letter's request only, while `cvdocs.voice` is on, under "How this person writes ... never copy a fact or
+  a phrase from it". No check reads them as facts, so a number or name found only in an excerpt is flagged.
 - `document` (`sections/documents.py`, in place of the generic reader for the Documents section) reads by
   the kind the person chose, all by rules: a transcript gives one education fact (qualification, subject,
   institution, grade, period or award date, and `modules_in`: table rows by their mark column, or lines with
@@ -1875,9 +1714,8 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   Hal found whose strongest source is `studied`, checked or not, for the checks below.
 - Skills in drafts (`writing/strengths.py`): `problems(sentence, studied, own)` fails a sentence that names a
   studied-only skill with a word of use ("I used", "we applied", "using", "carried out") and no word of
-  knowledge ("studied", "covered", "module"), unless its own story's facts name the skill.
-  `paragraphs.sentence_problems` runs it with `Scope.studied`, so a paragraph that fails is drafted again
-  once; `pack.unsupported_claims` runs `studied_claims` on whole drafts, which `fix_claims` rewrites once.
+  knowledge ("studied", "covered", "module"), unless the facts it is given (`own`) name the skill.
+  `checks.code_claims` runs `studied_claims` on whole drafts, so a draft that holds one is redrafted once.
   The skill names are the record's own, so a research method or a lab technique is held to this as a tool
   is.
 - CV studio: `cvstudio.suggest._studied` gives one "Wording" suggestion per skills line (target
@@ -1955,27 +1793,24 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   `merge.RANKS`, above every document. `pipeline.attach` (`POST .../sources/{id}/files`) adds files to its
   `record_source_files`; their text goes into the note and gives no facts.
 - Showcase: `profile.writing.cards()` carries each card's `star`. Once any project card is starred, the
-  writer tells only starred projects (`writing.plan.story_cards` for cards, `plan.offered` for the plan's
-  stories), in `rank.candidates`, `rank.order`, `plan.fitting` and `plan.letter_stories`; jobs are always
+  writer is given only starred projects (`writing.plan.story_cards`, through `plan.chosen`); jobs are always
   offered, and unstarred projects still give the fit map and skills their evidence. With nothing starred,
-  every project is offered as before. A starred job leads: `plan.starred_first` puts its story first in
-  `rank.order` and `plan.letter_stories`, which tells it even when the plan picked nothing of it.
+  every project is offered as before. A starred job leads `plan.chosen`.
 - Jobs from older CVs: `profile.writing.older_cv_job` is true for a job card whose own sources are all
   older CVs (`cvs.older`, or `profile.cvs.older_sources`), with no current CV and no document behind it.
   `cards()` marks it `older_cv_job` and gives it only its plain facts (`plain_job_facts`: title, employer,
-  dates, duties) as its summary and quotes. `plan.Story.older_cv` tells its story from those facts alone,
-  never the plan's quotes, and its block says to add nothing. Unless it is starred, `plan.older_last` puts it
-  after every other project and job in `rank.order`, `plan.letter_stories` and `plan.fitting`, so it is told
-  only when a draft has room after the work with current evidence. A starred one leads with the other
-  starred work (`plan.starred_first`), still from its plain facts alone.
+  dates, duties) as its summary and quotes. `plan.Story.older_cv` marks its story, told from those facts
+  alone, and its block says to add nothing. Unless it is starred, `plan.chosen` puts it after every other
+  project and job, so it is given only when there is room after the work with current evidence. A starred
+  one is given with the other starred work, still from its plain facts alone.
 - Stories from the sections: `profile.store.evidence_of` gives each piece of evidence its source's `section`
   and `doc_kind`. A project card with evidence from `profile.writing.OWN_SECTIONS` (project, coursework) is
   `sectioned`: its `cards()` quotes are those sources' own quotes (`_section_quotes`; a showcase piece adds
   the sentences of its summary after "Dissertation for ..."), and no record note is scanned. `cv_filled`
   gives the values of its fields that only CVs give, and `plan.Story.block` lists them under "From your CV,
   not the project's own sources", out of its Tools line. `cv_only` (`profile.cvs.cv_only`) marks a card no
-  project source backs: `plan.story_cards` and `plan.offered` leave it out while any card is starred,
-  `plan.fitting` puts it last, and its story says "your CV only". `dissertation` (evidence of type
+  project source backs: `plan.story_cards` leaves it out while any card is starred, `plan.chosen` puts it
+  last, and its story says "your CV only". `dissertation` (evidence of type
   `dissertation`) makes the story say it is the dissertation. A card with no section evidence keeps the
   older path, with its notes' sentences.
 - Authority: `profile.store.refold` ranks a fact from a Projects source at least at that section's

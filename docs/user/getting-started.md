@@ -100,51 +100,42 @@ the top. When Hal cannot tell the field from the advert or your goal, it uses ge
 another field's. It uses only your facts and never invents a number: where a result has none, it says who
 the work served instead. A first draft that breaks one of Hal's writing rules (a stock phrase, an invented
 number, "not just X but Y") is rewritten once, and anything still wrong is listed under **Check before
-sending**. Before it writes a letter, Hal picks the facts it will rest on: up to eight short quotes
-from your CV, the facts you checked and your own documents, each with where the work was done and your part
-in it when your files say so. The letter's notes list them under **Evidence**.
+sending**.
 
-Hal then tells each piece of work in a paragraph of its own. Each paragraph in the middle of a letter is
-about one of your projects or jobs, told once, and is written on its own from that work's facts alone:
-what it is, where you did it, your part, its tools and what came of it. It ends on why that work
-matters for the job only when one of its facts clearly fits. The message to the person hiring
-tells one piece of work in a sentence or two and asks one question about the employer's own work, something
-the advert or the company brief names, rather than about your project's subject. Each form answer
-tells one piece of work, or two when the question asks for more than one example, and the message and the
-answers take work the letter, the message and earlier answers have not told first where your record has
-enough, also in the answer to "Why do you want to work here?". An answer to "Why do
-you want to work here?" opens with what draws you to the employer, in your own words rather than the
-advert's, then ties it in a sentence to one piece of your work that fits the job well. Each paragraph is
-checked against its own work's facts: a number or tool they do not give (a tool you used on a project must
-be in that project's own facts, as a list of your skills says what you know, not where you used it), a tool
-or name that belongs to another of your projects, a tool given a job your facts give another tool, the project placed somewhere else (your degree instead of
-your own time), a team's work written as yours alone, or a sentence that ties the work to the job with
-stock words such as "aligns with" or "meets the requirement for". A paragraph with such a problem is
-written once more. If it is still wrong, Hal takes out the whole sentence at fault when the rest still
-reads, or leaves the paragraph out and says so under **Check before sending**, and then tells your next
-best piece of work instead. When only Hal's AI check doubts a paragraph, in a letter, a message or an answer, Hal keeps
-it, without the doubted sentence when the rest still reads, or whole and listed under **Check before sending**
-for you to check. The letter opens with who you are, the
-role and one concrete thing about the employer that draws you, such as what it makes or its mission. It
-names none of your projects there, as the paragraphs tell them, and closes by asking for the next step. When Hal finds none of your
-work to tell, it writes the letter, the message and the answers whole, and checks what each says about you
-against your CV, the facts you checked and your own documents: a claim it cannot find there is taken out or
-toned down once, and only what is left is listed. What a draft says about the employer, taken from the
-advert, is never listed.
+Hal writes each document in one go. It puts together one request from what it already has: what the
+advert asks for, a short note on what the employer does, how your evidence meets each need, and up to four
+pieces of your work that fit the job best, each with where you did it, your part, its own tools and what
+your files say of it, as well as your CV and your own documents. Hal picks that work itself, from what the
+fit table cites and what the advert's words share with it, and with no extra step for the AI. If you have
+starred projects on Your record, only those are offered, with your jobs. The letter is written from that
+request in one call, and so are the message to the person hiring and the answers to the advert's
+questions.
+
+The letter is asked to make one argument for why you can do this job: it answers what this employer needs,
+draws two or three pieces of your evidence together, opens each paragraph differently and does not give one
+project per paragraph with a closing line saying it is relevant. It opens with the role and one concrete
+thing about the employer that draws you, tied to something of yours, and closes by asking for the next
+step. The letter's notes list the work it names under **Evidence**.
+
+Then Hal checks everything once. One check reads the letter, the message and the answers together against
+the facts the writer was given, and Hal's own checks look for a number or tool your facts do not give (a
+tool you used on a project must be in that project's own facts, as a list of your skills says what you
+know, not where you used it), a tool or name that belongs to another of your projects, a project placed
+somewhere else (your degree instead of your own time), a team's work written as yours alone, a degree you
+do not hold, a phrase of the advert told as something you did, or a sentence that ties the work to the job
+with stock words such as "aligns with". A letter well under the length you prefer, or with paragraphs that
+open the same way, is sent back too. Each document with a problem is written once more, with the problems
+spelt out, and only what is still wrong is listed under **Check before sending**. What a draft says about
+the employer, taken from the advert, is never listed.
 A draft may say what one of your modules covered only when your CV, the facts you checked or your own
 documents say it too, as a module's name alone does not say what it taught.
 Each module and its mark is a fact of its own, even when your CV lists them all on one line, so a draft
 cannot tie one module's mark to a project or a piece of work that only another module's line names.
 The reason you give for wanting the job, in the letter's first paragraph and in answers to "Why do you want
-to work here?", should be your own. Before writing a letter, Hal pairs one specific thing about the employer,
-in the company's or the advert's own words, the company brief first (a product, a project, a place; never
-"innovation" or "a great culture", never a duty of the job such as "write SQL queries", and never an
-employee's quote), with one of the facts it picked from work that fits the job, and
-the letter's reason comes from that pairing. When nothing of yours connects to it, the letter names the role
-and gives no reason rather than invent one. A sentence
-that only repeats the advert or what the company says about itself is rewritten once to link something of
-yours (a project, a module, an interest) to something about the employer, and listed if it still repeats
-the advert. On a form, an answer with a claim or a number Hal cannot find in your facts is marked **Check this**. When you
+to work here?", should be your own: one specific thing about the employer tied to something of yours, never
+the advert's or the company's words about itself. A sentence that only repeats the advert or what the
+company says about itself is rewritten once to link something of yours (a project, a module, an interest)
+to something about the employer, and listed if it still repeats the advert. On a form, an answer with a claim or a number Hal cannot find in your facts is marked **Check this**. When you
 ask Hal for changes, the new letter, message and answers get the same checks as the first drafts.
 
 The message to the person hiring goes to the person the advert names as your contact for the job. An
@@ -176,12 +167,12 @@ flat. A company with the employer's exact name that Hal cannot tie to the advert
 "Possible match: ... (check it is the same company)", and any other is left out.
 
 Every pack has a **Check before sending** section, which says "Nothing to check." when nothing needs
-you. It lists only what you should act on: a paragraph Hal left out and why, a paragraph Hal kept although
-its check doubted it, a question your facts could not answer, a letter well under the length you prefer, and a paragraph that starts with "This", "It" or
+you. It lists only what you should act on: a claim Hal's check could not find in your facts, a question your
+facts could not answer, a letter well under the length you prefer, and a paragraph that starts with "This", "It" or
 "That" pointing at something the paragraph before does not say. Something Hal already fixed is never
 listed.
 
-Drafts speak as you, in the first person. A paragraph with a sentence that opens with the advert's
+Drafts speak as you, in the first person. A draft with a sentence that opens with the advert's
 wording ("For the requirement to ...", "The role asks for ...", "Regarding teamwork, ..."), points at your
 CV ("My CV lists ...") or calls you "the applicant" is written once more, and your right to work is said in
 plain words rather than as the choice in Settings. Quotes and apostrophes are kept plain, and each project

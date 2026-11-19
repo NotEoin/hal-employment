@@ -5,12 +5,13 @@ import support  # noqa: F401 - sets the temporary home before jobhunt loads
 
 from jobhunt.ai import effort, prompts
 
-# What one application's documents ask: (calls, prompt tokens, answer tokens) for each prompt, from `ai_usage` on
-# a copy of real data (sizes in characters / 4) and the gateway's request log, 2026-11-19.
-DOCUMENT_CALLS = {"analyse": (1, 930, 180), "brief": (1, 1130, 140), "fit": (1, 3260, 320),
-                  "evidence_plan": (1, 3420, 610), "story_rank": (1, 2000, 150), "motive_pair": (1, 1580, 60),
-                  "letter_frame": (1, 730, 100), "story_paragraph": (7, 1430, 105), "paragraph_verify": (4, 500, 25)}
-FIVE_MINUTES_S = 300
+# What one application's documents ask with no redraft: prompt id -> (prompt tokens, answer tokens without the
+# thinking), from the gateway's replies for three real adverts on a copy of real data (2026-11-19).
+DOCUMENT_CALLS = {"analyse": (1950, 300), "brief": (2900, 120), "fit": (4000, 400), "letter": (5000, 400),
+                  "message": (4300, 120), "answers": (4600, 300), "verify": (6100, 130)}
+REDRAFTED = ("letter", "message", "answers")    # each may be written once more, from about the same request
+FIRST_DRAFTS_S = 180           # about three minutes when nothing needs a redraft (owner's aim: about two)
+WORST_S = 300                  # five minutes, the owner's most for one application (2026-11-19)
 READ_TOKENS_S, WRITE_TOKENS_S = 500, 55     # the owner's card (2026-11-19)
 
 
@@ -31,18 +32,25 @@ class Levels(unittest.TestCase):
             with self.subTest(pid):
                 self.assertEqual(effort.budget(pid, effort.CAP_DEFAULT), (effort.HIGH, 8192))
 
-    def test_short_checks_think_little_and_planning_thinks_more(self):
+    def test_the_letter_and_the_fit_map_think_at_medium_and_the_rest_little(self):
+        """The letter is written in one call that chooses and weaves the evidence; the check stays at low
+        (2026-11-19)."""
         self.assertEqual(effort.of("brief").level, effort.NONE)
-        self.assertEqual(effort.of("paragraph_verify").level, effort.LOW)
-        self.assertEqual(effort.of("story_paragraph").level, effort.LOW)
-        for pid in ("fit", "evidence_plan", "story_rank"):
-            self.assertEqual(effort.of(pid).level, effort.MEDIUM)
+        for pid in ("verify", "message", "answers", "analyse"):
+            self.assertEqual(effort.of(pid).level, effort.LOW, pid)
+        for pid in ("fit", "letter"):
+            self.assertEqual(effort.of(pid).level, effort.MEDIUM, pid)
 
-    def test_an_applications_documents_fit_five_minutes_even_when_every_call_thinks_its_whole_budget(self):
-        """Owner, 2026-11-19: about 5 minutes of model time for each application; it was about 9."""
-        seconds = sum(n * (read / READ_TOKENS_S + (effort.budget(pid, effort.CAP_DEFAULT)[1] + said) / WRITE_TOKENS_S)
-                      for pid, (n, read, said) in DOCUMENT_CALLS.items())
-        self.assertLessEqual(seconds, FIVE_MINUTES_S)
+    def test_an_applications_documents_fit_their_budget_even_when_every_call_thinks_its_whole_budget(self):
+        """Owner, 2026-11-19: about 5 minutes of model time for each application at most, ideally about 2; it was
+        about 9, then 5 with 24 to 27 calls."""
+        def seconds(pid: str) -> float:
+            read, said = DOCUMENT_CALLS[pid]
+            return read / READ_TOKENS_S + (effort.budget(pid, effort.CAP_DEFAULT)[1] + said) / WRITE_TOKENS_S
+
+        first = sum(seconds(pid) for pid in DOCUMENT_CALLS)
+        self.assertLessEqual(first, FIRST_DRAFTS_S)
+        self.assertLessEqual(first + sum(seconds(pid) for pid in REDRAFTED), WORST_S, "with a redraft of each")
 
     def test_the_cap_bounds_every_budget_and_zero_turns_thinking_off(self):
         self.assertEqual(effort.budget("fit", 1000), (effort.MEDIUM, 1000))

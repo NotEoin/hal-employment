@@ -276,5 +276,40 @@ class Echoes(unittest.TestCase):
         self.assertFalse(drafts.why_question("Why are you a good fit for this role?"))
 
 
+class Degrees(unittest.TestCase):
+    """A README's "developed as an MSc dissertation" was told as the person's MSc, though they hold a BSc
+    (2026-11-12); the check moved from each paragraph to the whole draft (2026-11-19)."""
+
+    def test_a_degree_your_education_does_not_hold_is_a_claim(self):
+        said = drafts.unheld_degrees("I built it for my MSc dissertation. My BSc taught me C.", ["BSc (Hons) Fen"])
+        self.assertEqual(said, ["I built it for my MSc dissertation. (names a MSc, which your education does not "
+                                "hold)"])
+        self.assertEqual(drafts.unheld_degrees("My master's research ran for a year.", ["BSc Fen"])[0][:5], "My ma")
+
+    def test_a_degree_you_hold_or_no_education_on_record_is_never_one(self):
+        self.assertEqual(drafts.unheld_degrees("My Master of Science taught me R.", ["Master of Science Fen"]), [])
+        self.assertEqual(drafts.unheld_degrees("My MSc taught me R.", []), [], "nothing on record, nothing checked")
+        self.assertEqual(drafts.unheld_degrees("I fine-tuned an LLM.", ["BSc Fen"]), [], "an LLM is no degree")
+
+
+TEAM_CARD = {"kind": "project (university team project)", "name": "Ferry planner", "tools": ["Python"],
+             "summary": "", "context": "team", "role": "built the statistics features; team of 7"}
+
+
+class Solo(unittest.TestCase):
+    """Local models wrote a team's work as the person's alone (2026-11-07); checked a paragraph at a time until
+    2026-11-19, now on the whole draft."""
+
+    def test_a_teams_work_said_to_be_yours_alone_is_a_claim_with_your_part(self):
+        self.assertEqual(drafts.solo_claims("I built Ferry planner in Python.", [TEAM_CARD]),
+                         ["I built Ferry planner in Python. (says you did Ferry planner alone; it was a team's work; "
+                          "your part: built the statistics features)"])
+
+    def test_the_team_or_your_part_named_and_your_own_work_pass(self):
+        for said in ("We built Ferry planner as a team of seven.", "I built the statistics features of Ferry planner.",
+                     "I built Tide gauge in Lua."):
+            self.assertEqual(drafts.solo_claims(said, [TEAM_CARD, *CARDS]), [], said)
+
+
 if __name__ == "__main__":
     unittest.main()

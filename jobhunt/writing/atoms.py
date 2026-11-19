@@ -30,7 +30,7 @@ HEAD_MAX = 60              # characters of a list's heading: "Second year module
 ENTRY_WORDS = 10           # words of one entry: a long module name and its mark is about 8
 LIST_MIN = 3               # entries a comma list needs under any heading (see the module notes)
 HEADED = re.compile(rf"^(?P<head>[^:,;\n]{{1,{HEAD_MAX}}}?):\s+(?P<rest>\S.*)$")
-# Headings whose lists are always lists: modules, and the labels of a skills list (`writing.plan.SKILLS_LABEL`).
+# Headings whose lists are always lists: modules, and the labels of a skills list ("Skills:", "Tools:").
 LIST_HEAD = re.compile(r"\b(modules?|skills?|languages?|tools?|technologies|frameworks?|libraries|software|"
                        r"achievements?|awards?|interests?|certificat\w*)\b", re.I)
 MARK = re.compile(r"\s+(?P<mark>\d{1,3}(?:\.\d+)?\s*%?|\(\d{1,3}(?:\.\d+)?\s*%?\))$")

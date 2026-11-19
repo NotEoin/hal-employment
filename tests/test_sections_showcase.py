@@ -19,7 +19,7 @@ from jobhunt.profile import store as profile_store
 from jobhunt.profile import writing
 from jobhunt.sections import pipeline
 from jobhunt.sections import store as sources
-from jobhunt.writing import plan, rank
+from jobhunt.writing import plan
 
 CV = {"source_rel": "Sources/CVs/Avery CV.md", "doc_type": "cv"}
 
@@ -33,12 +33,6 @@ def project(con, name: str, star: bool = False) -> int:
     return item_id
 
 
-def story(card: dict) -> plan.Story:
-    """A plan's story about one card."""
-    return plan.Story(key=card["name"], name=card["name"], where="", card=card, kind=plan.PROJECT,
-                      facts=(card["summary"],))
-
-
 class Showcase(unittest.TestCase):
     def test_once_a_project_is_starred_only_starred_projects_are_offered_as_stories(self):
         with home() as (con, _, _):
@@ -46,17 +40,14 @@ class Showcase(unittest.TestCase):
             project(con, "Harbour bot")
             cards = writing.cards(con)
         self.assertEqual({c["name"]: c["star"] for c in cards}, {"Tide gauge": True, "Harbour bot": False})
-        self.assertEqual([c["name"] for c in rank.candidates([], cards)], ["Tide gauge"])
-        told = rank.order([story(c) for c in cards], cards, [], "tides harbour", n=3)
-        self.assertEqual([s.name for s in told.letter], ["Tide gauge"])
-        self.assertNotIn("Harbour bot", [s.name for s in told.others])
+        self.assertEqual([s.name for s in plan.chosen(cards, "tides harbour")], ["Tide gauge"])
 
     def test_with_nothing_starred_every_project_is_offered_as_before(self):
         with home() as (con, _, _):
             project(con, "Tide gauge")
             project(con, "Harbour bot")
             cards = writing.cards(con)
-        self.assertEqual(sorted(c["name"] for c in rank.candidates([], cards)), ["Harbour bot", "Tide gauge"])
+        self.assertEqual(sorted(s.name for s in plan.chosen(cards, "")), ["Harbour bot", "Tide gauge"])
         self.assertEqual(plan.story_cards(cards), cards)
 
     def test_a_job_is_always_offered_whatever_is_starred(self):
@@ -141,12 +132,8 @@ class Stories(unittest.TestCase):
             profile_store.confirm(con, job)
             profile_store.set_star(con, job, True)
             cards = writing.cards(con)
-        stories = [story(c) for c in cards]
-        ranked = [rank.Ranked("Tide gauge"), rank.Ranked("Lab helper at University of Nowhere Fen")]
-        self.assertEqual(rank.order(stories, cards, ranked, "tides").letter[0].name,
-                         "Lab helper at University of Nowhere Fen")
-        self.assertEqual(plan.letter_stories(stories[:1], cards, "tides")[0].name,
-                         "Lab helper at University of Nowhere Fen", "a starred job is told though the plan left it")
+        self.assertEqual(plan.chosen(cards, "tides", {"Tide gauge": 2})[0].name,
+                         "Lab helper at University of Nowhere Fen", "a starred job leads")
 
     def test_a_showcase_dissertation_is_told_under_its_title_as_the_dissertation(self):
         with home() as (con, _, _):

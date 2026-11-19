@@ -67,7 +67,7 @@ Design decisions, each with its reason:
   view, its tools (`elsewhere_only`, `for_writing`), quotes, files, aliases and passage context. An earlier
   project's card carried quotes from a later project's repository, and letters gave it the later one's
   database (2026-11-08). The record and the review page keep the evidence as stored.
-- A card carries its own evidence quotes (`quotes`) for the paragraph that tells it (`writing.plan.Story`):
+- A card carries its own evidence quotes (`quotes`) for the request that tells it (`writing.plan.Story`):
   only the person's own sources, never an older CV's, a plan's, or one naming a tool the card's writing
   fields leave out, so a quote never brings back what `for_writing` took out (2026-11-08). The sentences of the
   card's own repository or project notes join them, and only sentences about the work are kept, those with a
@@ -120,7 +120,7 @@ HEADING = "Profile (facts about the applicant from their files, each checked by 
 CARD_KINDS = ("project", "job")    # the cards whose tools and work the fit map sees in full (`cards`)
 CARDS_HEADING = "Profile cards (every project and job the applicant checked, with its tools):"
 CARD_SUMMARY = 200        # characters of a card's summary: enough to say what it was, short enough for all
-CARD_QUOTES = 12          # a card's own quotes a paragraph about it is given (`writing.plan.STORY_FACTS`)
+CARD_QUOTES = 12          # a card's own quotes a request about it is given (`writing.plan.STORY_FACTS`)
 # A passage's "[file > heading]" line and its "(Kind: ...)" line, as `record.context` writes them.
 PASSAGE_HEAD = re.compile(r"^(\[(.+?) > [^\n]*\]\n)(\(Kind: [^\n]*\)\n)?", re.M)
 
@@ -862,7 +862,7 @@ def checked_any(con: sqlite3.Connection | None = None) -> bool:
 
 def degrees(con: sqlite3.Connection | None = None) -> list[str]:
     """The qualification and subject of each education card not hidden ("BA (Hons) Imaginary Studies"), so a
-    draft naming a degree the person does not hold is drafted again (`writing.paragraphs`); any state, as a
+    draft naming a degree the person does not hold is redrafted (`drafts.unheld_degrees`); any state, as a
     degree Hal found and nobody checked yet is still more likely held than not (Hal's own database unless
     `con`)."""
     if con is None:

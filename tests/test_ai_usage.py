@@ -38,8 +38,8 @@ class Usage(unittest.TestCase):
                             VALUES (?, 'docs.prepare', 'done', ?, ?, '2026-11-19T12:00:00Z', '2026-11-19T12:00:00Z',
                                     '2026-11-19T12:05:00Z', 1)""", (ACTION, JOB, JOB))
         _call(self.con, "analyse", 20_000, (1000, 600, 400))
-        _call(self.con, "story_paragraph", 15_000, (1400, 500, 380))
-        _call(self.con, "story_paragraph", 14_000, (1500, 450, None))
+        _call(self.con, "message", 15_000, (1400, 500, 380))
+        _call(self.con, "message", 14_000, (1500, 450, None))
         _call(self.con, "brief", 3_000, (None, None, None), ok=0, effort="none")
         self.con.commit()
 
@@ -48,7 +48,7 @@ class Usage(unittest.TestCase):
         self.assertEqual([(c.purpose, c.calls, c.failed, c.seconds, c.tokens_in, c.tokens_out, c.thinking, c.effort)
                           for c in found],
                          [("analyse", 1, 0, 20.0, 1000, 600, 400, "low"),
-                          ("story_paragraph", 2, 0, 29.0, 2900, 950, 380, "low"),
+                          ("message", 2, 0, 29.0, 2900, 950, 380, "low"),
                           ("brief", 1, 1, 3.0, None, None, None, "none")])
         self.assertAlmostEqual(found[0].model_seconds, 1000 / usage.READ_TOKENS_S + 600 / usage.WRITE_TOKENS_S)
         self.assertEqual(found[2].model_seconds, 0, "no tokens, no estimate")
@@ -63,7 +63,7 @@ class Usage(unittest.TestCase):
             docs_cli.cmd_docs_time(argparse.Namespace(id=None, action=ACTION))
         lines = out.getvalue().splitlines()
         self.assertTrue(lines[0].startswith(f"action {ACTION} (done)"))
-        self.assertEqual(lines[3].split(), ["story_paragraph", "low", "2", "29", "2,900", "950", "380"])
+        self.assertEqual(lines[3].split(), ["message", "low", "2", "29", "2,900", "950", "380"])
         self.assertTrue(lines[-1].startswith("4 calls (1 failed), 0.9 minutes of calls, about 0.6 minutes"))
 
 

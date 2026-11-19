@@ -1,6 +1,28 @@
-"""The checks every pack draft goes through: the writing checker, the claim check and its one rewrite, the
-echo rewrite, the "Check before sending" lines and the refusals taken out."""
+"""The checks every pack draft goes through: one check of every draft at once and at most one redraft each
+(`settle`), the "Check before sending" lines and the refusals taken out.
+
+Design decisions, each with its reason:
+
+- One check, not one per paragraph (owner, 2026-11-19): `settle` makes one `verify` call on every draft of a
+  job at once (the letter, the message and the answers in a pack), against the facts their writer was given,
+  then redrafts each draft at most once with everything wrong with it stated: the claims the check found, the
+  claims the checks with no AI found (`code_claims`, `lifted_claims`), the writing rules' high-severity breaks
+  (`writing.check`), wording that says how the draft was made, such as a stock tie to the job ("aligns with",
+  `writing.plain.problems`), sentences restating the advert (`drafts.echoes`), and what its `Draft.extra` adds (an
+  answer repeating an earlier one, a letter short of its length or opening its paragraphs alike). No guard
+  against invented facts is dropped: the checks with no AI run again on the redraft, and a claim the check
+  found that the redraft still makes (`still_says`) is listed under "Check before sending". The redraft is
+  not checked by the AI again: one redraft, never a loop.
+- The advert and the company brief go to the check as the employer's own words, never flagged for being
+  restated: most of the "unsupported" claims in real packs were the employer's own facts (2026-11-06). A
+  claim one line of the facts the writer had states (`drafts.stated_in`) is supported, whatever the AI said.
+"""
+from __future__ import annotations
+
 import re
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Any
 
 from jobhunt import ai, record
 from jobhunt.pack.fitmap import known_tools
@@ -11,8 +33,14 @@ from jobhunt.writing import drafts, plain, stage, strengths, taught
 
 CUT_FLAG = "the {what} stopped mid-sentence twice; Hal kept it to its last full sentence, so check its ending"
 CUT_WHAT = {"letter": "cover letter", "message": "message to the person hiring"}
-ECHO_FLAG = "restates the advert rather than your own reason"   # a sentence still echoing after its rewrite
+ECHO_FLAG = "restates the advert rather than your own reason"   # a sentence still echoing after its redraft
 DANGLING_FLAG = "opens a paragraph by pointing back at something the paragraph before does not say"
+KEPT_SHARE = 0.6          # share of a claim's own words a sentence of the redraft holds for it to still make it
+LABELS = {"letter": "Letter", "message": "Message", "answers": "Answers"}
+REDRAFT_NOTE = ("Write the whole draft again from the facts above. Your first draft has the problems below: fix "
+                "every one of them, and keep what was right.")
+RULES_NOTE = "These break Hal's writing rules:\n"
+PLAIN_NOTE = "These sentences say how the draft was made rather than what the applicant did; rewrite each:\n"
 
 
 def unsupported_numbers(draft: str, *sources: str) -> list[str]:
@@ -29,109 +57,182 @@ def _hits(brief: Brief, text: str, kind: str, sources: tuple[str, ...]) -> list:
                                allowed=who.get("own_words") or ())
 
 
-def revise_once(draft, hits: list, rewrite):
-    """The draft revised once by `rewrite(note)` when the checker found a high-severity problem.
-
-    One revision, never a loop: what is still wrong after it is listed for the person to check, so a draft
-    is never held up by the checker. Returns (text, whether it was revised).
-    """
-    serious = writing_check.high(hits)
-    if not serious:
-        return draft, False
-    again = rewrite(writing_check.revision_note(serious))
-    return (again or draft), bool(again)
-
-
-def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employer: tuple[str, ...]) -> list[str]:
-    """The claims about the person in the drafts (`written`) that their facts do not support, as the verify
-    prompt quotes them.
-
-    The facts are the CV, every checked project and job card with its own tools, the checked profile and the
-    passages of their own documents (`kept`); the fit map is not one, since the AI wrote it from the same
-    facts. The advert and the company brief (`employer`) are given as the employer's own words, never to be
-    flagged for being restated: most of the "unsupported" claims in real packs were the employer's own facts
-    (2026-11-06). A claim one CV line states (`drafts.stated_in`) is supported, whatever the AI said. Three
-    kinds are found with no AI as well: a sentence that speaks of finishing a course that
-    has ended (`stage.ended_course`), a tool given to a project whose own facts never name it
-    (`drafts.misplaced_tools`), a project placed in a degree or in the person's own time against its
-    card's context (`drafts.wrong_context`), a skill only studied said to be used (`writing.strengths`), and what
-    a named module covered when no source naming the module
-    says it (`taught.unsupported`) or which tool a named module used when its own entry never names it
-    (`taught.tooled`). Each goes into the one rewrite `fix_claims` asks for. A draft told one piece
-    of work a paragraph is checked paragraph by paragraph instead (`writing.paragraphs`); this whole-draft check
-    is for drafts with no story to tell, and for form filling.
-    """
+def code_claims(written: str, *, facts: str, kept: str) -> list[str]:
+    """The claims about the person in `written` found with no AI: a sentence that speaks of finishing a course
+    that has ended (`stage.ended_course`), a tool given to a project whose own facts never name it
+    (`drafts.misplaced_tools`), a project placed in a degree or in the person's own time against its card's
+    context (`drafts.wrong_context`), one project's facts given to another of a like name (`drafts.crossed`), a
+    skill only studied said to be used (`writing.strengths`), and what a named module covered or which tool it
+    used when no source naming the module says so (`taught.unsupported`, `taught.tooled`), a degree the person's
+    education does not hold (`drafts.unheld_degrees`) and a team's work said to be the person's alone
+    (`drafts.solo_claims`)."""
     now = stage.current()
     cards = profile_writing.cards()
-    shown = profile_writing.cards_block(cards)
-    words = "\n\n".join(e.strip() for e in employer if e and e.strip())
-    request = (f"The employer's own words (the advert and the company brief): never flag a sentence for restating "
-               f"them.\n<<<EMPLOYER\n{words}\nEMPLOYER>>>\n\nFacts about the applicant:\n{stage.today_lines(now)}\n"
-               f"CV:\n{facts}" + (f"\n\n{shown}" if shown else "")
-               + _record_part(f"Employment record ({record.OWN_DOCUMENTS})", kept) + f"\n\nDrafts:\n{written}")
-    found = ai.chat_json(prompt("verify", who), request, role="checker", timeout=ai.LONG_TIMEOUT_S,
-                        purpose="verify").get("unsupported", [])
-    claims = [str(c).strip() for c in found if str(c).strip()] if isinstance(found, list) else []
-    claims = [c for c in claims if not drafts.stated_in(c, facts)]
     known = known_tools(cards)
-    return claims + [f"{s} ({stage.ended_said(now)})" for s in stage.ended_course(written, now)] \
+    return [f"{s} ({stage.ended_said(now)})" for s in stage.ended_course(written, now)] \
         + drafts.misplaced_tools(written, cards, known) + drafts.wrong_context(written, cards) \
-        + drafts.crossed(written, cards) + strengths.studied_claims(written, profile_writing.studied_skills()) \
+        + drafts.crossed(written, cards) + drafts.unheld_degrees(written, profile_writing.degrees()) \
+        + drafts.solo_claims(written, cards) \
+        + strengths.studied_claims(written, profile_writing.studied_skills()) \
         + taught.unsupported(written, profile_writing.module_names(), (facts, kept)) \
         + taught.tooled(written, profile_writing.module_names(), (facts, kept), known)
 
 
+LIFTED_SAID = 'takes "{phrase}" from the advert as a fact of your work'
+
+
+def lifted_claims(written: str, employer: tuple[str, ...], names: tuple[str, ...], own: str) -> list[str]:
+    """The sentences about the person's work that take a phrase of the advert or the brief as their fact when
+    the person's facts (`own`) do not hold its words (`drafts.lifted`): "low-latency systems" and "AI agents for
+    customer support" became claims in sentences mostly the person's own (2026-11-08)."""
+    advert, brief = (*employer, "", "")[:2]
+    out = []
+    for sentence in writing_check.sentences(written):
+        if drafts.about_employer(sentence, names):
+            continue
+        phrase = drafts.lifted(sentence, advert, brief, names, own)
+        if phrase:
+            out.append(f"{sentence} ({LIFTED_SAID.format(phrase=phrase)})")
+    return out
+
+
+def ai_claims(who: dict, written: str, *, given: str, employer: tuple[str, ...], cv: str) -> list[str]:
+    """The claims about the person in `written` that the facts in `given` do not support, as the `verify` prompt
+    quotes them, less those one line of `cv` states (`drafts.stated_in`): the CV, or every fact the writer had."""
+    words = "\n\n".join(e.strip() for e in employer if e and e.strip())
+    request = (f"The employer's own words (the advert and the company brief): never flag a sentence for restating "
+               f"them.\n<<<EMPLOYER\n{words}\nEMPLOYER>>>\n\nFacts about the applicant:\n{given}\n\nDrafts:\n{written}")
+    found = ai.chat_json(prompt("verify", who), request, role="checker", timeout=ai.LONG_TIMEOUT_S,
+                         purpose="verify").get("unsupported", [])
+    claims = [str(c).strip() for c in found if str(c).strip()] if isinstance(found, list) else []
+    return [c for c in claims if not drafts.stated_in(c, cv)]
+
+
+def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employer: tuple[str, ...]) -> list[str]:
+    """The claims about the person in `written` their facts do not support: the AI's (`ai_claims`, against the
+    CV, every checked card with its own tools and the passages of their own documents) and those found with no
+    AI (`code_claims`). For form filling (`autofill.check_written`); a pack's drafts are checked by `settle`."""
+    shown = profile_writing.cards_block(profile_writing.cards())
+    given = (f"{stage.today_lines()}\nCV:\n{facts}" + (f"\n\n{shown}" if shown else "")
+             + _record_part(f"Employment record ({record.OWN_DOCUMENTS})", kept))
+    return ai_claims(who, written, given=given, employer=employer, cv=facts) + code_claims(written, facts=facts,
+                                                                                         kept=kept)
+
+
 def claims_note(claims: list[str]) -> str:
-    """The request to rewrite a draft without the claims its facts do not support."""
+    """The part of a redraft request about claims the facts do not support."""
     listed = "\n".join(f"- {c}" for c in claims)
-    return (f"These claims about the applicant are not in their facts:\n{listed}\nRewrite the draft: take each "
-            "one out, or soften it to what the facts do say. Keep the rest as it is.")
+    return (f"These claims about the applicant are not in their facts:\n{listed}\nNone of them may stay in the new "
+            "draft: take each sentence out, or say instead only what the facts do say.")
 
 
 def echo_note(sentences: list[str]) -> str:
-    """The request to rewrite the sentences that restate the advert or brief as the applicant's own reason."""
+    """The part of a redraft request about sentences restating the advert or brief as the applicant's reason."""
     listed = "\n".join(f"- {s}" for s in sentences)
     return (f"These sentences restate the advert or the company brief instead of giving the applicant's own "
             f"reason:\n{listed}\nRewrite each one to tie one specific thing about the applicant (a named project, "
-            "module or interest from their facts) to one specific thing about this employer. Keep the rest as it "
-            "is.")
+            "module or interest from their facts) to one specific thing about this employer.")
 
 
-def fix_echoes(draft, echoed_in, rewrite):
-    """The draft rewritten once by `rewrite(note)` when `echoed_in(draft)` finds sentences that restate the
-    advert or brief (`drafts.echoes`); returns (draft, whether it was rewritten). One rewrite, never a loop:
-    what still echoes is listed by the caller."""
-    found = echoed_in(draft)
-    if not found:
-        return draft, False
-    again = rewrite(echo_note(found))
-    return (again or draft), bool(again)
+def still_says(claim: str, text: str, given: str = "") -> bool:
+    """True when `text` still makes `claim`: holds its words, or one sentence holds `KEPT_SHARE` of its own words
+    and, with the writer's facts (`given`), every one of its words those facts lack. A redraft that kept "Hatch was
+    built in TypeScript" and dropped "with Electron" was listed as still making the claim (2026-11-19)."""
+    if claim.lower() in (text or "").lower():
+        return True
+    if not drafts.stated_in(claim, text, share=KEPT_SHARE):
+        return False
+    held = set(re.findall(r"[a-z0-9]+", (given or "").lower()))
+    novel = {w for w in re.findall(r"[a-z0-9]+", claim.lower()) if w not in held and w not in drafts.LITTLE_WORDS}
+    said = set(re.findall(r"[a-z0-9]+", (text or "").lower()))
+    return not given or novel <= said
 
 
-def fix_claims(brief: Brief, draft, rewrite, *, employer: tuple[str, ...], as_text=str):
-    """The draft rewritten once by `rewrite(note)` when it makes claims about the person their facts do not
-    support, then checked again; returns (draft, the claims still unsupported, whether it was rewritten).
+@dataclass
+class Draft:
+    """One document of a job as written, and as `settle` leaves it.
 
-    One rewrite, never a loop, as with `revise_once`. `as_text` turns a draft (the answers are a list) into
-    the text that is checked.
-    """
-    def unsupported(text: str) -> list[str]:
-        return unsupported_claims(brief.who, text, facts=brief.facts, kept=brief.kept, employer=employer)
+    `value` is the text, or the answers' list; `as_text` turns it into the text that is checked. `rewrite(note)`
+    asks the writer once more with its draft and `note`, returning the new value or a falsy one. `echoed(value)`
+    gives the sentences restating the advert and `extra(value)` any other problems, as lines of the note."""
 
-    claims = unsupported(as_text(draft))
-    if not claims:
-        return draft, [], False
-    again = rewrite(claims_note(claims))
-    if not again:
-        return draft, claims, False
-    return again, unsupported(as_text(again)), True
+    kind: str                                  # "letter", "message" or "answers"
+    value: Any
+    rewrite: Callable[[str], Any]
+    rule_kind: str = "letter"                  # the writing rules it is read by ("letter" or "answer")
+    as_text: Callable[[Any], str] = str
+    echoed: Callable[[Any], list[str]] = lambda value: []
+    extra: Callable[[Any], list[str]] = lambda value: []
+    claims: list[str] = field(default_factory=list)     # still unsupported once settled
+    revised: bool = False                      # redrafted once
+    softened: bool = False                     # redrafted with claims its facts do not support
+
+    def text(self) -> str:
+        """The draft as the checks read it."""
+        return self.as_text(self.value) or ""
+
+
+def _owners(claim: str, written: list[Draft]) -> list[Draft]:
+    """The drafts a claim of the one check is about: every draft that makes it (`still_says`), as the check
+    quotes a claim once however many drafts make it; else the one sharing the most of its words."""
+    making = [d for d in written if still_says(claim, d.text())]
+    if making:
+        return making
+    own = set(re.findall(r"[a-z0-9]+", claim.lower()))
+    return [max(written, key=lambda d: len(own & set(re.findall(r"[a-z0-9]+", d.text().lower()))))]
+
+
+def _note(brief: Brief, d: Draft, claims: list[str], sources: tuple[str, ...]) -> str:
+    """Everything wrong with a draft before its one redraft, or "" when nothing is."""
+    text = d.text()
+    serious = writing_check.high(_hits(brief, text, d.rule_kind, sources))
+    names, labels = applicant_names(brief.who), plain.settings_labels()
+    wording = [f'- "{s}": {p}' for s in writing_check.sentences(text) for p in plain.problems(s, names, labels)]
+    parts = [RULES_NOTE + "\n".join(f'- "{h.quote}": {h.message}' for h in serious) if serious else "",
+             PLAIN_NOTE + "\n".join(wording) if wording else "",
+             claims_note(claims) if claims else "",
+             echo_note(found) if (found := d.echoed(d.value)) else "",
+             *d.extra(d.value)]
+    parts = [p for p in parts if p]
+    if not parts:
+        return ""
+    return "\n\n".join([REDRAFT_NOTE, *parts])
+
+
+def settle(brief: Brief, written: list[Draft], *, employer: tuple[str, ...], given: str, own: str = "",
+           names: tuple[str, ...] = ()) -> None:
+    """Checks every draft of one job at once and redrafts each at most once (see the module notes); `given` is the
+    facts the writer had (`drafting.Given.checked`), `own` every word of them (`Given.words`) and `names` the job's
+    title and employer, for the advert's phrases taken as facts (`lifted_claims`). Each draft's `claims` are what
+    is still unsupported."""
+    present = [d for d in written if d.text().strip()]
+    if not present:
+        return
+    said = "\n\n".join(f"{LABELS.get(d.kind, d.kind)}:\n{d.text()}" for d in present)
+    found: dict[int, list[str]] = {id(d): [] for d in present}
+    for claim in ai_claims(brief.who, said, given=given, employer=employer, cv=given):
+        for d in _owners(claim, present):
+            found[id(d)].append(claim)
+
+    def without_ai(text: str) -> list[str]:
+        return code_claims(text, facts=brief.facts, kept=brief.kept) + lifted_claims(text, employer, names,
+                                                                                     f"{own}\n{brief.facts}")
+
+    for d in present:
+        claims = found[id(d)] + without_ai(d.text())
+        note = _note(brief, d, claims, (*employer, own))
+        again = d.rewrite(note) if note else None
+        if again:
+            d.value, d.revised, d.softened = again, True, bool(claims)
+        text = d.text()
+        d.claims = [c for c in found[id(d)] if not d.revised or still_says(c, text, given)] + without_ai(text)
 
 
 def check_drafts(brief: Brief, drafts: str, *, sources: tuple[str, ...], kind: str = "letter",
                  claims: list[str] | None = None) -> list[str]:
-    """What to check before sending: numbers no source holds, claims the facts do not support (`claims` when
-    `fix_claims` already found them, else `unsupported_claims`), the writing rules a draft breaks
-    (`writing.check`) and the person's never-use phrases."""
+    """What to check before sending: numbers no source holds, the claims still unsupported (`claims`, as
+    `settle` left them; with None the whole check is made here, `unsupported_claims`), the writing rules a draft
+    breaks (`writing.check`) and the person's never-use phrases."""
     who = brief.who
     hits = _hits(brief, drafts, kind, sources)
     flagged = [h.flag for h in hits if h.rule == "T1"]

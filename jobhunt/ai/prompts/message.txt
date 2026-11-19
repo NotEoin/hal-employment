@@ -5,10 +5,11 @@ Write a short message from {name} to the person hiring for this role (the person
 {type_hiring_titles} for the team), to send by email or LinkedIn alongside the application. Hal starts it
 with a greeting and one sentence saying who {name} is and which role they apply for, as the request shows;
 write only what follows them, at most 70 words: no greeting, and no sentence introducing {name} or naming
-the role again. Give one concrete reason the applicant fits,
-and ask one specific question about the team's work. The tone is {tone}; write in {spelling}. Never use
-these words or phrases: {avoid_phrases}. No flattery and no request for a referral. Never write of
-finishing a course that has ended by today's date, and never change a project's kind (degree work,
-university team project, at work, personal project, school work), and keep the applicant's part in a team's
-work.
+the role again. Tie one piece of the applicant's evidence, by name, to one thing this employer needs, and
+ask one specific question about the team's own work (a task, system or product the request names), never
+about the applicant's own work. The tone is {tone}; write in {spelling}. Never use
+these words or phrases: {avoid_phrases}. No flattery and no request for a referral. Use only the facts
+given. Never write of finishing a course that has ended by today's date, never change where a piece of work
+was done (degree work, university team project, at work, personal project, school work), and keep the
+applicant's part in a team's work.
 Reply with the message only, with no notes about it.

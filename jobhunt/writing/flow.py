@@ -1,18 +1,23 @@
-"""How a draft reads once sentences are taken out: sentences that refer back to nothing, and letters left short.
+"""How a draft reads: paragraphs that refer back to nothing or open alike, and letters left short.
 
 `back_reference(sentence)` reads a sentence that opens by pointing back ("This project", "That RAG
 experience", "It"); `refers_to_nothing(sentence, before)` says whether what it points at is missing from the
-text before it; `reads_without(paragraph, sentence)` says whether a paragraph still reads when one sentence is
-taken out; `dangling(text)` lists the paragraphs that open by referring back to nothing; `short(text, words)`
-says whether a letter is under `LENGTH_FLOOR` of the person's preferred length.
+text before it; `dangling(text)` lists the paragraphs that open by referring back to nothing;
+`alike_openings(text)` the paragraphs that open like an earlier one; `relevance_closers(text)` the middle
+paragraphs that end on a sentence only claiming relevance; `short(text, words)` says whether a letter is under
+`LENGTH_FLOOR` of the person's preferred length.
 
 Design decisions, each with its reason:
 
-- The sentence checks took failing sentences out and left "This project allowed me ...", "that RAG
-  experience" and "I am ready to apply this experience" pointing at nothing, and letters of 105 to 216 words
-  against a preferred 250 (15 graded packs, 2026-11-07). A sentence the next one points back at is kept
-  (`writing.paragraphs` cuts a sentence only when its paragraph reads without it), and a short letter is
-  listed.
+- Letters left "This project allowed me ...", "that RAG experience" and "I am ready to apply this
+  experience" pointing at nothing, and came to 105 to 216 words against a preferred 250 (15 graded packs,
+  2026-11-07): each is listed, and a short letter is redrafted once (`pack.checks.settle`).
+- Letters all read alike: three paragraphs each opening "I built <project>, a personal project that ..."
+  (owner, 2026-11-19). A paragraph whose first `OPENING_WORDS` words are an earlier paragraph's, or a second
+  paragraph opening with "I", asks for the letter's one redraft; it is never listed, as it is a matter of
+  style. So does a middle paragraph ending on a sentence that only claims relevance (`RELEVANCE`: "These
+  experiences prepared me ...", "..., which is relevant to ..."), which every paragraph of those letters did
+  and the first one-call letters still did (2026-11-19).
 - A back reference is "This", "That", "These", "Those", "Such" or "It" at the start of a sentence. With a
   noun after it ("This project") it points at that noun, so it refers to nothing when none of the noun's
   words (by their first `STEM` letters) is in the text before it; a bare pronoun ("It runs", "This
@@ -45,6 +50,13 @@ JOB_NOUNS = frozenset("role position job post opportunity vacancy application".s
 IRREGULAR = frozenset("""built rebuilt led made wrote rewrote ran won taught began became did found gave got grew held
 kept knew met sold spent took brought chose fought went spoke lost paid undertook oversaw drove""".split())
 PAST_ED = 5                 # an "-ed" word at least this long ("based" and up) can be a past tense
+OPENING_WORDS = 2           # words that make two paragraph openings alike ("I built", "During my")
+# A paragraph's closing claim of relevance: "This experience prepared me ...", "These projects show I can ...",
+# "..., which is relevant to ...", "... gave me experience that is useful for ..." (owner, 2026-11-19).
+RELEVANCE = re.compile(r"^(?:this|these|that|those|both|all|such)\b[^.]{0,60}\b(?:shows?|showed|demonstrates?|"
+                       r"proves?|prepared|prepares|equips?|equipped|gave me|gives me|taught me|means)\b|"
+                       r"\b(?:is|are|was|were) (?:directly |highly |very )?(?:relevant|useful|applicable|transferable)"
+                       r"\b|\bwhich (?:is|are) relevant\b|\brelevant to (?:this|the|your)\b", re.I)
 
 
 def _stem(word: str) -> str:
@@ -82,22 +94,6 @@ def refers_to_nothing(sentence: str, before: str) -> bool:
     return not any(_stem(w) in held for w in phrase)
 
 
-def reads_without(paragraph: str, sentence: str) -> bool:
-    """True when `paragraph` still reads with `sentence` taken out: it keeps another sentence, and the sentence
-    after it does not point back at it (a bare pronoun, or a noun the rest before it does not hold)."""
-    said = check.sentences(paragraph)
-    if sentence not in said or len(said) <= 1:
-        return False
-    at = said.index(sentence)
-    if at == len(said) - 1:
-        return True
-    after = said[at + 1]
-    phrase = back_reference(after)
-    if phrase is None:
-        return True
-    return bool(phrase) and not refers_to_nothing(after, " ".join(said[:at]))
-
-
 def paragraphs(text: str) -> list[str]:
     """The paragraphs of a draft, each stripped; empty ones left out."""
     return [p.strip() for p in re.split(r"\n\s*\n", text or "") if p.strip()]
@@ -112,6 +108,29 @@ def dangling(text: str) -> list[str]:
             out.append(said[0])
         before = para
     return out
+
+
+def alike_openings(text: str) -> list[str]:
+    """The first sentences of the paragraphs that open like another: the same first `OPENING_WORDS` words as an
+    earlier paragraph, or "I" again after an earlier paragraph opened with it (see the module notes)."""
+    out, seen, by_i = [], set(), 0
+    for para in paragraphs(text):
+        said = check.sentences(para)
+        first = said[0] if said else para
+        words = tuple(w.lower() for w in re.findall(r"[A-Za-z']+", first)[:OPENING_WORDS])
+        by_i += bool(words) and words[0] == "i"
+        if words and (words in seen or (words[0] == "i" and by_i > 1)):
+            out.append(first)
+        seen.add(words)
+    return out
+
+
+def relevance_closers(text: str) -> list[str]:
+    """The last sentences of a letter's middle paragraphs (neither the first nor the last) that only claim the
+    work is relevant ("This experience prepared me ...", "..., which is relevant to ...", `RELEVANCE`)."""
+    middle = paragraphs(text)[1:-1]
+    last = [check.sentences(p)[-1] for p in middle if check.sentences(p)]
+    return [s for s in last if RELEVANCE.search(s)]
 
 
 def word_count(text: str) -> int:

@@ -1,4 +1,4 @@
-"""How a draft reads once sentences are taken out: sentences pointing back at nothing, and letters left short.
+"""How a draft reads: sentences pointing back at nothing, paragraphs opening alike, and letters left short.
 
 The sentences are made up, in the shapes graded packs showed (2026-11-07).
 """
@@ -31,16 +31,27 @@ class BackReferences(unittest.TestCase):
         self.assertEqual(flow.dangling(text), ["This project allowed me to test changes."])
 
 
-class ReadsWithout(unittest.TestCase):
-    PARA = "I like tides. I built Hal. It runs offline. My logger works."
+class Openings(unittest.TestCase):
+    """The letters read alike: three paragraphs each opening "I built <project>, a personal project that ..."
+    (owner, 2026-11-19)."""
 
-    def test_a_sentence_the_next_one_points_back_at_cannot_go(self):
-        self.assertFalse(flow.reads_without(self.PARA, "I built Hal."))
+    def test_paragraphs_opening_with_the_same_words_or_a_second_i_are_found(self):
+        text = ("I built a made-up tide logger.\n\nI built a ferry planner.\n\nDuring my degree I read maps.\n\n"
+                "During my degree I wrote reports.\n\nI would welcome a talk.")
+        self.assertEqual(flow.alike_openings(text), ["I built a ferry planner.", "During my degree I wrote reports.",
+                                                     "I would welcome a talk."])
 
-    def test_any_other_sentence_can_go_but_never_the_last_one_left(self):
-        for sentence in ("I like tides.", "It runs offline.", "My logger works."):
-            self.assertTrue(flow.reads_without(self.PARA, sentence), sentence)
-        self.assertFalse(flow.reads_without("I built Hal.", "I built Hal."))
+    def test_a_middle_paragraph_ending_on_a_claim_of_relevance_is_found(self):
+        text = ("Your tide data drew me here.\n\nAt the museum I guided visitors. These experiences prepared me to "
+                "work with the public.\n\nI logged river levels, which is relevant to your survey work.\n\n"
+                "I logged river levels every ten minutes. It ran for a year.\n\nThis shows I would fit well.")
+        self.assertEqual(flow.relevance_closers(text), ["These experiences prepared me to work with the public.",
+                                                       "I logged river levels, which is relevant to your survey work."],
+                         "the last paragraph is the closing, never a middle one")
+
+    def test_paragraphs_that_open_differently_are_never_found(self):
+        text = "Your tide data drew me here.\n\nAt the museum I guided visitors.\n\nI would welcome a talk."
+        self.assertEqual(flow.alike_openings(text), [])
 
 
 class Length(unittest.TestCase):

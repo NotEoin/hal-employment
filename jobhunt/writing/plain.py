@@ -4,8 +4,8 @@
 ("For the requirement to ..."), ties the work to the job with a stock phrase ("aligns with", `STOCK`),
 points at the CV instead of saying the thing ("My CV lists ..."), speaks of
 the person in the third person ("The applicant developed ...", "<name> has ...") or pastes the wording of a
-setting (`labels`, from `settings_labels`); `writing.paragraphs` lists them with a sentence's other problems,
-so its paragraph is drafted again. `tidy(text, cards)` is the draft as it is saved: no stray evidence id, no
+setting (`labels`, from `settings_labels`); `pack.check_drafts` lists them under "Check before sending".
+`tidy(text, cards)` is the draft as it is saved: no stray evidence id, no
 title in capitals, straight quotes and apostrophes, no stray space at the start of a line, and each project
 named as its card spells it.
 

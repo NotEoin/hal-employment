@@ -4,6 +4,15 @@ What changed in each version, in plain words.
 
 ## Unreleased
 
+### What's new
+
+- **Letters written in one go, and quicker.** Hal now writes your cover letter, the message to the person
+  hiring and your answers each in one go, from one request with what the advert needs, a note on the
+  employer, how your evidence fits and your best-fitting work, then checks all three together once and
+  rewrites a draft at most once. Letters no longer tell one project per paragraph: each makes one case for
+  why you can do the job, weaving two or three pieces of your work together. An application's documents
+  took about 5 minutes of Hal's AI time; for three real adverts they now took 2.3 to 2.8 minutes.
+
 ### Fixed
 
 - **The job's own name in your documents.** A letter could say it was applying for "Trainee DevOps Engineer

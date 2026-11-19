@@ -192,7 +192,7 @@ class Gateway(InHome):
         settings.set("ai.model.checker", "made-up-model", by="you")
         sent = {}
         with ai.use(GatewayBackend(self.url, self.token)):
-            for purpose in ("fit", "brief", "paragraph_verify", "project_read"):
+            for purpose in ("fit", "brief", "verify", "project_read"):
                 ai.chat("s", "u", purpose=purpose, timeout=5)
                 sent[purpose] = (_Gateway.bodies[-1].get("reasoning_effort"),
                                  _Gateway.bodies[-1]["thinking_budget_tokens"])
@@ -202,7 +202,7 @@ class Gateway(InHome):
             settings.set("ai.thinking_cap_tokens", 0, by="you")
             ai.chat("s", "u", purpose="fit", timeout=5)
             off = (_Gateway.bodies[-1]["reasoning_effort"], _Gateway.bodies[-1]["thinking_budget_tokens"])
-        self.assertEqual(sent, {"fit": ("medium", 1280), "brief": ("none", 0), "paragraph_verify": ("low", 512),
+        self.assertEqual(sent, {"fit": ("medium", 1280), "brief": ("none", 0), "verify": ("low", 512),
                                 "project_read": ("high", 8192)}, "a record read keeps the thinking it had")
         self.assertEqual(capped, ("high", 1000), "the cap is the most any request may think")
         self.assertEqual(off, ("none", 0), "a cap of 0 turns thinking off")

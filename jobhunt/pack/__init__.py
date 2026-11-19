@@ -7,10 +7,10 @@ hiring, and answers to common form questions. It is written to the job's folder 
 folder (`addon.applications_mirror`). Nothing is sent or submitted.
 
 This module builds the pack (`build`) and exports every name of its parts, so callers import `jobhunt.pack`:
-- `reading`: the prompt values, the advert reading, the record passages, the evidence plan and `Brief`.
+- `reading`: the prompt values, the advert reading, the record passages and `Brief`.
 - `fitmap`: the fit map and the eligibility flag.
-- `checks`: the writing and claim checks every draft goes through, and the refusals taken out.
-- `drafting`: the shared request, whole drafts, the paragraph scope and the story ranking.
+- `drafting`: the one request each document is written from (`Given`) and a draft asked for again when cut off.
+- `checks`: the one check of every draft and its one redraft (`settle`), and the refusals taken out.
 - `hiring`: who the message and the letter go to.
 - `letter`: the cover letter and its notes.
 - `others`: the message to the person hiring and the form answers.
@@ -20,49 +20,21 @@ Design notes:
 - The prompts live in `ai/prompts/*.txt` and name no one: `cvstudio.context.build` fills them from the
   `you.*`, `goal.*` and `cvdocs.*` settings and the CV type. `prompt(id)` renders
   the text when it is called, so callers see what the person's edits and settings give.
-- One letter path: `write_letter` reads the advert, the record and the fit map, writes the letter and checks
-  it, for a pack and for a letter a form asks for (`documents.draft_letter`), so every letter is checked
-  the same way.
+- Each document is written in one call from one request code assembles (owner, 2026-11-19: "a single prompt
+  assembled", about 5 minutes per application at most): the advert's reading, the employer note, the fit
+  map, and the work `writing.plan.chosen` picks with no AI, with where each piece was done and the person's
+  part (`drafting.given`). An evidence plan, a ranking, a motivation pairing and a call per paragraph took 24
+  and 27 calls and about 5 minutes for two real adverts, and their letters all read alike (2026-11-19).
+- One check, not one per paragraph: the letter, the message and the answers are written, then checked in one
+  `verify` call together, each redrafted at most once with everything wrong with it stated (`checks.settle`),
+  and what is left is listed under "Check before sending", never fixed in a loop. The letter alone (form
+  time, `documents.draft_letter`, and `docs.rewrite_letter`) and the message and answers alone
+  (`docs.change`) take the same path through `write_letter` and `write_others`.
 - Every draft the AI writes is respelt to the person's spelling (`spelt`, `writing.spelling`) before it is
   checked, as dashes are taken out (`ai.undash`): a spelling has one right form, so it needs no revision.
-- Every draft goes through the writing checker (`writing.check`). A high-severity break (an invented number,
-  a machine-made word, a staged contrast) makes the writer revise once with the problems quoted; what is
-  left is listed under "Check before sending", never fixed in a loop.
-- The claim check (`unsupported_claims`) works the same way (`fix_claims`) for a draft with no story to tell
-  (see below): the letter, the message and the answers are each rewritten once without the claims about the
-  person their facts do not support, checked again, and only what is left is listed. The advert and the
-  brief are the employer's own words, never flagged for being restated.
-- The letter's first paragraph and the "why do you want to work here" answers are checked, with no AI, for
-  sentences that restate the advert or the brief (`drafts.echoes`) and rewritten once to tie something of
-  the applicant's own to the employer (`fix_echoes`), before the claim check reads them: 26 generic
-  sentences in five real packs were the advert's words given back as a reason (2026-11-07).
 - An offer to relocate to the town the person lives in is taken out of the letter, the message and the
   answers with no AI (`relocation.without_own_move`): a letter offered to relocate to the London office of a
   person living in London (2026-11-07).
-- A form answer that repeats an earlier one nearly word for word is rewritten once, with the others, to
-  use other evidence (`fix_repeats`, `repeats.repeated`), and the fit map lists each gap once
-  (`repeats.unique_gaps`): two answers of a real pack gave the same details and a gap was listed twice
-  (2026-11-07).
-- Each draft rests on an evidence plan picked before it is written (`evidence_plan`, `writing.plan`): quotes
-  of the CV, the Profile block and the record, each with its card's context and the person's part, as a
-  local model framed projects in the wrong place and wrote team work as solo when it wrote freely
-  (2026-11-07). The letter's reason for the employer comes from a pairing of one employer fact with one plan
-  item (`writing.motive`), or it gives none, as letters gave generic motivation that echoed the advert.
-- The plan's items are grouped into stories, one per piece of work (`plan.stories`), and the letter, the
-  message and the answers tell each story in a paragraph of its own, drafted from that story's facts alone
-  and checked against them alone (`writing.paragraphs`, `_story_letter`, `_story_others`), with the letter's
-  opening and closing drafted from who is writing, the role and the reason (`writing.frame`). A grader capped
-  every pack at 2 of 5 for readability across four designs that drafted and checked sentence by sentence
-  with evidence markers, rewrote, cut and smoothed them, named projects with "For <card>, " and cut the
-  advert's lead-ins (15 packs, 2026-11-08); all of that is gone. Every starred card is a story too, from the
-  card's own facts (`plan.with_showcase`), so a pack is drafted whole and checked with `fix_claims`, as before
-  the plan, only when the plan tells no story and the record has no starred card (2026-11-09).
-- Which work the drafts tell comes from one AI ranking per pack (`story_ranking`, `writing.rank`), made by
-  `write_letter` and passed to `write_others`: word overlap with the advert led letters with weak projects
-  (15 graded packs, 2026-11-08). The letter tells the ranking's best, the message and answers the next.
-- No answer and no message is left blank (`_story_others`, 2026-11-08): 8 of 15 graded packs had an empty
-  answer or a message with nothing after its introduction, as a dropped paragraph left nothing. The next
-  story is tried, up to `STORY_TRIES`, and what is still empty is written by the whole-draft path.
 - The pack's checklist names no command: every action is a button on the Documents page.
 - A pack is written from a settled record (`freshness`): it waits while a record update is queued or running,
   and starts again when the record's revision moves before the job's CV or the pack is saved, as packs
@@ -73,8 +45,8 @@ Design notes:
   job's CV all read it (`cv.based_on`), and the choice is kept with the job's CV (`tailor.prepare`). When the
   person changes the CV while the pack is written, the job's CV is built on theirs, and the letter stays, as
   Change CV keeps it.
-- Each pack logs how many model calls it made (`build`, `ai.counted`): a pack made about 55 with sentence
-  checks, and the stories aim for about 30 at most (2026-11-08), so the count is logged to be measured.
+- Each pack logs how many model calls it made (`build`, `ai.counted`): analyse, brief, fit, the letter, the
+  message, the answers and one check, seven with no redraft (2026-11-19).
 """
 import logging
 from pathlib import Path
@@ -88,24 +60,14 @@ from jobhunt.pack.checks import (
     CUT_FLAG,
     DANGLING_FLAG,
     ECHO_FLAG,
+    Draft,
     check_drafts,
-    fix_claims,
-    fix_echoes,
-    revise_once,
+    settle,
     unsupported_claims,
     unsupported_numbers,
     without_refusals,
 )
-from jobhunt.pack.drafting import (
-    CUT_NOTE,
-    DRAFT_TEMPERATURE,
-    _context,
-    fitting_names,
-    paragraph_scope,
-    shared_context,
-    spelt,
-    story_ranking,
-)
+from jobhunt.pack.drafting import CUT_NOTE, DRAFT_TEMPERATURE, Given, given, spelt
 from jobhunt.pack.fitmap import (
     CELL_WORDS,
     EQUIVALENTS,
@@ -126,20 +88,9 @@ from jobhunt.pack.fitmap import (
     without_reasoning,
 )
 from jobhunt.pack.hiring import FIND_PREFIX, hiring_contacts, message_to, salutation
-from jobhunt.pack.letter import (
-    CHECKED_CLEAN,
-    LETTER_TRIES,
-    REVISED,
-    SHORT_FLAG,
-    SHORT_MIDDLE,
-    SOFTENED,
-    _item_note,
-    _letter_bodies,
-    _short_middle,
-    _story_letter,
-    letter_frame,
-    write_letter,
-)
+from jobhunt.pack.letter import CHECKED_CLEAN, REVISED, SHORT_FLAG, SOFTENED, check_all, write_letter
+from jobhunt.pack.letter import drafted as drafted_letter
+from jobhunt.pack.letter import finished as finished_letter
 from jobhunt.pack.markdown import (
     NOTHING_TO_CHECK,
     PREPARED,
@@ -151,19 +102,12 @@ from jobhunt.pack.markdown import (
 from jobhunt.pack.others import (
     NO_ANSWER,
     REPEAT_FLAG,
-    STORY_TRIES,
-    _answers,
-    _fitting,
-    _story_answer,
-    _story_message,
-    _story_of,
-    _story_others,
-    _why_story,
-    answers_request,
-    fix_repeats,
+    drafted_answers,
+    drafted_message,
     message_opening,
     write_others,
 )
+from jobhunt.pack.others import finished as finished_others
 from jobhunt.pack.reading import (
     COMMON_QUESTIONS,
     Brief,
@@ -171,7 +115,6 @@ from jobhunt.pack.reading import (
     _job_text,
     _kept,
     _research,
-    evidence_plan,
     field_of,
     passages,
     person,
@@ -181,8 +124,7 @@ from jobhunt.pack.reading import (
     written_out,
 )
 from jobhunt.profile import writing as profile_writing
-from jobhunt.writing import drafts, eligibility, motive, rank
-from jobhunt.writing import plan as planning
+from jobhunt.writing import drafts, eligibility
 
 __all__ = [
     "CELL_WORDS",
@@ -194,7 +136,6 @@ __all__ = [
     "ECHO_FLAG",
     "EQUIVALENTS",
     "FIND_PREFIX",
-    "LETTER_TRIES",
     "MISSING_GAP",
     "NOTHING_CHECKED",
     "NOTHING_TO_CHECK",
@@ -204,27 +145,16 @@ __all__ = [
     "REPEAT_FLAG",
     "REVISED",
     "SHORT_FLAG",
-    "SHORT_MIDDLE",
     "SOFTENED",
-    "STORY_TRIES",
     "THINKING",
     "Brief",
+    "Draft",
+    "Given",
     "NothingChecked",
-    "_answers",
     "_eligibility_flag",
     "_fit",
-    "_fitting",
-    "_item_note",
     "_job_text",
     "_kept",
-    "_letter_bodies",
-    "_short_middle",
-    "_story_answer",
-    "_story_letter",
-    "_story_message",
-    "_story_of",
-    "_story_others",
-    "_why_story",
     "add_company_check",
     "build",
     "check_drafts",
@@ -233,36 +163,25 @@ __all__ = [
     "consistent_fit",
     "covered_gaps",
     "drafts",
-    "evidence_plan",
     "field_of",
-    "fitting_names",
-    "fix_claims",
-    "fix_echoes",
-    "fix_repeats",
+    "given",
     "has_facts",
     "hiring_contacts",
     "known_tools",
-    "letter_frame",
     "message_opening",
     "message_to",
     "mirror_note",
-    "motive",
-    "paragraph_scope",
     "passages",
     "person",
-    "planning",
     "prompt",
-    "rank",
     "read_job",
     "read_letter_notes",
     "reputation",
-    "revise_once",
     "row_source",
     "salutation",
-    "shared_context",
+    "settle",
     "slug",
     "spelt",
-    "story_ranking",
     "unsupported_claims",
     "unsupported_numbers",
     "with_card_tools",
@@ -321,6 +240,21 @@ def _build(con, job_id: str, use_web: bool, ctx, fresh: freshness.Fresh) -> Path
         return _build_on(con, job, base, use_web, ctx, fresh)
 
 
+def _written(con, brief: Brief, fit: dict, questions: list[str]) -> tuple[dict, dict]:
+    """The letter, the message and the answers, each written in one call from one request (`drafting.given`)
+    and checked together in one call (`checks.settle`): (the letter as `write_letter` returns it, the message
+    and answers as `write_others` does)."""
+    facts = given(brief, fit, previous_applications(con, brief.job))
+    letter_cut: set[str] = set()
+    message_cut: set[str] = set()
+    letter = drafted_letter(brief, facts, trimmed=letter_cut)
+    message = drafted_message(brief, facts, trimmed=message_cut)
+    answers = drafted_answers(brief, facts, questions)
+    check_all(brief, facts, [letter, message, answers])
+    return (finished_letter(con, brief, facts, letter, fit, trimmed=letter_cut),
+            finished_others(brief, facts, message, answers, trimmed=message_cut))
+
+
 def _build_on(con, job, base: choose.Choice, use_web: bool, ctx, fresh: freshness.Fresh) -> Path:
     """`_build` on the CV chosen for the job (`base`), which every fact below is read from (`cv.based_on`)."""
     from jobhunt import documents
@@ -340,20 +274,12 @@ def _build_on(con, job, base: choose.Choice, use_web: bool, ctx, fresh: freshnes
                      role="checker", timeout=ai.LONG_TIMEOUT_S, purpose="brief")
     kept = _kept(analysis)
     fit = _fit(who, analysis, facts, kept, job)
-    plan = evidence_plan(analysis, facts, kept, tuple(COMMON_QUESTIONS))
     brief = Brief(job, who, analysis, about, facts, kept)
-    written = write_letter(con, job, who=who, analysis=analysis, about=about, kept=kept, fit=fit, plan=plan)
-    fresh.check()
-    letter = written["text"]
-    context = _context(brief, fit, previous_applications(con, job))
     questions = [*(analysis.get("questions") or []), *COMMON_QUESTIONS]
-    others = write_others(who, job, analysis, about, message_request=context,
-                          answers_request=answers_request(brief, questions, context),
-                          facts=facts, kept=kept, plan=plan, questions=questions,
-                          pairing=written["pairing"], paired=True, told=tuple(written.get("told", ())),
-                          ranking=written.get("ranking"))
+    written, others = _written(con, brief, fit, questions)
+    fresh.check()
     message, answers = others["message"], others["answers"]
-    letter, message, answers, refused = without_refusals(letter, message, answers)
+    letter, message, answers, refused = without_refusals(written["text"], message, answers)
 
     fresh.check()    # the job's CV is saved next, so a record that moved is caught before anything is kept
     made = tailor.prepare(dict(job), priorities=tailor.picked(job_id, con), base=base, con=con)

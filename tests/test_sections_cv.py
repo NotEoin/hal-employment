@@ -29,7 +29,7 @@ from jobhunt.profile import store as profile_store
 from jobhunt.profile import writing as profile_writing
 from jobhunt.sections import cv, pipeline, readers, store
 from jobhunt.sections.pipeline import Incoming
-from jobhunt.writing import plan, rank
+from jobhunt.writing import plan
 
 AI_REPLY = {"facts": [
     {"kind": "job", "fields": {"title": "Archive volunteer", "employer": "Fenwick Lantern Museum Trust",
@@ -401,13 +401,11 @@ class CurrentAndOlderCvs(unittest.TestCase):
         self.assertEqual(paper["quotes"], ["Paper round at Harrowgate Gazette, 2018 to 2020",
                                            "Delivered papers before school"], "its plain facts, nothing added")
         stories = [plan.card_story(paper), plan.card_story(shop)]
-        ranked = [rank.Ranked(paper["name"]), rank.Ranked(shop["name"])]
         cards = [paper, shop]
-        self.assertEqual([s.name for s in rank.order(stories, cards, ranked, "history", n=1).letter], [shop["name"]],
-                         "ranked first, it is still told after the job the current CV gives")
-        self.assertEqual([s.name for s in rank.order(stories, cards, ranked, "history", n=2).letter],
-                         [shop["name"], paper["name"]], "and told when the letter has room")
-        self.assertEqual(plan.letter_stories(stories, cards, "history", n=1)[0].name, shop["name"])
+        self.assertEqual([s.name for s in plan.chosen(cards, "papers", {paper["name"]: 2}, n=1)], [shop["name"]],
+                         "cited first, it is still given after the job the current CV gives")
+        self.assertEqual([s.name for s in plan.chosen(cards, "papers", {paper["name"]: 2}, n=2)],
+                         [shop["name"], paper["name"]], "and given when there is room")
         self.assertIn(f"Where its facts come from: {plan.OLDER_CV_JOB_WORDS}", stories[0].block())
         self.assertNotIn(plan.OLDER_CV_JOB_WORDS, stories[1].block())
 
@@ -421,11 +419,9 @@ class CurrentAndOlderCvs(unittest.TestCase):
             found = {c["name"]: c for c in profile_writing.cards(con) if c["kind"] == "job"}
         paper, shop = found["Paper round at Harrowgate Gazette"], found["Shop assistant at Made-up Books Ltd"]
         stories = [plan.card_story(shop), plan.card_story(paper)]
-        ranked = [rank.Ranked(shop["name"]), rank.Ranked(paper["name"])]
         cards = [shop, paper]
-        self.assertEqual([s.name for s in rank.order(stories, cards, ranked, "history", n=1).letter], [paper["name"]],
+        self.assertEqual([s.name for s in plan.chosen(cards, "books", {shop["name"]: 2}, n=1)], [paper["name"]],
                          "the person's star wins over the older CV")
-        self.assertEqual(plan.letter_stories(stories, cards, "history", n=1)[0].name, paper["name"])
         self.assertEqual(stories[1].facts, ("Paper round at Harrowgate Gazette, 2018 to 2020",
                                             "Delivered papers before school"), "still only its plain facts")
         self.assertIn(plan.OLDER_CV_JOB_WORDS, stories[1].block())

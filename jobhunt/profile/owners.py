@@ -14,7 +14,7 @@ Design decisions, each with its reason:
   project and two other visible cards, so the copy's name became an alias of both, and a letter placed the
   copy's network sniffer in an autonomous navigation project. So a listing never makes an alias, never ties
   a passage to a card by its file, and never gives a card a quote that names another card and not it
-  (`profile.writing`, `writing.plan.sources`). Only its passages and quotes that name one card count for
+  (`profile.writing`, `writing.plan.without_listings`). Only its passages and quotes that name one card count for
   that card.
 - A project's own file belongs to it (2026-11-08): a card of an earlier project carried evidence quoted from
   the repository of a later one with a longer name, so its tools took the later one's database and front

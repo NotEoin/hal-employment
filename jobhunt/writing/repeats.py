@@ -1,8 +1,8 @@
 """No repeats: an answer saying what an earlier one said, a sentence said twice, and a gap listed twice.
 
 `repeated(answers)` finds, with no AI, each sentence of a later answer that says nearly what a sentence of an
-earlier one says; `pack._answers` has the answers rewritten once so the later one uses other evidence.
-`same(a, b)` is the comparison, which `writing.paragraphs` also uses for a sentence a paragraph says twice.
+earlier one says; the answers' one redraft (`pack.checks.settle`) asks for the later one to use other
+evidence. `same(a, b)` is the comparison.
 `unique_gaps(gaps)` keeps the first of the fit map's gaps that say the same thing.
 
 Design decisions, each with its reason:

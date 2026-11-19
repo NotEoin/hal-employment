@@ -26,12 +26,10 @@ from pathlib import Path
 from unittest import mock
 
 from jobhunt import ai, db, pack, record, tasks
-from jobhunt.ai import prompts
 from jobhunt.company import reputation, research
 from jobhunt.cvstudio import cv
 from jobhunt.find import boards, replenish
 from jobhunt.mail import gmail
-from jobhunt.writing import plan
 from support.actions import wait_for_actions
 
 PERSON = {
@@ -222,10 +220,11 @@ def fake_chat_json(system: str, user: str, **kw) -> dict:
     """Canned answers for the pack's prompts; any other prompt goes to the AI of the test run."""
     fit = {"matches": [{"requirement": "Python", "evidence": "a made-up project", "strength": "strong"}],
            "gaps": ["SQL"], "eligible": True, "eligibility_notes": "No conditions."}
-    answers = {"answers": [{"question": "Why do you want this role?", "answer": "A made-up answer."}]}
+    listed = user.split("Questions:\n", 1)[1].split("\n\n", 1)[0] if "Questions:\n" in user else ""
+    answers = {"answers": [{"question": q[2:], "answer": "A made-up answer."} for q in listed.splitlines()
+                           if q.startswith("- ")]}
     canned = {pack.prompt("analyse"): ANALYSIS, pack.prompt("fit"): fit, pack.prompt("answers"): answers,
-              pack.prompt("verify"): {"unsupported": []},
-              prompts.text(plan.PROMPT): {"evidence": []}}
+              pack.prompt("verify"): {"unsupported": []}}
     if system in canned:
         return json.loads(json.dumps(canned[system]))
     if system.startswith(SCREEN_OPENING):
@@ -234,8 +233,11 @@ def fake_chat_json(system: str, user: str, **kw) -> dict:
 
 
 def fake_chat(system: str, user: str, **kw) -> str:
-    """Canned prose for the pack's brief, letter and message."""
-    if system in (pack.prompt("brief"), pack.prompt("letter"), pack.prompt("message")):
+    """Canned prose for the pack's brief, letter and message; the brief says something else, so no draft reads as
+    taken from it."""
+    if system == pack.prompt("brief"):
+        return "A made-up employer of made-up people."
+    if system in (pack.prompt("letter"), pack.prompt("message")):
         return "A short made-up paragraph."
     return REAL_CHAT(system, user, **kw)
 

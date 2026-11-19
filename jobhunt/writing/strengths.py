@@ -4,8 +4,8 @@ A skill whose every source is course material (`profile.strength.STUDIED`: lectu
 what the person studied, not what they did (sections plan, 2026-11-09). `studied_claims(text, studied)` finds
 each sentence that names such a skill and says it was used, applied, run or done ("I used thematic analysis",
 "using Haskell", "I carried out titration") with no words that make it knowledge ("I studied", "covered in my
-degree", "learned about"); a paragraph (`writing.paragraphs`) or a whole draft (`pack.unsupported_claims`) that
-holds one is drafted again once with the reason, as for any other claim the facts do not support.
+degree", "learned about"); a draft that holds one (`pack.checks.code_claims`) is redrafted once with the
+reason, as for any other claim the facts do not support.
 
 Design decisions, each with its reason:
 

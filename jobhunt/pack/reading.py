@@ -1,5 +1,5 @@
 """The advert and the person a pack is written for: the prompt values, the advert reading, the record
-passages the CV leaves out, the evidence plan and the `Brief` every draft shares."""
+passages the CV leaves out and the `Brief` every draft shares."""
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -10,7 +10,6 @@ from jobhunt.company import research
 from jobhunt.cvstudio import context as cv_context
 from jobhunt.profile import writing as profile_writing
 from jobhunt.writing import fields
-from jobhunt.writing import plan as planning
 
 SOMEONE = cv_context.SOMEONE  # what a prompt calls the person before they have given a name
 
@@ -117,13 +116,6 @@ def _record_part(heading: str, kept: str) -> str:
 def passages(kept: str) -> list[str]:
     """The record passages a prompt was given, as "file > heading" labels."""
     return PASSAGE.findall(kept or "")
-
-
-def evidence_plan(analysis: dict, facts: str, kept: str, questions: tuple[str, ...] = ()) -> list[planning.Item]:
-    """The evidence the drafts for one job may rest on (`writing.plan`): picked once from the CV, the Profile
-    block and the record passages for the advert's requirements and `questions`."""
-    return planning.make(_requirements(analysis), [*(analysis.get("questions") or []), *questions], facts, kept,
-                         profile_writing.cards(), profile_writing.listings())
 
 
 def previous_applications(con, job) -> str:

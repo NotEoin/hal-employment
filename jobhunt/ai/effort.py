@@ -8,16 +8,17 @@ sent either field (`hal_gateway.GatewayBackend`); other backends ignore them.
 
 Design decisions, each with its reason:
 
-- The budgets come from the five-minute target for one application's documents (owner, 2026-11-19), on the
-  speeds measured that day (about 55 tokens a second written, 500 read): calls x (prompt tokens / 500 +
-  (thinking + answer tokens) / 55) must stay under 300 s. Before, about 90% of each call was thinking (a
-  median 1,400 to 1,600 tokens for a 130-token answer), so 20 calls took 9 minutes of model time. At these budgets the
-  documents' calls can think at most about 11,000 tokens in all, 200 s, which leaves the rest for reading
-  the prompts and writing the answers; `medium` is 1,280, not 1,536, as 1,536 came to 308 s when every call
-  thinks its whole budget (docs/dev/architecture.md, "Thinking effort", and `tests/test_ai_effort.py`).
+- The budgets come from the time one application's documents may take (owner, 2026-11-19: five minutes at
+  most, then about two once each document is written in one call), on the speeds measured that day (about 55
+  tokens a second written, 500 read): calls x (prompt tokens / 500 + (thinking + answer tokens) / 55).
+  Before, about 90% of each call was thinking (a median 1,400 to 1,600 tokens for a 130-token answer). The
+  seven calls of `docs.prepare` (analyse, brief, fit, letter, message, answers, verify) think at most 4,608
+  tokens in all; the budget, with a redraft of each document, is in docs/dev/architecture.md ("Thinking
+  effort") and `tests/test_ai_effort.py`. The letter thinks at `medium`, as it now chooses and weaves the
+  evidence itself; the message, the answers and the check at `low`.
 - Reads of the record keep thinking on at the level they always had (`high`, today's 8,192-token bound): with
   thinking off a read kept 55 facts against 77 (owner's test, 2026-11-12), so they are never lowered.
-- A check that guards against invented facts (`paragraph_verify`, `verify`) gets `low`, not `none`: it weighs
+- The check that guards against invented facts (`verify`) gets `low`, not `none`: it weighs
   each claim against the facts, and a few hundred tokens of thinking is cheap beside a wrong letter.
 - `none` is only for jobs with nothing to reason about (a short note, a name, a report turned into a note):
   on Hal's Qwen 3.8 model, thinking off answered a small reasoning question wrongly twice where `low` answered
@@ -34,7 +35,7 @@ from dataclasses import dataclass
 NONE, LOW, MEDIUM, HIGH = "none", "low", "medium", "high"
 EFFORTS = (NONE, LOW, MEDIUM, HIGH)
 # Thinking tokens each level may spend. `high` is the bound every request had until 2.3.2, so a read thinks as
-# it did; the others are sized for the five-minute target (module notes).
+# it did; the others are sized for the time an application's documents may take (module notes).
 BUDGETS = {NONE: 0, LOW: 512, MEDIUM: 1280, HIGH: 8192}
 CAP_KEY = "ai.thinking_cap_tokens"
 CAP_DEFAULT = BUDGETS[HIGH]     # no prompt is cut below its own level until the person lowers the cap
@@ -60,16 +61,10 @@ LEVELS: dict[str, Effort] = {
     "analyse": Effort(LOW, "lifts lists out of the advert; little to weigh"),
     "brief": Effort(NONE, "a short note on the employer from the advert and web pages"),
     "fit": Effort(MEDIUM, "weighs each requirement against the evidence"),
-    "evidence_plan": Effort(MEDIUM, "chooses which facts each draft may rest on"),
-    "story_rank": Effort(MEDIUM, "ranks the person's work against the job"),
-    "motive_pair": Effort(LOW, "pairs one employer fact with one thing of the person's"),
-    "letter_frame": Effort(LOW, "writes the letter's opening and closing"),
-    "story_paragraph": Effort(LOW, "writes one paragraph from one story's facts"),
-    "paragraph_verify": Effort(LOW, "a guard: checks a paragraph against its facts"),
-    "verify": Effort(LOW, "a guard: checks a whole draft's claims against the facts"),
-    "letter": Effort(LOW, "writes a whole letter when no story can be told"),
+    "letter": Effort(MEDIUM, "writes the whole letter in one go: picks and weaves the evidence into an argument"),
     "message": Effort(LOW, "writes a short note to the person hiring"),
     "answers": Effort(LOW, "writes short answers to an advert's questions"),
+    "verify": Effort(LOW, "a guard: checks every draft's claims against the facts, once"),
     "prep": Effort(LOW, "writes notes for an interview or a test"),
     # the person's CVs
     "cv_parse": Effort(HIGH, "reads an uploaded CV into sections; a read, kept as it was"),

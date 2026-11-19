@@ -3,7 +3,7 @@
 A letter says what the person wanted an employer to think, so nothing in it becomes a fact about them (sections
 plan, 2026-11-09): the reader keeps its text, title and date, and gives no facts. `voice_samples` hands the
 newest few letters' words to a writer that wants to match the person's voice, and `voice_excerpts` cuts them to
-what a letter's frame and paragraph requests carry (`pack.paragraph_scope`, `writing.paragraphs.voice_block`).
+what a letter's request carries (`pack.drafting.Given.request`).
 
 Design decisions, each with its reason:
 
