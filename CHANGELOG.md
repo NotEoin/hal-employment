@@ -6,12 +6,23 @@ What changed in each version, in plain words.
 
 ### Fixed
 
-- After one busy moment, Hal could stop making to-dos from your emails and stop preparing applications
-  and looking for contacts ahead of time, until it was restarted. It now recovers on its own.
+- **Hal carries on after a busy moment.** After one busy moment, Hal could stop making to-dos from your
+  emails and stop preparing applications and looking for contacts ahead of time, until it was restarted.
+  It now recovers on its own.
 
 - **Reading your record no longer stops with "database is locked".** A file being read into your record
   could fail with that message when Hal wrote something else at the same moment, such as the note of how
   long its AI took. The read now carries on as it should.
+
+- **Esc closes the setup guide at once.** On a busy computer, pressing Esc just after the setup guide
+  opened could do nothing, and the guide stayed open. Now Esc saves your place and closes it straight away.
+
+- **Your Gmail address stays as you type it.** In the setup guide's Email step, an address typed before
+  the step had finished loading could be run together with the one Hal had saved, so **Test** said it was
+  not an email address. Now what you type is kept.
+
+- **A tick stays on while it saves.** In **Sort a big folder for me**, a tick could go off again for a
+  moment just after you pressed it, so it looked as if it had not taken. Now it stays on while Hal saves it.
 
 ## 2.3.3 (2026-11-19)
 
@@ -42,16 +53,6 @@ What changed in each version, in plain words.
 - **One dissertation per course.** Pressing **This is my dissertation** on two pieces of coursework one
   straight after the other could mark both of them, and Hal said nothing. Now the first one is marked, and
   Hal tells you the second cannot be until you say the first is not your dissertation.
-
-- **Esc closes the setup guide at once.** On a busy computer, pressing Esc just after the setup guide
-  opened could do nothing, and the guide stayed open. Now Esc saves your place and closes it straight away.
-
-- **Your Gmail address stays as you type it.** In the setup guide's Email step, an address typed before
-  the step had finished loading could be run together with the one Hal had saved, so **Test** said it was
-  not an email address. Now what you type is kept.
-
-- **A tick stays on while it saves.** In **Sort a big folder for me**, a tick could go off again for a
-  moment just after you pressed it, so it looked as if it had not taken. Now it stays on while Hal saves it.
 
 ## 2.3.2 (2026-11-19)
 
