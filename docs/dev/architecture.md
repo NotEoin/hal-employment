@@ -682,10 +682,13 @@ runs: tests use `tests/support/fake_claude/`.
   lines into the CV the job's CV was built from (`main_version_id`, `main_doc_id`) through `edit.save`, the
   same base-checked save as My CV's editor.
 - In both editors every line, paragraph and profile is a `FormatBox` (`cv/format.js`): its Bold, Italic and
-  Link buttons show while the box has focus, Ctrl+B and Ctrl+I do the same, and each writes the marks of
-  `cvstudio/inline.py` into the text around the selection (`toggleMark`, `addLink`), trimmed of spaces and
-  widened to whole words, so the pair always hugs words. The words stay selected; the change is an ordinary
-  `replace` of the text.
+  Link buttons show while the box has focus, and Ctrl+B and Ctrl+I do the same. A button works on the
+  line's words, not its characters (`toggleMark`, `addLink`): `marks.chars` reads the line into characters with
+  their styles and where each came from, the selection is trimmed of spaces and widened to whole words, the
+  style is set on those words (Bold on words that are all bold takes it away), and `marks.toText` writes the
+  whole line again in canonical form, so marks already there never end up as stray stars. The same words
+  stay selected; the change is an ordinary `replace` of the text. A link address whose parentheses do not
+  pair gets them as `%28` and `%29` (`linkAddress`), so it reads back as the same link.
 - Outside the editors a line reaches the page through `Marked` (`cv/marks.js`), which reads the marks by the
   rules of `inline.py` (kept in step by hand) and draws `strong`, `em` and `a` with every word as Preact
   text: suggestion cards (Now and the wording), "What Hal changed" on the CV tab and the Documents step, and

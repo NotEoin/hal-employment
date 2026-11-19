@@ -158,6 +158,25 @@ class EditCv(unittest.TestCase):
                         self.assertNotIn("*", inline.plain(want))
                 self.assertEqual(p.errors, [])
 
+    def test_a_link_with_parentheses_reads_back_as_the_same_link(self) -> None:
+        # regression: "example.org/a)b" was written raw, so the line linked to ".../a" and showed "b)" (review)
+        wiki = "https://en.example.org/wiki/Avery_(writer)"
+        cases = (("example.org/a)b", "https://example.org/a%29b"), ("example.org/a(b", "https://example.org/a%28b"),
+                 (wiki, wiki))
+        p = self.page("narrow", "dark")
+        line = p.page.locator(f"textarea[aria-label='Line 1 of {JOB}']")
+        for typed, url in cases:
+            with self.subTest(typed=typed):
+                line.fill("Wrote up the labs")
+                select(line, "labs")
+                p.page.locator(f"button[aria-label='Link, line 1 of {JOB}']").click()
+                p.page.get_by_label("Link to", exact=True).fill(typed)
+                p.page.keyboard.press("Enter")
+                text = now(line)[0]
+                self.assertEqual(text, f"Wrote up the [labs]({url})")
+                self.assertEqual(inline.runs(text)[-1], inline.Run("labs", link=url))
+        self.assertEqual(p.errors, [])
+
     def test_a_card_from_your_record_is_added_with_its_lines(self) -> None:
         con = db.connect()
         try:

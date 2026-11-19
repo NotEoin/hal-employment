@@ -54,12 +54,25 @@ export function toggleMark(text, start, end, kind) {
   return written(cs.map((c, k) => (k >= from && k < to ? { ...c, [kind]: on } : c)), from, to);
 }
 
+/* True when every "(" in the address has its ")" after it, as in "en.example.org/wiki/Avery_(writer)". */
+function balanced(url) {
+  let depth = 0;
+  for (const ch of url) {
+    if (ch === "(") depth++;
+    else if (ch === ")" && --depth < 0) return false;
+  }
+  return depth === 0;
+}
+
 /** The address as a link the CV keeps: https:// added to a bare address, mailto: to an email; "" when it
-    cannot be one (it has spaces or control characters). */
+    cannot be one (it has spaces or control characters). Parentheses that do not pair are written as %28 and
+    %29, the same address to a browser: a raw ")" would end the link early ("[w](https://example.org/a)b)"
+    reads as a link to ".../a" and the words "b)"), and a lone "(" would leave the whole mark as text. */
 export function linkAddress(typed) {
   const url = (typed || "").trim();
   if (!url || SPACE.test(url)) return "";
-  return safeLink(SCHEME.test(url) ? url : EMAIL.test(url) ? "mailto:" + url : "https://" + url);
+  const full = SCHEME.test(url) ? url : EMAIL.test(url) ? "mailto:" + url : "https://" + url;
+  return safeLink(balanced(full) ? full : full.replace(/\(/g, "%28").replace(/\)/g, "%29"));
 }
 
 /** The line with the words at [start, end] made a link to `url` (with no words selected, the address's own

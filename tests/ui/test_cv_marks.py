@@ -22,7 +22,8 @@ LINES = ["Led **twelve** volunteers on *Saturday* tours", "***Winner***", "**ran
          "*a **b***", "***a** b*", "**a*", "See [my **portfolio**](https://example.org/avery).",
          "[C++ [advanced]](https://example.org/wiki/Avery_(writer))", "[x](javascript:alert(1))",
          "[mail](mailto:a@example.org) and [x](example.org)", "one *star\nand* another",
-         "[x](https://example.org/a\x01b) and [y](https://example.org/\x7f)"]
+         "[x](https://example.org/a\x01b) and [y](https://example.org/\x7f)",
+         "[w](https://example.org/a)b)", "[w](https://example.org/a(b)", "[w](https://example.org/a%28b)"]
 RUNS = ("async (lines) => { const m = await import('/app/cv/marks.js');"
         " return lines.map(t => [m.runs(t), m.toText(m.runs(t))]); }")
 WRITE = "async (rs) => { const m = await import('/app/cv/marks.js'); return rs.map(r => m.toText(r)); }"
