@@ -132,7 +132,8 @@ def _browser(html: str, out: Path, expect_name: str, expect_text: list[str]) -> 
 
 
 def _page(doc: Any, doc_id: str, con: sqlite3.Connection) -> tuple[str, str, str, str]:
-    """(the printed page, its look, the name and first heading it must hold) as Download PDF prints `doc`."""
+    """(the printed page, its look, the name and first heading it must hold) as Download PDF prints `doc` once
+    it is CV `doc_id`'s version in use."""
     from jobhunt.cvstudio import render, types
 
     d = store.doc(con, doc_id)
@@ -141,10 +142,11 @@ def _page(doc: Any, doc_id: str, con: sqlite3.Connection) -> tuple[str, str, str
     except (LookupError, ValueError) as e:
         log.warning("CV type %r could not be loaded: %s", d["type_id"], e)
         type_ = None
-    try:
-        layout = store.layout(con, doc_id) or {}
-    except (LookupError, ValueError):
-        layout = {}
+    # The layout `doc` itself gives (its sections and the CV's locked lines), not the version in use's: a draft
+    # counted before it is saved must print as it will once saved, or its count is kept under another page's
+    # hash (`keep` found none for a fresh CV built on a CV whose version in use had other sections). Reading
+    # the version in use also made a starter version on a CV that had none.
+    layout = store.layout_of(d, doc)
     look_id = d["look_id"] or render.DEFAULT_LOOK
     v = render.view(doc, type_, render.profile_from_settings(), layout=layout)
     first = v.sections[0].title if v.sections else ""

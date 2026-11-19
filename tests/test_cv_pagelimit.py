@@ -58,7 +58,9 @@ class StandIn:
 @contextlib.contextmanager
 def stand_in(fail: bool = False) -> Iterator[StandIn]:
     p = StandIn(fail)
-    with mock.patch.object(pagelimit, "PRINT", p):
+    # each test starts with no remembered counts: one left by an earlier test hid a count kept under the wrong
+    # page (the fresh CV test passed in its class and failed alone, 2026-11-19)
+    with mock.patch.object(pagelimit, "PRINT", p), mock.patch.dict(pagelimit._COUNTED, clear=True):
         yield p
 
 
@@ -342,6 +344,29 @@ class FreshCvKeepsToTheLimit(unittest.TestCase):
             self.assertEqual(pagelimit.known(out["version_id"]), (1, True))
             self.assertEqual(pagelimit.measure(out["version_id"]), 1)
         self.assertEqual(p.calls, calls)
+
+
+class DraftsPrintAsTheyWillBeSaved(unittest.TestCase):
+    """A draft is counted with the layout it will have once saved, not the version in use's (2026-11-19)."""
+
+    def test_a_draft_on_a_cv_whose_version_in_use_differs_keeps_its_count_when_saved(self):
+        with World(), stand_in() as p:
+            doc_id = humanities_cv_in_use()
+            first = store.current(doc_id=doc_id)[0]
+            draft = made_up_cv(people.HUMANITIES.key)
+            draft.sections = [s for s in reversed(draft.sections)]        # other sections, in another order
+            draft.sections[0].title = "Things I enjoy"
+            self.assertEqual(pagelimit.count_doc(draft, doc_id), 1)
+            self.assertEqual(store.current(doc_id=doc_id)[0], first, "counting saves nothing")
+            vid = store.new_version(draft, origin="manual", what="Made-up draft", by="you", doc_id=doc_id)
+            self.assertEqual(pagelimit.keep(vid), 1)
+            self.assertEqual((pagelimit.measure(vid), p.calls), (1, 1), "not printed again")
+
+    def test_counting_a_draft_on_a_cv_with_no_version_makes_none(self):
+        with World(), stand_in():
+            doc_id = store.doc()["id"]
+            pagelimit.count_doc(made_up_cv(people.HUMANITIES.key), doc_id)
+            self.assertIsNone(store.doc(doc_id=doc_id)["current_version_id"])
 
 
 class CountsKeptWithTheVersion(CvCase):

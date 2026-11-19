@@ -696,6 +696,15 @@ def layout(con: sqlite3.Connection | None = None, doc_id: str | None = None) -> 
     with _conn(con) as c:
         d = doc(c, doc_id)
         _, cv = current(c, d["id"])
+    return layout_of(d, cv)
+
+
+def layout_of(d: dict, cv: CVDoc) -> dict:
+    """`layout` of document `cv` as a version of CV row `d` (`doc`) would have it, reading nothing more.
+
+    So a document not saved yet is printed with the layout it will have once saved (`pagelimit.count_doc`),
+    not with the version in use's sections (2026-11-19).
+    """
     locked = list(d["layout"].get("locked_lines") or [])
     for s in cv.sections:
         for e in s.entries:
