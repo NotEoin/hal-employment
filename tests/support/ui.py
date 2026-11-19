@@ -130,6 +130,9 @@ class AppPage:
     def open(self, route: str = "") -> AppPage:
         """Loads the app afresh at `#route` and waits until the shell or the no-session screen is drawn."""
         self.page.goto("about:blank")  # a hash change alone would not reload the app
+        # The page left behind gets no answer event for what it was still asking, so its boot's /session
+        # stayed "still waiting" in every later failure message (seen on CI, 2026-11-19).
+        self._asked.clear()
         self.page.goto(self.base_url + "/" + ("#" + route if route else ""))
         self.settle()
         return self
