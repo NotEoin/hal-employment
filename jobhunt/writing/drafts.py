@@ -45,7 +45,9 @@ Design decisions, each with its reason:
   support" were the advert's words put into claims about the person, in sentences mostly their own, so
   `echoes` let them through. A run of `ECHO_RUN` or more words found in the advert or the brief, with at
   least `LIFT_CONTENT` own words, fails a sentence about the person's work, unless the person's facts hold
-  every one of those words. A sentence about the employer or the role (`about_employer`: "you", "your", "this
+  every one of those words; words for what a tool is for (`TOOL_PURPOSES`: "version control", "unit
+  testing") need not be held beside a word that is, as "Git for version control" only says the person uses
+  Git (2026-11-19). A sentence about the employer or the role (`about_employer`: "you", "your", "this
   role", the employer's name or the job title) may use the advert's words.
 - A degree the person's education does not hold (`unheld_degrees`) and a team's work told as the person's
   alone (`solo_claims`) are claims too: each was checked a paragraph at a time until 2026-11-19, and moved
@@ -380,6 +382,12 @@ def echoes(sentence: str, advert: str, brief: str = "", names: tuple[str, ...] =
 
 LIFT_CONTENT = 2           # own words an advert phrase of `ECHO_RUN` or more words needs to be a claim of its own
 LIFT_STEM = 5              # letters compared when the person's facts excuse a phrase ("builds" meets "build")
+# What a tool is for, in the words every advert uses: "Git for version control" said only that the person uses
+# Git, and was listed as the advert's phrase (2026-11-19). These words excuse a phrase only beside a tool or other
+# word the person's facts hold.
+TOOL_PURPOSES = frozenset("""version source control unit testing tests integration continuous delivery deployment
+containerisation containerization containers orchestration monitoring logging debugging scripting automation
+documentation""".split())
 # A sentence about the employer: it addresses them, or speaks of the role itself.
 ABOUT_EMPLOYER = re.compile(r"\b(?:you|your|yours)\b|\b(?:this|the) (?:role|job|position|post|vacancy)\b", re.I)
 
@@ -394,7 +402,8 @@ def about_employer(sentence: str, names: tuple[str, ...] = ()) -> bool:
 def lifted(sentence: str, advert: str, brief: str = "", names: tuple[str, ...] = (), own: str = "") -> str:
     """The first phrase of at least `ECHO_RUN` words a sentence takes from the advert or the brief that holds at
     least `LIFT_CONTENT` own words (little words and `names` aside) the person's facts (`own`) do not all hold
-    (by their first `LIFT_STEM` letters); "" when there is none (see the module notes)."""
+    (by their first `LIFT_STEM` letters), where `TOOL_PURPOSES` count as held beside a word the facts hold; ""
+    when there is none (see the module notes)."""
     words = _tokens(sentence)
     theirs = [*_tokens(advert), "|", *_tokens(brief)]
     runs = {tuple(theirs[i:i + ECHO_RUN]) for i in range(len(theirs) - ECHO_RUN + 1)}
@@ -411,7 +420,9 @@ def lifted(sentence: str, advert: str, brief: str = "", names: tuple[str, ...] =
             continue
         end = next((j for j in range(k, len(words)) if not covered[j]), len(words))
         content = [w for w in words[k:end] if w not in LITTLE_WORDS and w not in named]
-        if len(content) >= LIFT_CONTENT and not all(w[:LIFT_STEM] in held for w in content):
+        unheld = [w for w in content if w[:LIFT_STEM] not in held]
+        beside = any(w[:LIFT_STEM] in held and w not in TOOL_PURPOSES for w in content)
+        if len(content) >= LIFT_CONTENT and unheld and not (beside and set(unheld) <= TOOL_PURPOSES):
             return " ".join(words[k:end])
         k = end
     return ""

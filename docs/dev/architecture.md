@@ -1119,7 +1119,10 @@ runs: tests use `tests/support/fake_claude/`.
   (5) letters) in the writer's facts, is a claim about the person's work (`checks.LIFTED_SAID`). A sentence
   about the employer or the role (`drafts.about_employer`: "you", "your", "this role", the employer's name
   or the job title) may use them. "low-latency systems" and "AI agents for customer support" became the
-  person's claims in sentences mostly their own (2026-11-08).
+  person's claims in sentences mostly their own (2026-11-08). Words for what a tool is for
+  (`drafts.TOOL_PURPOSES`, such as "version control" and "unit testing") count as held beside a word the
+  facts hold, as "Git for version control" was listed though the facts named Git (2026-11-19); with no such
+  word beside them they are the advert's.
 - `writing/counts.py`: `miscounted(draft, facts)` lists each sentence of a draft whose number counts
   something the facts do not count that way, or that no fact holds as a word ("the past four years"); the
   rule is under the one check above.

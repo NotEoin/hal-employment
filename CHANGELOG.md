@@ -19,6 +19,11 @@ What changed in each version, in plain words.
   Such a sentence is rewritten, or listed under **Check before sending**. Marks, years and the length you
   asked for are never listed. The check thinks a little longer, at most about 14 seconds an application.
 
+- **Fewer false alarms about the advert's words.** "My projects use Git for version control" was listed
+  under **Check before sending** as a phrase taken from the advert, though your record names Git. Words
+  for what a tool is for, such as "version control" or "unit testing", now count as yours when they sit
+  beside a tool your record names.
+
 ### Fixed
 
 - **The job's own name in your documents.** A letter could say it was applying for "Trainee DevOps Engineer

@@ -240,6 +240,17 @@ class Lifted(unittest.TestCase):
                                        TRADING_NAMES, own), "")
         self.assertEqual(drafts.lifted("I care about the tests I write.", TRADING, "", TRADING_NAMES), "")
 
+    def test_what_a_tool_you_used_is_for_is_never_the_adverts_phrase(self):
+        # "Git for version control" was listed as taken from the advert, though the facts named Git (2026-11-19)
+        advert = "You will use Git for version control and know unit testing and continuous integration."
+        said = "Quill keeps its code in Git for version control."
+        self.assertEqual(drafts.lifted(said, advert, "", TRADING_NAMES, "Quill: Python, Git"), "")
+        self.assertEqual(drafts.lifted(said, advert, "", TRADING_NAMES, "Quill: Python"), "git for version control",
+                         "a tool the facts do not hold is still the advert's")
+        self.assertEqual(drafts.lifted("I know unit testing and continuous integration.", advert, "", TRADING_NAMES,
+                                       "Quill: Python, Git"), "know unit testing and continuous integration",
+                         "what tools are for, with no tool of yours, is still the advert's")
+
     def test_a_sentence_about_the_employer_may_use_the_adverts_words(self):
         self.assertTrue(drafts.about_employer("I would like to help your traders with low-latency systems.",
                                               TRADING_NAMES))
