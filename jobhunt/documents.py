@@ -31,6 +31,7 @@ from jobhunt.ai import gpu
 from jobhunt.core import naming, settings
 from jobhunt.cvstudio import cv, tailor
 from jobhunt.docs import folders
+from jobhunt.writing import titles
 
 WRITTEN_FROM_PREFIX = "docs_written_from:"
 SECTION = re.compile(r"^## (.+?)\n(.*?)(?=^## |\Z)", re.S | re.M)
@@ -261,7 +262,8 @@ def render(job, docs: dict, out: Path | None = None) -> dict:
     body = _ascii(docs.get("letter", ""))
     if body.strip():
         target = d / naming.file_name("letter")
-        letter.render(body, target, [f"{job['company']} recruitment team"], f"Application: {_ascii(job['title'])}",
+        subject = f"Application: {_ascii(titles.of_job(job))}"
+        letter.render(body, target, [f"{job['company']} recruitment team"], subject,
                       cv_sent=sent)   # the letter's header repeats the CV sent with it
         made["letter"] = str(target)
     return made

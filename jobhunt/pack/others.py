@@ -39,6 +39,7 @@ from jobhunt.writing import (
     relocation,
     repeats,
     stage,
+    titles,
 )
 from jobhunt.writing import plan as planning
 
@@ -121,7 +122,7 @@ def message_opening(brief: Brief) -> opening.Opening:
     the advert's first hiring contact (`hiring_contacts`)."""
     contacts = hiring_contacts(brief.analysis, _job_text(brief.job))
     name = str(brief.who.get("name") or "")
-    return opening.Opening.of("" if name == SOMEONE else name, stage.current(), brief.job["title"],
+    return opening.Opening.of("" if name == SOMEONE else name, stage.current(), titles.of_job(brief.job),
                               contacts[0]["name"] if contacts else "")
 
 

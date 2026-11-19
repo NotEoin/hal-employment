@@ -1892,6 +1892,21 @@ class Advert(unittest.TestCase):
             pack.build(a.con, job["id"], use_web=False)
         self.assertIn("Requirements:\n- Keep projects on time and track budgets.", writer.asked("fit")[0]["user"])
 
+    def test_the_drafts_and_the_pack_call_the_job_by_its_title_without_the_boards_padding(self):
+        """Regression: a letter said it was applying for "Trainee DevOps Engineer | No experience needed (Ref:
+        7501)", the advert's raw title (owner's trial, 2026-11-19)."""
+        raw = "Project Coordinator | No experience needed (Ref: 7501)"
+        with as_applicant(people.CHANGER) as a:
+            job = add_job(a.con, "career_changer")
+            a.con.execute("UPDATE jobs SET title = ? WHERE id = ?", (raw, job["id"]))
+            a.con.commit()
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        asked = "\n".join(e["user"] for e in a.writer.log if e["id"] in ("letter", "message", "answers"))
+        self.assertNotIn("7501", asked.split("<<<ADVERT", 1)[0], "the advert itself is the employer's own words")
+        self.assertIn("Project Coordinator", asked)
+        self.assertTrue(md.startswith("# Harbourside Housing: Project Coordinator\n"))
+        self.assertIn("applying for the Project Coordinator role.", section(md, "Message to the hiring manager"))
+
     def test_the_letter_greets_the_person_the_advert_names(self):
         # the letter said "Dear Hiring Team" while the message beside it greeted the named contact (2026-10-23)
         writer = reading(contacts=["Ada Penhallow, Head of Collections"])

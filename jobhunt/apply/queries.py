@@ -12,6 +12,7 @@ from jobhunt import browser, db, documents, tasks
 from jobhunt.apply import rewrite
 from jobhunt.core import clock, settings
 from jobhunt.core.runner import ACTIONS, ACTIVE, checkpoint
+from jobhunt.writing import titles
 
 log = logging.getLogger(__name__)
 
@@ -300,12 +301,12 @@ def board(con) -> dict:
                             ORDER BY a.number IS NULL, a.number DESC, j.id""").fetchall():
         col = column_of(r["status"], r["stage"])
         if col is None:
-            closed.append({"id": r["id"], "number": r["number"], "title": r["title"], "org": r["company"],
+            closed.append({"id": r["id"], "number": r["number"], "title": titles.of_job(r), "org": r["company"],
                            "why": _closed_why(con, r)})
             continue
         nxt, tone, note = _card_words(con, r, col)
         busy = _busy(r["id"])
-        columns[col].append({"id": r["id"], "number": r["number"], "org": r["company"], "title": r["title"],
+        columns[col].append({"id": r["id"], "number": r["number"], "org": r["company"], "title": titles.of_job(r),
                              "next": nxt, "tone": tone, "note": note, "hal_busy": busy,
                              "approvable": col == "ready" and not busy and _has_documents(r),
                              "remakeable": col == "ready" and not busy and not _has_documents(r)
@@ -341,7 +342,7 @@ def nav(con, job_id: str) -> dict:
 def job_card(r) -> dict:
     """The parts of a JobCard the application page shows; the Jobs pages build the full card."""
     keys = r.keys()
-    return {"id": r["id"], "title": r["title"], "org": r["company"], "place": r["location"] or "",
+    return {"id": r["id"], "title": titles.of_job(r), "org": r["company"], "place": r["location"] or "",
             "pay": r["salary"] or "", "closes": r["closes_at"] if "closes_at" in keys else None,
             "url": r["url"], "status": r["status"], "score": r["score"], "source": r["source"]}
 

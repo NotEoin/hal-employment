@@ -6,6 +6,12 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **The job's own name in your documents.** A letter could say it was applying for "Trainee DevOps Engineer
+  | No experience needed (Ref: 7501)", the job board's whole title. Your letter, message, answers, the
+  letter's subject line and the application page now say "Trainee DevOps Engineer": reference numbers,
+  salaries, places and phrases such as "Immediate start" are left out of the title. When Hal is not sure a
+  word is padding, it keeps it.
+
 - **Hal carries on after a busy moment.** After one busy moment, Hal could stop making to-dos from your
   emails and stop preparing applications and looking for contacts ahead of time, until it was restarted.
   It now recovers on its own.

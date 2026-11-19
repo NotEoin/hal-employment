@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 import re
 
-from jobhunt.writing import check, fields
+from jobhunt.writing import check, fields, titles
 
 log = logging.getLogger(__name__)
 
@@ -150,7 +150,7 @@ def critique(con, job) -> dict:
                   "letter": _checker_lines(letter, "letter", sources=(cv_text, advert), spelling=spelling,
                                            cv_text=cv_text, target_words=who.get("letter_words"), allowed=own)
                   if letter else []}
-    persona = (f"Read it as an experienced UK hiring manager for this job: {job['title']} at {job['company']} "
+    persona = (f"Read it as an experienced UK hiring manager for this job: {titles.of_job(job)} at {job['company']} "
                f"({resolved.name}). The candidate is {who.get('career_stage') or 'an applicant'}.")
     reads, note = {}, ""
     try:

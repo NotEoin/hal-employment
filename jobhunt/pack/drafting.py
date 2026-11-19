@@ -8,7 +8,7 @@ from jobhunt.pack.checks import applicant_names
 from jobhunt.pack.fitmap import known_tools
 from jobhunt.pack.reading import Brief, _job_text, _record_part, _requirements, field_of, previous_applications, prompt
 from jobhunt.profile import writing as profile_writing
-from jobhunt.writing import drafts, fields, paragraphs, plain, rank, spelling, stage
+from jobhunt.writing import drafts, fields, paragraphs, plain, rank, spelling, stage, titles
 from jobhunt.writing import plan as planning
 
 log = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ NOTE_PARA = re.compile(r"\(.*\)\Z|(notes?|word count)\b", re.S | re.I)   # a clo
 def _context(brief: Brief, fit: dict, history: str) -> str:
     """The request text every drafted document shares: the job, the evidence and the person's dates."""
     job, analysis = brief.job, brief.analysis
-    return (f"Job: {job['title']} at {job['company']}\nRole summary: {analysis.get('summary', '')}\n"
+    return (f"Job: {titles.of_job(job)} at {job['company']}\nRole summary: {analysis.get('summary', '')}\n"
             + (f"Earlier applications to this employer: {history}. Do not mention them unless asked.\n"
                if history else "") +
             f"{stage.today_lines()}\nMention availability only if the advert's start date is "
@@ -84,12 +84,12 @@ def paragraph_scope(brief: Brief, *, found: list[planning.Story], cards: list[di
     now, advert = stage.current(), _job_text(job)
     company = (f"What the employer does (from the company brief; never copy its words):\n"
                f"{about.strip()[:paragraphs.BRIEF_CHARS]}\n\n") if (about or "").strip() else ""
-    context = (f"The job: {job['title']} at {job['company']}\nThe advert (for what the job is; never copy its "
+    context = (f"The job: {titles.of_job(job)} at {job['company']}\nThe advert (for what the job is; never copy its "
                f"words):\n{advert[:paragraphs.ADVERT_CHARS]}\n\n{company}{stage.today_lines(now)}\n\n"
                + fields.block(field_of(job, who, brief.analysis), kind))
     return paragraphs.Scope(tuple(found), tuple(cards), tuple(known_tools(cards)),
                             f"{advert}\n{about}\n{stage.today_lines(now)}", advert, about,
-                            (job["title"], job["company"]), now, tuple(profile_writing.module_names()),
+                            (titles.of_job(job), job["company"]), now, tuple(profile_writing.module_names()),
                             (brief.facts, brief.kept),
                             tuple(applicant_names(who)), tuple(plain.settings_labels()), who, context.strip(), request,
                             tuple(profile_writing.studied_skills()), _voice(kind), tuple(profile_writing.degrees()))
@@ -110,7 +110,7 @@ def story_ranking(brief: Brief, found: list[planning.Story], cards: list[dict]) 
     """The one AI ranking of the person's work for one job (`writing.rank`), logged with its reasons; [] when it
     gave nothing usable, so the job's words choose the work."""
     job, analysis = brief.job, brief.analysis
-    ranked = rank.make(rank.Job(job["title"], job["company"], str(analysis.get("summary") or ""),
+    ranked = rank.make(rank.Job(titles.of_job(job), job["company"], str(analysis.get("summary") or ""),
                                 tuple(_requirements(analysis)), brief.about or ""), cards, found)
     if ranked:
         log.info("story ranking for job %s: %s", job["id"], rank.said(ranked))

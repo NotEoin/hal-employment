@@ -10,6 +10,7 @@ from jobhunt.core import events
 from jobhunt.pack.hiring import message_to, salutation
 from jobhunt.pack.letter import NOTE_KEYS, NOTES_HEADING
 from jobhunt.pack.reading import Brief, slug
+from jobhunt.writing import titles
 
 PREPARED = "docs.prepared"    # the event the Hal add-on's Applications mirror listens for
 # The pack's last section. It names no command: the Documents page has a button for each.
@@ -57,7 +58,7 @@ def read_letter_notes(job) -> dict:
 def _markdown(brief: Brief, urls, fit, letter, message, answers, pdf, track, flagged, notes) -> str:
     """The pack's Markdown: the job, what to check, the role, the company, the fit map and every draft."""
     job, analysis, about, who = brief.job, brief.analysis, brief.about, brief.who
-    lines = [f"# {job['company']}: {job['title']}", "",
+    lines = [f"# {job['company']}: {titles.of_job(job)}", "",
              f"- Apply: {job['url']}",
              f"- Location: {job['location'] or 'not stated'} | Salary: {job['salary'] or 'not stated'}",
              f"- Tailored CV: `{pdf}`" + (f" (track: {track})" if track else ""),

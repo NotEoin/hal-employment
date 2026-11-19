@@ -43,6 +43,7 @@ from jobhunt.writing import (
     rank,
     relocation,
     stage,
+    titles,
 )
 from jobhunt.writing import plan as planning
 
@@ -93,7 +94,7 @@ def letter_frame(brief: Brief, scope: paragraphs.Scope, pairing: motive.Pairing 
     text) each, which the frame must not retell (`frame.retold`)."""
     name = str(brief.who.get("name") or "")
     now = scope.now or stage.current()
-    return frame.Facts("" if name == SOMEONE else name, opening.described(now), brief.job["title"],
+    return frame.Facts("" if name == SOMEONE else name, opening.described(now), titles.of_job(brief.job),
                        brief.job["company"],
                        pairing, told, now.institution, modules, middle)
 

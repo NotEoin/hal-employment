@@ -872,6 +872,13 @@ runs: tests use `tests/support/fake_claude/`.
   `markdown`. `jobhunt.pack` exports every name of its parts, so callers and the `pack.<name>` references
   below need no submodule. The drafts share one frozen `pack.Brief` (the job, `person`, the advert
   reading, the company brief, the CV facts and the record passages) instead of passing them one by one.
+- A job is called by its title as a person would say it (`writing/titles.py`, `titles.of_job`): every request
+  that writes a document, the message's opening, the letter's subject line, the pack's heading, the
+  recruiter's read, the interview notes and the application page and board use it. `titles.spoken` drops a
+  tail after " | ", and a tail after a dash or comma or in brackets only when all of it is padding (a
+  reference number, a salary, the advert's own location, "Remote" or "Hybrid", or an agency phrase such as
+  "No experience needed"), and puts a title in capitals into title case with its acronyms kept. A letter
+  said it was applying for "Trainee DevOps Engineer | No experience needed (Ref: 7501)" (2026-11-19).
 - `cvstudio.context.build(job=None)` is the one source of every document prompt's placeholders: the person
   (`you.*`, `goal.*`), the CV type's `[documents]` and `[writing]`, `cvdocs.*`, the profile block
   (`profile`, see Profile below) and the person's voice. Job facts are never placeholders, so a prompt
