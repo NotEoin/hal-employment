@@ -29,7 +29,8 @@ What changed in each version, in plain words.
 - **Real page counts.** Hal counts the pages of your CV as it prints in your look, instead of guessing from
   the number of words. After you save in **Edit your CV**, Hal says when the CV runs longer than you asked,
   for example "This CV is now 3 pages. You asked for 2." Your save always stands, and the length check on
-  **Checks** uses the same count. Where no browser can print, Hal says it cannot count the pages.
+  **Checks** uses the same count. Where no browser can print, Hal says it cannot count the pages; when one
+  print fails, Hal tries again a few minutes later.
 
 - **Hal keeps its own changes inside your length.** A change of Hal's is held back only when it would add a
   page and take the CV past the length you chose. When Hal adjusts a CV for a job, it undoes such changes,

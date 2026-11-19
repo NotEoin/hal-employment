@@ -43,24 +43,28 @@ def long_cv(lines: int = FILLER_PER_PAGE * (LONG_PAGES - 1)) -> model.CVDoc:
 
 
 class StandIn:
-    """A printer that counts `FILLER` lines; `fail` makes it fail as a computer with no browser does."""
+    """A printer that counts `FILLER` lines. `fail` makes its prints fail, as a slow or broken browser does,
+    `fail` times (True: always); `none` says this computer has no browser that can print."""
 
-    def __init__(self, fail: bool = False) -> None:
-        self.fail, self.calls = fail, 0
+    def __init__(self, fail: bool | int = False, none: bool = False) -> None:
+        self.fail, self.none, self.calls = fail, none, 0
 
     def __call__(self, html: str, out: Path, expect_name: str, expect_text: list[str]) -> int:
         self.calls += 1
-        if self.fail:
-            raise printer.PrintError("no browser that can print was found")
+        if self.none:
+            raise pagelimit.NoPrinter("no browser that can print was found")
+        if self.fail is True or self.calls <= self.fail:
+            raise printer.PrintError("Playwright's Chromium took longer than 60 seconds")
         return 1 + html.count(FILLER) // FILLER_PER_PAGE
 
 
 @contextlib.contextmanager
-def stand_in(fail: bool = False) -> Iterator[StandIn]:
-    p = StandIn(fail)
+def stand_in(fail: bool | int = False, none: bool = False) -> Iterator[StandIn]:
+    p = StandIn(fail, none)
     # each test starts with no remembered counts: one left by an earlier test hid a count kept under the wrong
     # page (the fresh CV test passed in its class and failed alone, 2026-11-19)
-    with mock.patch.object(pagelimit, "PRINT", p), mock.patch.dict(pagelimit._COUNTED, clear=True):
+    with mock.patch.object(pagelimit, "PRINT", p), mock.patch.dict(pagelimit._FAILURES, clear=True), \
+            mock.patch.dict(pagelimit._COUNTED, clear=True):
         yield p
 
 
@@ -130,13 +134,35 @@ class RealCounts(unittest.TestCase):
             self.assertEqual(pagelimit.state(doc_id)["words"], "", "no limit, no warning")
 
     def test_with_no_browser_the_count_is_not_known_and_said_so(self):
-        with World(), stand_in(fail=True) as p:
+        with World(), stand_in(none=True) as p:
             doc_id = humanities_cv_in_use()
             got = pagelimit.state(doc_id)
             self.assertEqual((got["pages"], got["counted"], got["over"]), (None, False, False))
             self.assertEqual(got["words"], pagelimit.UNKNOWN)
             pagelimit.state(doc_id)
-            self.assertEqual(p.calls, 1, "a page that could not print is not tried again until it changes")
+            self.assertEqual(p.calls, 1, "no browser here is not looked for again on every request")
+
+    def test_a_print_that_failed_once_is_tried_again_later_and_then_counted(self):
+        # one slow browser start marked a version "cannot count" for good (review, 2026-11-19)
+        now = [1000.0]
+        with World(), stand_in(fail=1) as p, mock.patch.object(pagelimit.time, "monotonic", lambda: now[0]):
+            doc_id = humanities_cv_in_use()
+            got = pagelimit.state(doc_id)
+            self.assertEqual((got["pages"], got["words"]), (None, pagelimit.UNKNOWN_FAILED))
+            pagelimit.state(doc_id)
+            self.assertEqual(p.calls, 1, "not printed again on the next request")
+            now[0] += pagelimit.RETRY_S
+            self.assertEqual(pagelimit.state(doc_id)["pages"], LONG_PAGES)
+            self.assertEqual(p.calls, 2)
+
+    def test_a_print_that_keeps_failing_is_tried_a_bounded_number_of_times(self):
+        now = [1000.0]
+        with World(), stand_in(fail=True) as p, mock.patch.object(pagelimit.time, "monotonic", lambda: now[0]):
+            doc_id = humanities_cv_in_use()
+            for _ in range(pagelimit.MAX_TRIES * 2):
+                pagelimit.state(doc_id)
+                now[0] += pagelimit.RETRY_S * pagelimit.MAX_TRIES
+            self.assertEqual(p.calls, pagelimit.MAX_TRIES)
 
     def test_a_test_run_never_starts_a_browser_to_count(self):
         with World(), mock.patch.object(printer, "to_pdf", side_effect=AssertionError("a browser started")):

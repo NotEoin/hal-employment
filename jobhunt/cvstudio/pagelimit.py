@@ -30,6 +30,7 @@ import shutil
 import sqlite3
 import tempfile
 import threading
+import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
@@ -44,7 +45,12 @@ CHOICE_WORDS = {0: "No limit", 1: "One page", 2: "Two pages", 3: "Three pages", 
 OFFERED = (0, 1, 2)             # the card's choices for every CV; longer ones only from a copied type (`choices`)
 OVER = "This CV is {now}{pages} pages. You asked for {limit}."
 UNKNOWN = "Hal cannot count this CV's pages: no browser on this computer can print it."
+UNKNOWN_FAILED = "Hal could not print this CV to count its pages just now. It tries again in a few minutes."
 UNKNOWN_JOB = "Hal could not count the pages of this CV."
+NO_PRINTER, PRINT_FAILED = "no printer", "print failed"     # why a count is not known (`_failed`)
+RETRY_S = 120                   # a failed print is tried again after 2, 4, 6 ... minutes (`_wait_before`)
+MAX_TRIES = 5                   # then not again until Hal restarts: the browser is broken, not slow
+NO_PRINTER_RETRY_S = 3600       # a browser installed meanwhile is found within the hour
 HELD = "Hal undid {n} of its own changes to keep this CV to {limit}. Press Redo to use one anyway."
 HELD_OVER_ALREADY = ("Without Hal's changes your CV is already {alone} pages, more than the {limit} you asked for. "
                      "Hal kept its changes that add no page and undid {n} that would. Press Redo to use one anyway.")
@@ -76,6 +82,7 @@ PRINT: Callable[[str, Path, str, list[str]], int] | None = None
 COUNTED_KEPT = 32
 _COUNTED: dict[str, int] = {}
 _COUNTED_LOCK = threading.Lock()
+_FAILURES: dict[str, tuple[str, int, float]] = {}   # page hash -> (why, prints failed, when: `time.monotonic`)
 
 
 @contextlib.contextmanager
@@ -146,11 +153,52 @@ def _printing_allowed() -> bool:
     return PRINT is not None or os.environ.get(TEST_ENV) != "1" or os.environ.get(REAL_PRINT_ENV) == "1"
 
 
+class NoPrinter(Exception):
+    """No browser on this computer can print (none found, or only snap and flatpak ones)."""
+
+
 def _browser(html: str, out: Path, expect_name: str, expect_text: list[str]) -> int:
-    """Prints with the browser printer only (no simple PDF) and returns the page count."""
+    """Prints with the browser printer only (no simple PDF) and returns the page count; `NoPrinter` when this
+    computer has no browser that can print, `printer.PrintError` when the print itself failed."""
     from jobhunt.cvstudio import printer
 
+    found, why = printer.printers()
+    if not found:
+        raise NoPrinter(why)
     return printer.to_pdf(html, out, expect_name=expect_name, max_pages=0, expect_text=expect_text)["pages"]
+
+
+def _failed(key: str, kind: str) -> None:
+    """Notes a print of page `key` that failed (`NO_PRINTER` or `PRINT_FAILED`), for when to try it again."""
+    with _COUNTED_LOCK:
+        _, tries, _ = _FAILURES.get(key, ("", 0, 0.0))
+        _FAILURES[key] = (kind, tries + 1, time.monotonic())
+        while len(_FAILURES) > COUNTED_KEPT:
+            _FAILURES.pop(next(iter(_FAILURES)))
+
+
+def _wait_before(key: str) -> str | None:
+    """Why page `key` is not printed again yet (`NO_PRINTER`, `PRINT_FAILED`), None when it may be.
+
+    A failed print is tried again after `RETRY_S` times the failures so far, at most `MAX_TRIES` times, and
+    "no browser" after `NO_PRINTER_RETRY_S`, so a page is never printed on every request.
+    """
+    with _COUNTED_LOCK:
+        failed = _FAILURES.get(key)
+    if failed is None:
+        return None
+    kind, tries, at = failed
+    wait = NO_PRINTER_RETRY_S if kind == NO_PRINTER else RETRY_S * tries
+    if kind == PRINT_FAILED and tries >= MAX_TRIES:
+        return kind
+    return kind if time.monotonic() - at < wait else None
+
+
+def why_unknown(key: str) -> str:
+    """The words for a count that is not known: no browser here, or a print that failed (tried again later)."""
+    with _COUNTED_LOCK:
+        failed = _FAILURES.get(key)
+    return UNKNOWN_FAILED if failed is not None and failed[0] == PRINT_FAILED else UNKNOWN
 
 
 def _page(doc: Any, doc_id: str, con: sqlite3.Connection) -> tuple[str, str, str, str]:
@@ -190,8 +238,13 @@ def _print_count(html: str, look_id: str, name: str, first: str) -> int | None:
         out = Path(tmp) / "cv.pdf"
         try:
             pages = (PRINT or _browser)(html, out, name, [first] if first else [])
+        except NoPrinter as e:
+            log.info("no browser here can print the CV to count its pages: %s", e)
+            _failed(_key(html), NO_PRINTER)
+            return None
         except printer.PrintError as e:
             log.info("could not print the CV to count its pages: %s", e)
+            _failed(_key(html), PRINT_FAILED)
             return None
         cached = paths.cache_dir() / "cv-print" / f"{_key(html)}-{look_id}.pdf"
         if out.exists() and not cached.exists():
@@ -240,24 +293,27 @@ def known(version_id: str, con: sqlite3.Connection | None = None) -> tuple[int |
         v = store.version(version_id, con=c)
         html, _, _, _ = _page(store.get(version_id, con=c), v["doc_id"], c)
         row = c.execute("SELECT pages, pages_key FROM cv_versions WHERE id = ?", (version_id,)).fetchone()
-    if row is None or row["pages_key"] != _key(html):
+    if row is None or row["pages_key"] != _key(html) or row["pages"] is None:
         return None, False
     return row["pages"], True
 
 
 def measure(version_id: str, con: sqlite3.Connection | None = None) -> int | None:
-    """The version's page count, printed once per printed page and kept with the version; None when no
-    browser can print it."""
+    """The version's page count, printed once per printed page and kept with the version; None when it is
+    not known. A print that failed is not kept: it is tried again later (`_wait_before`), so one slow browser
+    start never leaves a version uncounted for good."""
     with _conn(con) as c:
         v = store.version(version_id, con=c)
         html, look_id, name, first = _page(store.get(version_id, con=c), v["doc_id"], c)
         key = _key(html)
         row = c.execute("SELECT pages, pages_key FROM cv_versions WHERE id = ?", (version_id,)).fetchone()
-    if row is not None and row["pages_key"] == key:
+    if row is not None and row["pages_key"] == key and row["pages"] is not None:
         return row["pages"]
-    if not _printing_allowed():
+    if not _printing_allowed() or _wait_before(key):
         return None
     pages = _print_count(html, look_id, name, first)
+    if pages is None:
+        return None
     with _conn(con) as c, store.writing(c):
         c.execute("UPDATE cv_versions SET pages = ?, pages_key = ? WHERE id = ?", (pages, key, version_id))
     log.info("CV version %s prints on %s pages", version_id, pages)
@@ -277,9 +333,12 @@ def state(doc_id: str | None = None, con: sqlite3.Connection | None = None, *, c
         vid = store.current(c, doc_id)[0]
         rule = type_rule(store.doc(c, doc_id)["id"], c)
         pages = measure(vid, c) if count else known(vid, c)[0]
+        unknown = why_unknown(_key(_page(store.get(vid, con=c), store.version(vid, con=c)["doc_id"], c)[0]))
+    said = words(pages, limit, now=now)
     return {"limit": limit, "chosen": chosen, "choices": choices(limit, rule),
             "pages": pages, "counted": pages is not None,
-            "over": pages is not None and bool(limit) and pages > limit, "words": words(pages, limit, now=now)}
+            "over": pages is not None and bool(limit) and pages > limit,
+            "words": unknown if pages is None and limit else said}
 
 
 # ------------------------------------------------------------------------------------------ a job's CV

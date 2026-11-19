@@ -601,7 +601,10 @@ runs: tests use `tests/support/fake_claude/`.
 - Page counts are real: `pagelimit.measure(version_id)` prints the version as Download PDF does (the CV's
   stored type, look, layout and contact details) with the browser printer only, never the simple PDF, and
   keeps the count in `cv_versions.pages` keyed by the printed page's hash (`pages_key`), so each version and
-  look prints once; a print that fails keeps NULL with the key, so it is not retried until the page changes.
+  look prints once. A failed print is not stored: `pagelimit.NoPrinter` (no browser here, from
+  `printer.printers`) is looked for again after an hour, and a print that failed (`printer.PrintError`: a
+  timeout, a slow start) after `RETRY_S` times the failures, at most `MAX_TRIES` times per page and process
+  (`_wait_before`, in memory); the Length card says which (`UNKNOWN`, `UNKNOWN_FAILED`).
   A draft counted before it is saved (`pagelimit.count_doc`, while Hal weighs a suggestion, Accept all or a
   fresh CV) is remembered by its page's hash, and `pagelimit.keep` stores it with the version saved from it.
   Every page is printed with the layout of the document printed (`store.layout_of`), never the version in

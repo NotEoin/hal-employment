@@ -333,7 +333,8 @@ When the CV runs longer than you asked, Hal tells you, for example "This CV is n
 and never stops a save: what to shorten is your choice. The length check on **Checks** uses the same count.
 
 To count the pages Hal prints the CV with a browser, which takes a second or so, once for each version. On a
-computer where no browser can print, Hal says it cannot count the pages, rather than guess.
+computer where no browser can print, Hal says it cannot count the pages, rather than guess. When a print
+fails, for example because the browser was slow to start, Hal says so and tries again a few minutes later.
 
 Hal keeps its own changes inside the length you chose. A change of Hal's is held back only when it would add
 a page and take the CV past that length; a CV that is already longer keeps every change that adds no page.
