@@ -18,7 +18,7 @@ from support.ui import AppPage, chromium, skip_unless_browser
 from test_cv_import import lay_out
 
 from jobhunt import db
-from jobhunt.cvstudio import cv, import_v1, model, store, tailor
+from jobhunt.cvstudio import cv, import_v1, inline, model, store, tailor
 from jobhunt.profile import store as profile_store
 
 JOB = "Lab assistant"
@@ -130,6 +130,32 @@ class EditCv(unittest.TestCase):
                     p.page.locator("button:has-text('Save changes')").click()
                     p.page.wait_for_selector("text=Saved your CV as version")
                     self.assertEqual(entry(store.current()[1], JOB).bullets[0].text, linked)
+                self.assertEqual(p.errors, [])
+
+    def test_bold_and_italic_over_marks_already_there_never_leave_stray_stars_at_both_sizes(self) -> None:
+        # regression: the buttons looked only at the stars beside the selection, so "**big data**" with "data"
+        # selected and Bold pressed became "**big **data****", which the CV printed with its stars (review)
+        site = "[site](https://example.org/s)"
+        cases = (("**big data**", "data", "Bold", "**big** data", "data"),
+                 ("**big data**", "big", "Bold", "big **data**", "big"),
+                 ("**a** and **b**", "a** and **b", "Bold", "**a and b**", "a and b"),
+                 ("**a** and **b**", "a** and **b", "Italic", "***a** and **b***", "a** and **b"),
+                 (f"see {site} now", "see [site", "Italic", "*see* [*site*](https://example.org/s) now",
+                  "see* [*site"),
+                 (f"see {site} now", "ee [si", "Bold", "**see** [**site**](https://example.org/s) now",
+                  "see** [**site"))
+        for size, scheme in (("wide", "light"), ("narrow", "dark")):
+            with self.subTest(size=size):
+                p = self.page(size, scheme)
+                line = p.page.locator(f"textarea[aria-label='Line 1 of {JOB}']")
+                for typed, chosen, button, want, still in cases:
+                    with self.subTest(typed=typed, chosen=chosen, button=button):
+                        line.fill(typed)
+                        select(line, chosen)
+                        p.page.locator(f"button[aria-label='{button}, line 1 of {JOB}']").click()
+                        self.assertEqual(now(line), (want, still))
+                        self.assertEqual(inline.plain(want), inline.plain(typed))
+                        self.assertNotIn("*", inline.plain(want))
                 self.assertEqual(p.errors, [])
 
     def test_a_card_from_your_record_is_added_with_its_lines(self) -> None:

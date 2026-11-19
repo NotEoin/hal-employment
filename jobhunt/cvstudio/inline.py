@@ -263,17 +263,27 @@ def _escaped(text: str, escape: bool) -> str:
     return "".join("\\" + ch if ch in ESCAPABLE else ch for ch in text) if escape else text
 
 
+def _lasts(rs: list[Run], k: int, style: str) -> int:
+    """How many runs from the `k`th on are bold ("b") or italic ("i") without a break."""
+    n = 0
+    while k + n < len(rs) and (rs[k + n].bold if style == "b" else rs[k + n].italic):
+        n += 1
+    return n
+
+
 def _write_styled(rs: list[Run], escape: bool) -> str:
     """Runs that share one link as text with bold and italic marks, closing and reopening as styles change."""
     marks = {"b": "**", "i": "*"}
     out: list[str] = []
     stack: list[str] = []
-    for r in [*rs, Run("")]:
+    every = [*rs, Run("")]
+    for k, r in enumerate(every):
         want = {x for x, on in (("b", r.bold), ("i", r.italic)) if on}
         keep = next((n for n, x in enumerate(stack) if x not in want), len(stack))
         while len(stack) > keep:
             out.append(marks[stack.pop()])
-        for x in ("b", "i"):
+        # the style that lasts longer opens first, so it closes last: "***a** and **b***", not stray stars
+        for x in sorted(("b", "i"), key=lambda x: -_lasts(every, k, x)):
             if x in want and x not in stack:
                 stack.append(x)
                 out.append(marks[x])

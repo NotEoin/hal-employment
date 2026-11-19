@@ -3,50 +3,55 @@
    Link buttons (and Ctrl B, Ctrl I), shown while the box or its buttons have focus, so a page of many lines
    is not a page of buttons.
 
-   The marks go round whole words, with no spaces just inside them, because the server only counts a pair that
-   hugs words: a selection is trimmed of spaces and widened to the words it touches. Pressing Bold on words
-   that are already bold takes the marks away. After a change the same words stay selected. The buttons keep
+   A button works on the line's words, not its characters: the line is read into words with their styles
+   (cv/marks.js `chars`, the rules of `inline.py`), the selection is trimmed of spaces and widened to the words
+   it touches, Bold makes them all bold (or takes it away when they all already are), and the whole line is
+   written again in canonical form (`toText`), so marks already in the line never end up as stray stars.
+   After a change the same words stay selected. The buttons keep
    the focus in the text box when clicked, so the selection stays in view. */
 import { html, useState } from "../core/html.js";
 import { Icon } from "../ui/icons.js";
-import { safeLink } from "./marks.js";
+import { chars, runsOf, safeLink, toText } from "./marks.js";
 
-const MARKS = { bold: 2, italic: 1 };   // stars on each side
 const WORD = /[\p{L}\p{N}]/u;
 const SPACE = /\s/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SCHEME = /^(https?:\/\/|mailto:)/i;
 
-/** The selection [start, end] trimmed of spaces and stars at its edges and widened to whole words. */
-export function wordsAt(text, start, end) {
-  while (start < end && (SPACE.test(text[start]) || text[start] === "*")) start++;
-  while (end > start && (SPACE.test(text[end - 1]) || text[end - 1] === "*")) end--;
-  while (start > 0 && WORD.test(text[start - 1])) start--;
-  while (end < text.length && WORD.test(text[end])) end++;
+/** The selection [start, end] of `words` trimmed of spaces at its edges and widened to whole words. */
+export function wordsAt(words, start, end) {
+  while (start < end && SPACE.test(words[start])) start++;
+  while (end > start && SPACE.test(words[end - 1])) end--;
+  while (start > 0 && WORD.test(words[start - 1])) start--;
+  while (end < words.length && WORD.test(words[end])) end++;
   return [start, end];
 }
 
-function starsAround(text, start, end) {
-  let before = 0, after = 0;
-  while (start - before > 0 && text[start - before - 1] === "*") before++;
-  while (end + after < text.length && text[end + after] === "*") after++;
-  return Math.min(before, after);
+/* A selection of the typed line as a range of its words' characters (`chars`): every character it touches. */
+function wordRange(cs, start, end) {
+  let from = cs.findIndex(c => c.to > start);
+  if (from < 0) from = cs.length;
+  const to = Math.max(from, cs.filter(c => c.from < end).length);
+  return wordsAt(cs.map(c => c.ch).join(""), from, to);
 }
 
-/** The text with the words at [start, end] made bold or italic, or that taken away when they already are:
-    { text, start, end }, where start and end select the same words afterwards. */
+/* The characters written back as a line in canonical form, with the words `from` to `to` selected in it. */
+function written(cs, from, to) {
+  const text = toText(runsOf(cs));
+  const back = chars(text);
+  return { text, start: from < back.length ? back[from].from : text.length,
+    end: to > from && to <= back.length ? back[to - 1].to : text.length };
+}
+
+/** The line with the words at [start, end] made bold or italic, or that taken away when they all already are:
+    { text, start, end }, where start and end select the same words afterwards. It works on the line's words
+    and their styles, then writes the whole line again, so marks already there never end up as stray stars. */
 export function toggleMark(text, start, end, kind) {
-  const n = MARKS[kind];
-  [start, end] = wordsAt(text, start, end);
-  const around = starsAround(text, start, end);
-  const has = kind === "bold" ? around >= 2 : around === 1 || around === 3;
-  if (has) {
-    return { text: text.slice(0, start - n) + text.slice(start, end) + text.slice(end + n), start: start - n,
-      end: end - n };
-  }
-  const mark = "*".repeat(n);
-  return { text: text.slice(0, start) + mark + text.slice(start, end) + mark + text.slice(end), start: start + n,
-    end: end + n };
+  const cs = chars(text);
+  const [from, to] = wordRange(cs, start, end);
+  if (from >= to) return { text, start, end };
+  const on = !cs.slice(from, to).every(c => c[kind]);
+  return written(cs.map((c, k) => (k >= from && k < to ? { ...c, [kind]: on } : c)), from, to);
 }
 
 /** The address as a link the CV keeps: https:// added to a bare address, mailto: to an email; "" when it
@@ -57,12 +62,14 @@ export function linkAddress(typed) {
   return safeLink(SCHEME.test(url) ? url : EMAIL.test(url) ? "mailto:" + url : "https://" + url);
 }
 
-/** The text with the words at [start, end] made a link to `url`: { text, start, end } as for toggleMark. */
+/** The line with the words at [start, end] made a link to `url` (with no words selected, the address's own
+    words are added there): { text, start, end } as for toggleMark. */
 export function addLink(text, start, end, url) {
-  [start, end] = wordsAt(text, start, end);
-  const words = text.slice(start, end) || url.replace(SCHEME, "");
-  const out = text.slice(0, start) + "[" + words + "](" + url + ")" + text.slice(end);
-  return { text: out, start: start + 1, end: start + 1 + words.length };
+  const cs = chars(text);
+  const [from, to] = wordRange(cs, start, end);
+  if (from < to) return written(cs.map((c, k) => (k >= from && k < to ? { ...c, link: url } : c)), from, to);
+  const added = [...url.replace(SCHEME, "")].map(ch => ({ ch, bold: false, italic: false, link: url }));
+  return written([...cs.slice(0, from), ...added, ...cs.slice(from)], from, from + added.length);
 }
 
 function selectSoon(id, start, end) {

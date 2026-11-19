@@ -20,7 +20,8 @@ changes**, and each save is a new version, so you can always go back.
 To make words bold or italic, or a link, in a line, a paragraph or your profile:
 
 1. Click in the box and select the words. **Bold**, **Italic** and **Link** appear under it.
-2. Press **Bold** or **Italic**, or press Ctrl+B or Ctrl+I (Cmd on a Mac). Press it again to take it off.
+2. Press **Bold** or **Italic**, or press Ctrl+B or Ctrl+I (Cmd on a Mac). If only some of the words were
+   bold, they all become bold; press it again to take it off.
 3. For a link, press **Link**, type the web or email address in **Link to**, and press **Add link**.
 
 The box shows the marks Hal keeps: two stars for bold (`**Python**`), one star for italic (`*Hamlet*`), and

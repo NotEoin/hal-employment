@@ -107,6 +107,12 @@ class Writing(unittest.TestCase):
         self.assertEqual(out, r"\*Note\*")
         self.assertEqual(runs(out), [Run("*Note*")])
 
+    def test_a_style_that_lasts_longer_is_opened_first_so_both_read_back(self) -> None:
+        # regression: "a" and "b" bold inside one italic stretch were written as stars that read back plain
+        rs = [Run("a", True, True), Run(" and ", italic=True), Run("b", True, True)]
+        self.assertEqual(to_text(rs), "***a** and **b***")
+        self.assertEqual(runs(to_text(rs)), rs)
+
     def test_a_style_change_inside_a_word_is_dropped_not_stored_as_stars(self) -> None:
         self.assertEqual(to_text([Run("Py"), Run("thon", bold=True)]), "Python")
 
