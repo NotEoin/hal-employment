@@ -5,8 +5,15 @@ Hal is switched off and the Hal add-on respects that. Reading the record folder 
 `record.sync` job, which calls `sync_record` every `schedule.record_every` minutes; that is also when files
 put in the drop folder (`record.drop_folder`) are sorted: Hal proposes a place for each, for the person to accept
 on Your record, and never reads them straight in (`sections.sorting.actions.queue_inbox`).
+
+The worker keeps one connection for ever, so each round must leave it clean: Python's sqlite3 opens a
+transaction before a write and keeps it when the statement fails, and the next round's read then joins it and
+holds its snapshot. After one busy moment every write of every later round failed as "database is locked"
+(SQLITE_BUSY_SNAPSHOT, which the busy timeout never retries) until Hal restarted (seen 2026-11-19). So the
+connection is rolled back after every round, and replaced when even that fails.
 """
 import logging
+import sqlite3
 import time
 
 from jobhunt import db, record, tasks
@@ -58,6 +65,20 @@ def sync_record() -> dict:
     return out
 
 
+def _clean(con):
+    """Ends any transaction a round left open and returns the connection; a fresh one when that fails."""
+    try:
+        con.rollback()
+        return con
+    except sqlite3.Error:
+        log.exception("the worker could not roll back; it opens a new connection")
+        try:
+            con.close()
+        except sqlite3.Error:
+            log.debug("the old connection would not close either", exc_info=True)
+        return db.connect()
+
+
 def worker() -> None:
     """Keeps the queue full and the to-do list current, forever."""
     con = db.connect()
@@ -67,5 +88,6 @@ def worker() -> None:
             worked = step_once(con)
         except Exception:  # the worker must outlive any one failure
             log.exception("the worker's round failed")
+        con = _clean(con)  # also after a good round, so no read snapshot outlives it
         if not worked:
             time.sleep(WORKER_PAUSE)

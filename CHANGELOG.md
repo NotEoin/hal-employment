@@ -2,6 +2,13 @@
 
 What changed in each version, in plain words.
 
+## Unreleased
+
+### Fixed
+
+- After one busy moment, Hal could stop making to-dos from your emails and stop preparing applications
+  and looking for contacts ahead of time, until it was restarted. It now recovers on its own.
+
 ## 2.3.3 (2026-11-19)
 
 ### What's new
