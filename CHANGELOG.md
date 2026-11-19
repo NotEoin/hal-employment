@@ -12,6 +12,11 @@ What changed in each version, in plain words.
   counts, and **Make it fit** tightens Hal's copy a little when it runs longer. The look is kept with your
   data: rename it, use it for any CV, or delete it once no CV uses it.
 
+- **Documents written sooner.** Hal now writes one application's documents at a time, so each one is
+  ready sooner instead of all of them finishing late together. **How many things Hal's AI works on at
+  once** is a plain setting in **Settings**, **Hal's brain**, and starts at 1 on a new install; a number you
+  chose before is kept.
+
 ### Fixed
 
 - **One dissertation per course.** Pressing **This is my dissertation** on two pieces of coursework one

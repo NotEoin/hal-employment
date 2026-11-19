@@ -255,7 +255,7 @@ class Defaults(unittest.TestCase):
         self.assertEqual(registry.default_of(REGISTRY["scoring.prepare_ahead"], fake_get({"ai.provider": "local"})), 5)
         claude = fake_get({"ai.provider": "claude_cli"})
         self.assertEqual(registry.default_of(REGISTRY["scoring.prepare_ahead"], claude), 0)
-        self.assertEqual(registry.default_of(REGISTRY["ai.parallel"], claude), 2)
+        self.assertEqual(registry.default_of(REGISTRY["ai.parallel"], claude), 1, "one at a time, for every AI")
         self.assertEqual(registry.default_of(REGISTRY["ai.model.writer"], claude), "sonnet")
 
     def test_the_suggested_ai_is_local_only_when_ollama_answers_on_linux(self):

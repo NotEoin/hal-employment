@@ -230,13 +230,14 @@ class Gateway(InHome):
         _Gateway.slots = 2
         self.assertEqual((be.slots("made-up-model"), be.slots("made-up-other")), (2, 0))
 
-    def test_hal_keeps_as_many_calls_with_the_gateway_as_its_model_serves(self):
-        """Hal read the record one file at a time while Hal's writer served two at once."""
+    def test_hal_keeps_as_many_calls_with_the_gateway_as_its_model_serves_and_the_setting_allows(self):
+        """Four calls at once on a model that serves one made every application finish late (2026-11-19), so
+        the person's setting is the most, and the gateway's slots the most beside it."""
         settings.set("ai.provider", "hal", by="you")   # the checker model is then the gateway's, not Claude's
         settings.set("ai.parallel", 1, by="you")
         _Gateway.slots = 2
         with ai.use(GatewayBackend(self.url, self.token)):
-            self.assertEqual(ai.at_once("checker"), 2)
+            self.assertEqual(ai.at_once("checker"), 1, "the setting says one at a time")
         settings.set("ai.parallel", 4, by="you")
         with ai.use(GatewayBackend(self.url, self.token)):
             self.assertEqual(ai.at_once("checker"), 2, "four calls on two slots timed out queueing (2026-11-12)")

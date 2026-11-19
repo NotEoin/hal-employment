@@ -25,8 +25,10 @@ PROVIDER_HELP = ("This computer needs a strong graphics card. Claude uses your o
 ALLOWANCE_HELP = ("Hal shares your Claude Pro allowance with your own chats. It spends it in this order: things "
                   "you just asked for, documents for jobs you chose, then background checks. Background checks "
                   "pause when Claude says you have reached a limit, and start again when it resets.")
+PARALLEL_HELP = ("1 writes one application's documents at a time, so each one is ready sooner. Choose more only if "
+                 "your AI can answer several requests at once; Hal never sends more than it says it can take.")
 MAX_DAILY_CAP = 100
-MAX_PARALLEL = 4
+MAX_PARALLEL = 4           # the runner's document threads (`core.runner.DOCUMENT_THREADS`) are this many
 AI_TIMEOUT = 300   # seconds per answer; a local model writing a letter can take minutes
 
 
@@ -105,8 +107,8 @@ register(
             help="Hal does no background AI work in these hours."),
     Setting("ai.local_only", "bool", False, "Never use online AI", order=130,
             help="Keeps everything on this computer. Needs \"Hal's local model\" or \"This computer\"."),
-    Setting("ai.parallel", "int", 2, "AI calls at once", advanced=True, min=1, max=MAX_PARALLEL, order=140,
-            default_fn=lambda get: 1 if uses_local_ai(get) else 2),
+    Setting("ai.parallel", "int", 1, "How many things Hal's AI works on at once", min=1, max=MAX_PARALLEL,
+            order=140, help=PARALLEL_HELP),
     Setting("ai.timeout", "int", AI_TIMEOUT, "Seconds to wait for an answer", advanced=True, min=10, order=150),
     Setting("ai.gpu_gate", "bool", True, "Wait while the graphics card is busy", advanced=True,
             visible_if="ai.provider == 'local'", order=160),

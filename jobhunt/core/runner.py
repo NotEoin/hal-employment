@@ -3,7 +3,9 @@
 An action kind is registered with `@action(kind, area=, label=, why=)`; `start(kind, ...)` writes an
 `actions` row and its Activity row (`running = 1`) and runs `fn(ctx, **params)` on a thread pool (`_pool`):
 the now pool for priority 0 and for on-screen work at priority 1, the record pool for record updates the person
-started (priorities 0 and 1), the user pool for the rest of priority 1 and the background pool for 2.
+started (priorities 0 and 1), the documents pool for document writes at priority 1, `ai.parallel` of them at
+once in the order they were queued (`_DOC_GATE`), the user pool for the rest of priority 1 and the background
+pool for 2.
 `run(kind, ...)` does the same in the calling thread, for the command line and scheduled children. Each kind
 also has a work class (`core.work`, the kind's `work_class`), entered while it runs, which orders its AI calls
 in the AI's queue. Steps go to `action_steps`; the server's `DbPoller` turns those rows into `step` events, so
@@ -64,6 +66,12 @@ BACKGROUND_THREADS = 2       # priority 2
 # queued application's documents in the user pool, and a bulk read behind scheduled jobs in the background pool
 # (2026-11-18). Two, as two quick uploads are read side by side and the bulk read runs one at a time.
 RECORD_THREADS = 2
+# Document writes the person queued have threads of their own and run `ai.parallel` at a time (`_DOC_GATE`): four
+# at once on a model that answers one request at a time interleaved their calls, so every application finished
+# late, 17 minutes running each on average after 14 queued (2026-11-19). The threads are the setting's most, so
+# a raised setting takes effect at once; the ones waiting their turn hold no thread another action needs.
+DOCUMENT_THREADS = 4          # `ai.parallel`'s most (`core/settings/catalog/ai.py`, MAX_PARALLEL)
+GATE_POLL_S = 1.0             # how often a waiting document write looks for a stop or a changed setting
 JOB_THREADS = 6              # the driver's actions mostly wait on the browser or the model
 IDLE_POLL_S = 0.5            # `idle()` looks again this often even unwoken, so a missed wake-up costs little
 STOP_POLL_S = 1.0            # how often a checkpoint asks the database whether another process said stop
@@ -114,6 +122,7 @@ _NOW = ThreadPoolExecutor(max_workers=NOW_THREADS, thread_name_prefix="action-no
 _USER = ThreadPoolExecutor(max_workers=USER_THREADS, thread_name_prefix="action-user")
 _BACKGROUND = ThreadPoolExecutor(max_workers=BACKGROUND_THREADS, thread_name_prefix="action-bg")
 _RECORD = ThreadPoolExecutor(max_workers=RECORD_THREADS, thread_name_prefix="action-record")
+_DOCUMENTS = ThreadPoolExecutor(max_workers=DOCUMENT_THREADS, thread_name_prefix="action-docs")
 BACKGROUND = 2                 # the priority of background work
 _PRIORITY: contextvars.ContextVar[int] = contextvars.ContextVar("hal_action_priority", default=0)
 _CURRENT: contextvars.ContextVar[Ctx | None] = contextvars.ContextVar("hal_action", default=None)
@@ -762,10 +771,81 @@ def _bound(kind: ActionKind, params: dict) -> Callable[[Ctx], Any]:
     return lambda ctx: fn(ctx, **clean)
 
 
+def _parallel() -> int:
+    """`ai.parallel`: how many document writes run at once (at least 1)."""
+    from jobhunt.core import settings
+
+    return max(1, int(settings.get("ai.parallel")))
+
+
+class _Gate:
+    """At most `limit()` actions at once, in the order they were queued; one stopped while it waits leaves."""
+
+    def __init__(self, limit: Callable[[], int]) -> None:
+        self._cond = threading.Condition()
+        self._limit = limit
+        self._running = 0
+        self._queue: list[_Live] = []
+
+    def queue(self, live: _Live) -> None:
+        """Puts `live` at the back of the line."""
+        with self._cond:
+            self._queue.append(live)
+
+    def _prune(self) -> None:
+        """Drops stopped or ended actions from the line, so one never holds up those behind it."""
+        self._queue = [q for q in self._queue if not (q.stop.is_set() or q.state in FINAL)]
+
+    def enter(self, live: _Live) -> bool:
+        """Waits for `live`'s turn and takes it: True, or False when it was stopped while it waited."""
+        with self._cond:
+            while True:
+                self._prune()
+                if live not in self._queue:
+                    self._cond.notify_all()
+                    return False
+                if self._queue[0] is live and self._running < self._limit():
+                    self._queue.pop(0)
+                    self._running += 1
+                    self._cond.notify_all()
+                    return True
+                # woken by a leave; the poll also sees a stop or a raised setting, which notify no one here
+                self._cond.wait(GATE_POLL_S)
+
+    def leave(self) -> None:
+        """Gives the turn taken by `enter` back."""
+        with self._cond:
+            self._running -= 1
+            self._cond.notify_all()
+
+
+_DOC_GATE = _Gate(_parallel)
+
+
+def _gated(live: _Live) -> bool:
+    """True for a document write that waits its turn (`_DOC_GATE`): a kind of the documents area in the documents
+    work class (`docs.prepare`), not something the person just pressed (priority 0 never waits behind queued
+    jobs). The area is asked as well because any kind at priority 1 whose first word names no class falls in the
+    documents class (`work.for_kind`)."""
+    return live.kind.area == "documents" and live.kind.work_class == work.DOCUMENTS and live.priority > 0
+
+
+def _execute_gated(live: _Live, fn: Callable[[Ctx], Any], resumed_from: str | None) -> None:
+    """`_execute` once `_DOC_GATE` gives the action its turn; nothing when it was stopped while it waited."""
+    if not _DOC_GATE.enter(live):
+        return
+    try:
+        _execute(live, fn, resumed_from)
+    finally:
+        _DOC_GATE.leave()
+
+
 def _pool(live: _Live) -> ThreadPoolExecutor:
-    """The pool an action of `start` runs on: by its priority, except that the person's record updates have
-    their own and on-screen work at priority 1 joins priority 0's. Background work (the scheduled record sync)
-    stays in the background pool."""
+    """The pool an action of `start` runs on: by its priority, except that queued document writes (`_gated`) and
+    the person's record updates have their own and on-screen work at priority 1 joins priority 0's. Background
+    work (the scheduled record sync) stays in the background pool."""
+    if _gated(live):
+        return _DOCUMENTS
     if live.priority < BACKGROUND and live.kind.work_class == work.RECORD:
         return _RECORD
     if live.priority < BACKGROUND and live.kind.work_class == work.ON_SCREEN:
@@ -786,8 +866,12 @@ def start(kind: str, *, subject: str | None = None, job_id: str | None = None, p
     subject = subject if subject is not None else job_id
     live = _begin(k, subject=subject, job_id=job_id, params=params, why=why, priority=priority, replace=replace,
                   session_id=session_id, helper_id=helper_id, remote=remote)
+    run_it = _execute
+    if _gated(live):
+        _DOC_GATE.queue(live)
+        run_it = _execute_gated
     pool = _pool(live)
-    pool.submit(_execute, live, _bound(k, params), params.get("_carry_on_from"))
+    pool.submit(run_it, live, _bound(k, params), params.get("_carry_on_from"))
     return live.id
 
 

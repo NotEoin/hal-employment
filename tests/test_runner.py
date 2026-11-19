@@ -19,7 +19,7 @@ from pathlib import Path
 import support  # noqa: F401 - puts the run in a temporary home before jobhunt is imported
 
 from jobhunt import db
-from jobhunt.core import paths, runner, work
+from jobhunt.core import paths, runner, settings, work
 
 WAIT_S = 10
 SHORT_S = 0.2   # long enough to see that a held action keeps `idle` waiting
@@ -270,6 +270,55 @@ class Runner(unittest.TestCase):
             runner.start("test.queued_job", subject=f"job-{n}")
         runner.start("test.pressed", subject="pressed")
         self.assertTrue(done.wait(WAIT_S), "the pressed action waited for the queue")
+        release.set()
+
+    def _document_writes(self, n: int, **start):
+        """Starts `n` made-up document writes; returns their ids, the events each sets once it runs, and the event
+        that lets them all end."""
+        release = threading.Event()
+        self.addCleanup(release.set)
+        running = [threading.Event() for _ in range(n)]
+
+        def write(ctx, k: int):
+            running[k].set()
+            release.wait(WAIT_S)
+            return "written"
+        self.kinds.add("test.write", write, area="documents")
+        ids = [runner.start("test.write", subject=f"job-{k}", params={"k": k}, **start) for k in range(n)]
+        return ids, running, release
+
+    def test_document_writes_run_one_at_a_time_in_the_order_queued_by_default(self):
+        """Four at once on a one-request model made every application finish late (2026-11-19)."""
+        ids, running, release = self._document_writes(3)
+        self.assertTrue(running[0].wait(WAIT_S))
+        self.assertFalse(running[1].wait(SHORT_S), "the second waits for the first")
+        runner.flush()
+        self.assertEqual(runner.get(ids[1])["state"], "queued")
+        release.set()
+        for k in range(3):
+            self.assertEqual(runner.wait(ids[k])["state"], "done")
+
+    def test_document_writes_follow_a_raised_setting(self):
+        settings.set("ai.parallel", 2, by="you")
+        _, running, release = self._document_writes(3)
+        self.assertTrue(running[0].wait(WAIT_S) and running[1].wait(WAIT_S), "two run side by side")
+        self.assertFalse(running[2].wait(SHORT_S), "the third waits")
+        release.set()
+
+    def test_a_document_write_stopped_while_it_waits_never_runs_or_holds_up_the_next(self):
+        ids, running, release = self._document_writes(3)
+        self.assertTrue(running[0].wait(WAIT_S))
+        self.assertTrue(runner.stop(ids[1]))
+        release.set()
+        self.assertEqual(runner.wait(ids[2])["state"], "done")
+        self.assertEqual(runner.wait(ids[1])["state"], "stopped")
+        self.assertFalse(running[1].is_set())
+
+    def test_a_document_write_the_person_just_pressed_never_waits_its_turn(self):
+        _, running, release = self._document_writes(1)
+        self.assertTrue(running[0].wait(WAIT_S))
+        pressed = runner.start("test.write", subject="pressed", params={"k": 0}, priority=0)
+        self.assertEqual(runner.wait(pressed, timeout=SHORT_S)["state"], "running")
         release.set()
 
     def test_ai_calls_inside_an_action_add_up_on_its_row(self):

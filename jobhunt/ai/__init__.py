@@ -198,19 +198,21 @@ def model_for(be: Backend, role: str) -> str:
 
 
 def at_once(role: str = "checker") -> int:
-    """How many calls for `role` go to the AI at once: the slots the backend says its model serves (Hal's gateway
-    reports its writer's `parallel`), else `ai.parallel`. More calls than slots only queue at the model, and the
-    wait counts against each call's timeout: four calls on Hal's two-slot writer timed out after 300 s
-    (2026-11-12)."""
+    """How many calls for `role` go to the AI at once: `ai.parallel`, and no more than the slots the backend says
+    its model serves (Hal's gateway reports its model's `parallel`). More calls than slots only queue at the
+    model, and the wait counts against each call's timeout: four calls on Hal's two-slot writer timed out after
+    300 s (2026-11-12). More than one at once on a model that serves one at a time made every application finish
+    late, so the person's setting is the most (2026-11-19)."""
     chosen = max(1, int(_settings().get("ai.parallel")))
     be = backend()
     slots = getattr(be, "slots", None)
     if slots is None:
         return chosen
     try:
-        return int(slots(model_for(be, role))) or chosen
+        served = int(slots(model_for(be, role)))
     except LLMUnavailable:
         return chosen
+    return min(chosen, served) if served > 0 else chosen
 
 
 class _Turns:

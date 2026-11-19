@@ -187,10 +187,16 @@ processes, once a second. Payloads carry ids, never private data.
 - `progress` counts items (files read, pages fetched) in `actions.done_n` and `done_total`, beside the
   steps and without adding one, so a long action shows a bar. The Action shape carries `done_n`,
   `done_total` and `eta_s`: the time per item since the action started, times the items left.
-- Four pools (`runner._pool`): now (6 threads, priority 0 and on-screen work at priority 1), record (2, the
-  record updates the person started, at priority 0 or 1), user (4, the rest of priority 1, such as
-  `docs.prepare`) and background (2, priority 2, which keeps the scheduled `record.sync` and the project
-  refresh). One running action per subject unless `replace=True`.
+- Five pools (`runner._pool`): now (6 threads, priority 0 and on-screen work at priority 1), record (2, the
+  record updates the person started, at priority 0 or 1), documents (4, document writes of the documents
+  area at priority 1, such as `docs.prepare`), user (4, the rest of priority 1) and background (2, priority
+  2, which keeps the scheduled `record.sync` and the project refresh). One running action per subject unless
+  `replace=True`.
+- Document writes run `ai.parallel` at a time (`runner._DOC_GATE`, default 1), in the order they were
+  queued; the rest stay queued, and one stopped while it waits leaves the line. A raised setting is seen
+  within `GATE_POLL_S`. A document write the person just pressed (priority 0) never waits its turn. Four at
+  once on a model that answers one request at a time interleaved their calls, so every application finished
+  late (17 minutes running each, 2026-11-19); one at a time, finished ones arrive steadily.
 - Each kind has a work class (`core/work.py`, `ActionKind.work_class`) that orders its AI calls: 0 on screen
   (what the person waits for), 1 record updates, 2 document writes, 3 everything else. The default is on
   screen at priority 0; else a `record.*` kind is a record update; else a background kind is other work;
@@ -361,8 +367,8 @@ comes from their settings.
    Claude only the hours kept free and the daily cap on background checks.
 3. The GPU gate (`ai/gpu.py`, local models only): wait while another program holds the graphics card.
 4. The backend, under `ai.at_once()` turns (`ai._Turns`, keyed on work class then arrival, so first come
-   first served within a class): the slots the backend says its model serves (Hal's gateway lists
-   `meta.slots`, its writer's `parallel`), else `ai.parallel`. More calls than slots would only queue at the
+   first served within a class): `ai.parallel`, and no more than the slots the backend says its model serves
+   (Hal's gateway lists `meta.slots`, its model's `parallel`). More calls than slots would only queue at the
    model, inside each call's timeout. A call's class is the one entered around it (`work.current`), else its
    priority's (`work.for_priority`: an explicit `priority=` of 0 is on screen, 1 a document write, 2 other
    work). The allowance (step 2) and the GPU wait and claim (step 3) still go by the priority alone, which

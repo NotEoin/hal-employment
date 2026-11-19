@@ -18,7 +18,8 @@ an SSH tunnel, which is loopback again), so the token is only ever sent to a loo
 there: never through a proxy from the environment and never on to where a redirect points.
 
 The gateway says how many requests a model serves at once (`meta.slots` in its list, from the model's
-`parallel`), and `slots` passes that on, so Hal sends that many at once (`ai.at_once`).
+`parallel`), and `slots` passes that on, so Hal sends no more than that at once, and never more than
+`ai.parallel` (`ai.at_once`).
 
 The gateway always listens on a Unix socket in Hal's runtime directory, and on TCP only when
 `[gateway].tcp = true`. With `ai.hal_url` left at its default, this backend talks to that socket when it
