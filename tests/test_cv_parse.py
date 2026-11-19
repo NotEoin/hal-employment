@@ -25,7 +25,7 @@ from support.make_cv_fixtures import BROWSER_EXPECTED, BROWSER_NAME, EXPECTED, F
 from jobhunt import db
 from jobhunt.ai.base import LLMUnavailable
 from jobhunt.core import paths, runner, settings
-from jobhunt.cvstudio import inline, mdread, parse, pdflines, pdfread, store
+from jobhunt.cvstudio import inline, mdread, model, parse, parse_actions, pdflines, pdfread, store
 from jobhunt.cvstudio.lines import Line
 from jobhunt.cvstudio.model import KINDS, Bullet, CVDoc, Entry, Section, to_json
 
@@ -76,10 +76,10 @@ def held_ai(entered: threading.Event, release: threading.Event):
     """Holds the AI's reading of a CV until `release` is set, setting `entered` when it starts: a busy AI."""
     ai_read = parse.read_with_ai
 
-    def held(lines):
+    def held(lines, rules=None):
         entered.set()
         release.wait(WAIT_S)
-        return ai_read(lines)
+        return ai_read(lines, rules)
 
     return mock.patch.object(parse, "read_with_ai", held)
 
@@ -458,6 +458,71 @@ class OneProfile(unittest.TestCase):
         self.assertEqual(doc.sections[0].text, "I sort records. Careful with sources.")
 
 
+class KeepRulesSections(unittest.TestCase):
+    """The AI's reading never loses what the rules found. On 2026-11-19 Claude returned a CV's Skills section
+    with no lines, and Hal kept that reading, so all five skills lines were gone from Hal's copy."""
+
+    def merged(self, key: str, change) -> tuple[parse.Reading, parse.Reading]:
+        """The rules' and the AI's reading of a made-up CV, the AI's reply first changed by `change`."""
+        name, data = fixture(key, "pdf")
+        lines = parse.lines_of(data, parse.check(data, name)[0])
+        rules = parse.read_rules(lines)
+        reply = json.loads(ai_reply(rules.doc))
+        change(reply["sections"])
+        ai = parse.from_ai(reply)
+        parse.mark_values(ai, lines)
+        parse.keep_rules_sections(ai, rules)
+        return rules, ai
+
+    def test_an_ai_that_agrees_with_the_rules_keeps_its_own_reading(self):
+        for key in ("humanities", "technical", "changer"):
+            with self.subTest(person=key):
+                rules, ai = self.merged(key, lambda sections: None)
+                self.assertEqual(ai.from_rules, [])
+                self.assertNotIn(parse.LEFT_OUT_WHY, ai.marks.values())
+                self.assertEqual(to_json(ai.doc), to_json(rules.doc))
+
+    def test_a_section_the_ai_left_empty_is_the_rules_section_and_says_so(self):
+        def empty_skills(sections):
+            next(s for s in sections if s["kind"] == "skills")["entries"] = []
+        rules, ai = self.merged("humanities", empty_skills)
+        skills = next(s for s in ai.doc.sections if s.kind == "skills")
+        self.assertEqual(skills.entries, next(s for s in rules.doc.sections if s.kind == "skills").entries)
+        self.assertEqual(ai.from_rules, [skills.title])
+        rows = [r for r in parse.rows(ai) if r["path"].startswith(f"s:{skills.id}/")]
+        self.assertTrue(rows)
+        self.assertTrue(all(not r["sure"] and r["why"] == parse.LEFT_OUT_WHY for r in rows))
+        self.assertIn("14 skills", parse.found_words(ai.doc))
+        self.assertEqual(model.validate(ai.doc), [])
+
+    def test_a_section_the_ai_left_out_goes_back_in_its_place(self):
+        def no_skills(sections):
+            sections[:] = [s for s in sections if s["kind"] != "skills"]
+        rules, ai = self.merged("humanities", no_skills)
+        self.assertEqual([s.kind for s in ai.doc.sections], [s.kind for s in rules.doc.sections])
+        self.assertEqual(model.validate(ai.doc), [])
+
+    def test_a_section_the_ai_kept_in_part_is_the_rules_section_whole(self):
+        # the rule for a partial loss: the whole section is the rules', never a line silently dropped
+        def drop_a_bullet(sections):
+            job = next(s for s in sections if s["kind"] == "experience")["entries"][0]
+            job["bullets"] = job["bullets"][:-1]
+        rules, ai = self.merged("humanities", drop_a_bullet)
+        ours = next(s for s in ai.doc.sections if s.kind == "experience")
+        self.assertEqual(ours.entries, next(s for s in rules.doc.sections if s.kind == "experience").entries)
+        self.assertEqual(ai.from_rules, [ours.title])
+        others = [r for r in parse.rows(ai) if not r["path"].startswith(f"s:{ours.id}/")]
+        self.assertNotIn(parse.LEFT_OUT_WHY, [r["why"] for r in others])
+
+    def test_a_line_the_ai_moved_to_another_section_is_not_counted_lost(self):
+        def move_a_bullet(sections):
+            jobs = next(s for s in sections if s["kind"] == "experience")["entries"]
+            moved = jobs[0]["bullets"].pop()
+            sections.append({"kind": "custom", "title": "Also", "text": moved})
+        _, ai = self.merged("humanities", move_a_bullet)
+        self.assertEqual(ai.from_rules, [])
+
+
 class Upload(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -566,6 +631,18 @@ class Upload(unittest.TestCase):
         self.assertFalse(rows["Sept 24 to Jun 25"]["sure"])
         self.assertTrue(rows["Marnie Quillfeather"]["sure"])
         self.assertTrue(rows["University of Nowhere Fen"]["sure"])
+
+    def test_a_section_the_ai_lost_is_kept_and_the_report_says_the_ai_did_not_read_it(self):
+        name, data = fixture("humanities", "pdf")
+        reply = json.loads(ai_reply(rules_doc("humanities")))
+        next(s for s in reply["sections"] if s["kind"] == "skills")["entries"] = []
+        done = self.read(name, data, {"cv_parse": json.dumps(reply)})
+        self.assertEqual(done["result"]["how"], "ai")
+        self.assertIn("14 skills", done["result"]["found"])
+        self.assertTrue(any(s["text"] == parse_actions.LEFT_OUT_STEP.format(sections="Skills")
+                            for s in done["steps"]))
+        left = [r for r in self.report()["rows"] if r["why"] == parse.LEFT_OUT_WHY]
+        self.assertEqual({r["label"].split(":")[0] for r in left}, {"Skills"})
 
     def test_an_ai_that_agrees_with_the_rules_makes_no_second_version(self):
         name, data = fixture("technical", "pdf")
@@ -724,7 +801,7 @@ class Upload(unittest.TestCase):
         self.assertNotIn(INVENTED_EMPLOYER, to_json(store.get(mine)))
 
     def test_a_reading_that_fails_leaves_no_mark_and_keeps_the_rules_reading(self):
-        def broken(lines):
+        def broken(lines, rules=None):
             raise RuntimeError("the made-up AI fell over")
 
         name, data = fixture("technical", "pdf")

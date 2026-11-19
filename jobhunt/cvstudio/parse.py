@@ -26,6 +26,12 @@ field. Design decisions, each with its reason:
   contact details, and Claude gave a CV's whole profile paragraph as its headline (seen on 2026-11-19), which
   drew the profile above the contact line. A line that is not a headline is the start of the profile, and a
   CV with no such line has no headline.
+- The AI's reading never loses what the rules found (`keep_rules_sections`). Claude returned a CV's Skills
+  section with no lines at all on 2026-11-19, while another CV of the same shape kept all 41 skills that
+  day. A section the rules filled that the AI left empty, left out, or kept only in part is the rules'
+  section in the AI's reading, and every row of it says so in "Check what Hal read" (`LEFT_OUT_WHY`).
+  The whole section is taken, not just the lost lines, because where a lost line belongs among the AI's
+  entries is a guess, and a guess could put it under the wrong job or show it twice.
 - A CV has one summary. Text above the first heading becomes the profile only when it reads as one; a line
   of short facts set apart by "|" (places, right to work, notice) joins the headline instead. When a CV
   still gives two summaries (a paragraph above a "Profile" heading, or the AI returning two), they are
@@ -91,6 +97,7 @@ NOT_FOUND_WHY = "Hal could not find these words in your file."
 UNSURE_WHY = "Hal was not sure about this."
 TWO_DIGIT_WHY = "The year is written with two digits."
 MISSING_WHY = "Hal did not find this in your file."
+LEFT_OUT_WHY = "Hal's AI left this part out, so this is Hal's own reading of your file."
 
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
@@ -197,6 +204,7 @@ class Reading:
     doc: CVDoc
     marks: dict[str, str] = field(default_factory=dict)
     how: str = "rules"      # rules | ai
+    from_rules: list[str] = field(default_factory=list)     # sections the AI lost, as titles
 
 
 # ------------------------------------------------------------------------------------------- the file
@@ -1010,8 +1018,147 @@ def from_ai(reply: dict) -> Reading | None:
     return Reading(doc, marks, "ai")
 
 
-def read_with_ai(lines: list[Line]) -> tuple[Reading | None, str]:
-    """The AI's reading of the lines and "" , or (None, why not) when there is no AI or its reply is unusable."""
+# ------------------------------------------------------------------------------- what the AI must not lose
+
+PIECE_SPLIT = re.compile(r"\s*[,;|:\t]\s*")
+
+
+def _pieces(value: str) -> list[str]:
+    """A value's words cut where a reading may cut it into fields (commas, bars, colons), normalised."""
+    return [p for p in (_norm(x) for x in PIECE_SPLIT.split(inline.plain(value))) if p]
+
+
+def _values(sec: Section) -> list[str]:
+    """The lines of the file a section holds, items aside: its text, each entry's text, bullets and modules,
+    and the heading of an entry that has nothing else (a certificate, an award).
+
+    An entry's other fields (employer, place, details) are left out: a value the AI changed there is not a
+    lost line, and `mark_values` marks it "Check this" already.
+    """
+    out = [sec.text]
+    for e in sec.entries:
+        out += [e.text] + [b.text for b in e.bullets] + [m.name for m in e.modules]
+        if not (e.text or e.bullets or e.items):
+            out.append(e.heading)
+    return [v for v in out if v.strip()]
+
+
+def _blank(sec: Section) -> bool:
+    """True when a section holds none of the file's words."""
+    return not _values(sec) and not any(e.items or e.heading for e in sec.entries)
+
+
+def _words(sections: list[Section], extra: tuple[str, ...] = ()) -> str:
+    """The normalised words of `sections` (items included) and of `extra`, one value a line."""
+    values = [v for sec in sections for v in _values(sec)] + [i for sec in sections for e in sec.entries
+                                                               for i in e.items] + list(extra)
+    return "\n".join(_norm(inline.plain(v)) for v in values if v.strip())
+
+
+def _lost(sec: Section, everywhere: str, same_kind: str) -> bool:
+    """True when a value of the rules' section `sec` is missing from the AI's reading.
+
+    A value counts as kept when each of its pieces is anywhere in the AI's reading, as the AI may move a
+    line to another section or cut it into fields; a skill or language only when it is in a section of the
+    same kind, as the name of a skill is also a tool named under a job or a project.
+    """
+    if any(not all(p in everywhere for p in _pieces(v)) for v in _values(sec)):
+        return True
+    return any(not all(p in same_kind for p in _pieces(i)) for e in sec.entries for i in e.items)
+
+
+def _match(sec: Section, sections: list[Section], taken: set[int]) -> int | None:
+    """The place in `sections` of the AI's section for the rules' `sec`: the same title, else the same id."""
+    for same in (lambda s: _key(s.title) == _key(sec.title), lambda s: s.id == sec.id):
+        for i, s in enumerate(sections):
+            if id(s) not in taken and same(s):
+                return i
+    return None
+
+
+def _fresh_id(want: str, used: set[str]) -> str:
+    """`want`, or `want-2`, `want-3` ... when it is taken; the id is added to `used`."""
+    out, n = want, 2
+    while out in used:
+        out, n = f"{want}-{n}", n + 1
+    used.add(out)
+    return out
+
+
+def _paths(sec: Section) -> list[str]:
+    """The "Check what Hal read" paths of every value a section holds, as `rows` names them."""
+    out = [f"s:{sec.id}/text"] if sec.text else []
+    for e in sec.entries:
+        base = f"s:{sec.id}/e:{e.id}"
+        out += [f"{base}/{name}" for name in ("heading", "org", "grade", "text", "items") if getattr(e, name)]
+        if e.start or e.end:
+            out.append(f"{base}/dates")
+        out += [f"{base}/b:{b.id}" for b in e.bullets]
+    return out
+
+
+def _put_back(ai: Reading, rules: Reading, rsec: Section, at: int, replace: bool) -> Section:
+    """Puts a copy of the rules' section `rsec` into the AI's reading at `at` (in place of the section there
+    when `replace`), with ids no other part holds, the rules' marks for it and `LEFT_OUT_WHY` on each row."""
+    doc = ai.doc
+    old = doc.sections[at] if replace else None
+    used = {x for s in doc.sections if s is not old
+            for x in [s.id] + [e.id for e in s.entries] + [b.id for e in s.entries for b in e.bullets]}
+    sec = copy.deepcopy(rsec)
+    renamed = {f"s:{rsec.id}": f"s:{_fresh_id(old.id if old else rsec.id, used)}"}
+    sec.id = renamed[f"s:{rsec.id}"][2:]
+    for e, was in zip(sec.entries, rsec.entries, strict=True):
+        e.id = _fresh_id(e.id, used)
+        renamed[f"s:{rsec.id}/e:{was.id}"] = f"s:{sec.id}/e:{e.id}"
+        for b in e.bullets:
+            b.id = _fresh_id(b.id, used)
+    if old is not None:
+        ai.marks = {p: why for p, why in ai.marks.items() if not p.startswith(f"s:{old.id}/")}
+        doc.sections[at] = sec
+    else:
+        doc.sections.insert(at, sec)
+    for path, why in rules.marks.items():
+        head = next((k for k in sorted(renamed, key=len, reverse=True) if path.startswith(k + "/")), None)
+        if head is not None:
+            ai.marks[renamed[head] + path[len(head):]] = why
+    for path in _paths(sec):
+        ai.marks[path] = LEFT_OUT_WHY
+    return sec
+
+
+def keep_rules_sections(ai: Reading, rules: Reading) -> None:
+    """Puts back into the AI's reading each section the rules filled that the AI left empty, left out or kept
+    only in part, in the rules' place for it; its titles go in `ai.from_rules`."""
+    doc = ai.doc
+    # a line the AI made a heading or the headline is not lost
+    everywhere = _words(doc.sections, (doc.headline, *(s.title for s in doc.sections),
+                                       *(e.heading for s in doc.sections for e in s.entries)))
+    taken: set[int] = set()
+    last = -1
+    for rsec in rules.doc.sections:
+        if _blank(rsec):
+            continue
+        at = _match(rsec, doc.sections, taken)
+        if at is not None:
+            taken.add(id(doc.sections[at]))
+            last = at
+        same_kind = _words([s for s in doc.sections if s.kind == rsec.kind])
+        empty = at is not None and _blank(doc.sections[at])
+        if not empty and not _lost(rsec, everywhere, same_kind):
+            continue
+        place = at if at is not None else last + 1
+        sec = _put_back(ai, rules, rsec, place, replace=at is not None)
+        taken.add(id(sec))
+        last = place
+        ai.from_rules.append(sec.title)
+
+
+def read_with_ai(lines: list[Line], rules: Reading | None = None) -> tuple[Reading | None, str]:
+    """The AI's reading of the lines and "", or (None, why not) when there is no AI or its reply is unusable.
+
+    Each section the rules' reading (`rules`, read here when not given) filled and the AI lost is put back
+    (`keep_rules_sections`).
+    """
     from jobhunt import ai
     from jobhunt.ai.base import LLMUnavailable, PrivateLeak
 
@@ -1027,6 +1174,7 @@ def read_with_ai(lines: list[Line]) -> tuple[Reading | None, str]:
         return None, "The AI's reading was empty."
     mark_values(reading, lines)
     keep_marks(reading.doc, lines)
+    keep_rules_sections(reading, rules or read_rules(lines))
     return reading, ""
 
 

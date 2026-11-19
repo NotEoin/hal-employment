@@ -22,6 +22,11 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Hal's AI no longer loses part of your CV.** Hal's AI sometimes read a section of a CV, such as Skills,
+  as empty, and Hal kept that reading, so the lines were missing from Hal's copy. Now, when the AI leaves
+  out a section or a line that Hal's own reading found, Hal keeps its own reading of that section, and
+  **Check what Hal read** marks each of its lines so you can check them.
+
 - **Your profile stays a profile.** A profile paragraph or sentence under your contact details was
   sometimes read as the line under your name, so Hal's copy showed your profile above your contact details.
   Hal now reads only a few words on one line, such as a job title, as that line, and a CV without one has

@@ -584,6 +584,14 @@ runs: tests use `tests/support/fake_claude/`.
   under 0.6, the year has two digits, or a field a CV normally has is missing. The AI's reading is put in
   the rules' shape first, so the same file read by rules or AI gives the same ids. With no AI, a
   `PrivateLeak` or an empty reply, Hal's own reading is kept and a step says why.
+- The AI's reading never loses a section the rules filled (`parse.keep_rules_sections`). The rules' lines of
+  a section (its text, each entry's text, bullets, modules and items, and the heading of an entry with
+  nothing else) are looked for in the AI's reading, cut at commas, bars and colons; a skill or language
+  only in a section of the same kind. A section the AI left empty, left out, or kept with a line missing is
+  the rules' whole section, in the rules' place, and each of its rows says "Hal's AI left this part out"
+  (`LEFT_OUT_WHY`); the action's steps name it. The whole section is taken because placing a lost line
+  among the AI's entries would be a guess. An employer, place or detail the AI changed is not a lost line:
+  it is marked "Check this" as a value not in the file.
 - Report rows name one field each (`contact/<key>`, `s:<section>/e:<entry>/<field>`, `.../b:<bullet>`). A
   correction makes "You corrected N things Hal misread".
 - Every reader gives `Line`s (`cvstudio/lines.py`) with text, size, bold, a bold lead-in (`lead`), bullet and

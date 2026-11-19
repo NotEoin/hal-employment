@@ -25,6 +25,8 @@ request thread. The file becomes the CV's own file (`baseline_file_id`), so "you
   `start_read` holds a lock from its check to the action's start, so two requests in this process never make
   two versions of one upload; `store.create_for_file` checks again under the write lock, so a request in
   another process makes no second CV either.
+- The AI's reading never loses a section the rules' reading filled (`parse.keep_rules_sections`, given the
+  rules' reading this action already made); a step names each section Hal kept its own reading of.
 - The report ("Check what Hal read") belongs to that version and follows the reading kept in it; corrections
   to it are new versions. Values the CV gives for `you.*` settings fill only settings that are still empty,
   once the final reading is in, so nothing the person typed is overwritten.
@@ -44,6 +46,7 @@ from jobhunt.cvstudio import parse, record_cvs, store
 log = logging.getLogger(__name__)
 
 UPLOADED_WHAT = "Your file: {name} (never changed)"
+LEFT_OUT_STEP = "The AI left out part of {sections}, so Hal kept its own reading there"
 _STARTING = threading.Lock()   # held from the check for a reading to its start: one upload, one version
 BUSY_ELSEWHERE = "Hal is already reading this file for another of your CVs. Wait until it is done, then try again."
 EXAMPLE_CV = """Ada Fernhollow
@@ -246,11 +249,13 @@ def parse_cv(ctx, file_id: str, file: str, doc_id: str | None = None, last: bool
                     "pages": pages, "how": reading.how, "unsure": [], "filled": []}
     cv = cv or doc_id or store.version(version_id)["doc_id"]
     ctx.step("Asking the AI to check Hal's reading")
-    ai_reading, why_not = parse.read_with_ai(lines)
+    ai_reading, why_not = parse.read_with_ai(lines, reading)
     if ai_reading is None:
         ctx.step(f"Kept the reading from Hal's own rules: {why_not}")
     else:
         ctx.used("ai", "cv_parse")
+        if ai_reading.from_rules:
+            ctx.step(LEFT_OUT_STEP.format(sections=", ".join(ai_reading.from_rules)))
         reading = ai_reading
         if not store.replace_reading(version_id, reading.doc):
             ctx.changed(f"Read {file}, but its version of your CV is gone, so Hal kept nothing.")
