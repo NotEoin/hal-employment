@@ -79,8 +79,9 @@ class Look:
     css: str = ""
     letter_css: str = ""
     entry_form: str = "stacked"     # "stacked": heading, place, text on lines of their own; "line": one line
-    dates: str = "right"            # "right": at the right of the heading; "inline": in the line, after a comma
-    sep: str = " | "                # between the contact line's parts
+    bullet_form: str = "stacked"    # the same for an entry with a list under it
+    dates: str = "right"            # "right": at the right of the heading; "inline": in the line or place line
+    sep: str = " | "                # between the contact line's parts, and a stacked entry's place line
     measures: measures.Measures | None = None     # a personal look's measures, for the Word file
 
     def public(self) -> dict:
@@ -94,8 +95,8 @@ def personal_look(look_id: str, name: str, m: measures.Measures, *, note: str = 
     family = {"sans": "Source Sans 3", "serif": "Source Serif 4"}
     fonts = tuple(dict.fromkeys((family[m.font], family[m.heading_font])))
     return Look(look_id, name, True, note or PERSONAL_NOTE, fonts, 1, PERSONAL_ORDER, personal=True,
-                css=measures.css(m), letter_css=measures.letter_css(m), entry_form=m.entry_form, dates=m.dates,
-                sep=measures.separator(m), measures=m)
+                css=measures.css(m), letter_css=measures.letter_css(m), entry_form=m.entry_form,
+                bullet_form=m.bullet_form, dates=m.dates, sep=measures.separator(m), measures=m)
 
 
 @functools.cache
@@ -344,19 +345,28 @@ def _hl(text: str, part_id: str, hl: set[str], *, rich: bool = False) -> str:
     return f'<mark class="hl">{shown}</mark>' if part_id in hl else shown
 
 
-def _stacked(e: ViewEntry, hl: set[str], dates: str) -> list[str]:
-    """An entry's heading (dates at its right, or after it with `dates` "inline"), then its place, details and
-    text on lines of their own."""
+def _stacked(e: ViewEntry, hl: set[str], dates: str, sep: str) -> list[str]:
+    """An entry's heading, then its place, details and text on lines of their own.
+
+    With dates at the right, they sit at the heading's right. With `dates` "inline", the heading stands alone
+    and one quieter line joins the place, the dates and the details with the look's separator
+    ("Made-up University | Sep 2023 - Jun 2026 | ..."), as a CV made from Markdown writes them.
+    """
     out = []
-    if e.heading or e.dates:
-        run = dates == "inline"
-        shown = (f'<span class="cv-dates">{", " if run and e.heading else ""}{_e(e.dates)}</span>'
-                 if e.dates else "")
-        out.append(f'<div class="cv-top{" cv-run" if run else ""}"><h3>{_hl(e.heading, e.id, hl)}</h3>{shown}</div>')
-    if e.org:
-        out.append(f'<p class="cv-org">{_e(e.org)}</p>')
-    if e.meta:
-        out.append(f'<p class="cv-meta">{_e(e.meta)}</p>')
+    if dates == "inline":
+        if e.heading:
+            out.append(f'<div class="cv-top"><h3>{_hl(e.heading, e.id, hl)}</h3></div>')
+        under = [x for x in (e.org, e.dates, e.meta) if x]
+        if under:
+            out.append(f'<p class="cv-org">{_e(sep).join(_e(x) for x in under)}</p>')
+    else:
+        if e.heading or e.dates:
+            shown = f'<span class="cv-dates">{_e(e.dates)}</span>' if e.dates else ""
+            out.append(f'<div class="cv-top"><h3>{_hl(e.heading, e.id, hl)}</h3>{shown}</div>')
+        if e.org:
+            out.append(f'<p class="cv-org">{_e(e.org)}</p>')
+        if e.meta:
+            out.append(f'<p class="cv-meta">{_e(e.meta)}</p>')
     if e.text:
         out.append(f'<p class="cv-text">{_hl(e.text, e.id, hl, rich=True)}</p>')
     return out
@@ -399,12 +409,14 @@ def _one_line(e: ViewEntry, hl: set[str], dates: str) -> str:
 
 def _entry_html(e: ViewEntry, hl: set[str], look_: Look | None = None) -> str:
     form, dates = (look_.entry_form, look_.dates) if look_ else ("stacked", "right")
+    if e.bullets and look_ is not None:
+        form = look_.bullet_form       # a file may write an entry with a list differently from one without
     out = [f'<div class="cv-entry{" cv-one" if form == "line" else ""}" data-id="{_e(e.id)}">']
     if form == "line":
         if e.heading or e.dates or e.org or e.meta or e.text:
             out.append(_one_line(e, hl, dates))
     else:
-        out += _stacked(e, hl, dates)
+        out += _stacked(e, hl, dates, look_.sep if look_ else " | ")
     if e.bullets:
         out.append("<ul>" + "".join(f'<li data-id="{_e(bid)}">{_hl(text, bid, hl, rich=True)}</li>'
                                     for bid, text in e.bullets) + "</ul>")

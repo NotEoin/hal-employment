@@ -727,8 +727,12 @@ runs: tests use `tests/support/fake_claude/`.
   baseline; the name is the first row when larger than the body text, the contact line the first of the next
   three rows with an address or number, section headings the short rows over a rule (else in capitals, else
   the largest bold ones), list items the rows with a marker or bullet, and entries the rows whose first part
-  starts in bold (wholly bold: stacked; bold then plain: one line). Line height is the smallest step between
-  two rows of body text at the same left edge, letter spacing the pen's step less each letter's advance. A
+  starts in bold (wholly bold: stacked; bold then plain: one line; a bold label ending in a colon is neither).
+  Entries with a list under them and entries without are counted apart into `bullet_form` and `entry_form`,
+  and a kind the file does not show is stacked. A stacked entry with its dates inline is drawn as its
+  heading alone, then one line joining place, dates and details with the look's separator. Line height is
+  the step most rows take within a CSS pixel of the smallest step between two rows of body text at the
+  same left edge, letter spacing the pen's step less each letter's advance. A
   measure the file does not show keeps Classic's value, every number is clamped into its range, and
   `Found.notes` says in plain words what was approximated (side-by-side text read as one column, pictures
   left out, a one-page file's bottom margin). Checked by printing Hal's own page in known measures and

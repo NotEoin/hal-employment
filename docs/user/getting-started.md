@@ -348,7 +348,8 @@ your file, with a line saying that employers get the file as you uploaded it. An
 If you uploaded your CV as a PDF, Hal's copy can keep its look. Open **My CV**, **Type and look**, and
 press **Match my file's look**. Hal measures your file's page: the margins, the type and its size, the
 line spacing, the name and contact line, the section headings, how each job or qualification is written
-(on one line, or a heading with the place and text below), where the dates go, the lists and the colours.
+(on one line, or a heading with the place and text below, measured apart for those with a list of points
+under them and those without), where the dates go, the lists and the colours.
 It makes a look of them called "Like" and your file's name, and uses it for this CV.
 
 Hal then shows your file's own page beside Hal's copy in the new look, with both page counts, for example

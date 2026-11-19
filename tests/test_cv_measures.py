@@ -114,7 +114,8 @@ class Tighter(unittest.TestCase):
 
 class Markup(unittest.TestCase):
     def test_a_one_line_look_writes_each_entry_as_one_line(self) -> None:
-        look = render.personal_look("my-one", "Mine", measures.validate({"entry_form": "line", "dates": "inline"}))
+        look = render.personal_look("my-one", "Mine", measures.validate({"entry_form": "line", "bullet_form": "line",
+                                                                          "dates": "inline"}))
         page = render.html_of(humanities_view(), look)
         self.assertIn('<div class="cv-line"><h3>Collections volunteer</h3>, <span class="cv-org">Made-up Record '
                       'Office, Harrowgate Vale</span>, <span class="cv-dates">Sep 2023 - Present</span></div><ul>',
@@ -140,16 +141,27 @@ class Markup(unittest.TestCase):
                       'class="cv-dates">2019</span>: Pass. <span class="cv-text">with a made-up project.</span>', page)
 
     def test_dates_at_the_right_of_a_one_line_entry_are_written_first(self) -> None:
-        look = render.personal_look("my-one", "Mine", measures.validate({"entry_form": "line"}))
+        look = render.personal_look("my-one", "Mine", measures.validate({"entry_form": "line", "bullet_form": "line"}))
         page = render.html_of(humanities_view(), look)
         self.assertIn('<div class="cv-line"><span class="cv-dates cv-right">Sep 2023 - Present</span>'
                       "<h3>Collections volunteer</h3>, ", page)
 
-    def test_a_stacked_entry_can_have_its_dates_in_the_line(self) -> None:
+    def test_a_stacked_entry_with_dates_inline_joins_place_and_dates_under_its_heading(self) -> None:
         look = render.personal_look("my-run", "Mine", measures.validate({"dates": "inline"}))
         page = render.html_of(humanities_view(), look)
-        self.assertIn('<div class="cv-top cv-run"><h3>Collections volunteer</h3><span class="cv-dates">, '
-                      "Sep 2023 - Present</span></div>", page)
+        self.assertIn('<div class="cv-top"><h3>Collections volunteer</h3></div><p class="cv-org">Made-up Record '
+                      "Office, Harrowgate Vale | Sep 2023 - Present</p>", page)
+
+    def test_an_entry_with_a_list_takes_the_listed_form_and_one_without_the_other(self) -> None:
+        # the file wrote its degree and main project stacked over their bullets and short jobs on one line;
+        # Hal's copy ran every entry on one line (trial, 2026-11-19)
+        m = measures.validate({"entry_form": "line", "bullet_form": "stacked", "dates": "inline",
+                               "contact_sep": "dot"})
+        page = render.html_of(humanities_view(), render.personal_look("my-mix", "Mine", m))
+        self.assertIn('<div class="cv-top"><h3>Collections volunteer</h3></div><p class="cv-org">Made-up Record '
+                      "Office, Harrowgate Vale \u00b7 Sep 2023 - Present</p><ul>", page)
+        self.assertIn('<div class="cv-line"><h3>Paper round</h3>, <span class="cv-org">Made-up Newsagent</span>, '
+                      '<span class="cv-dates">2018 - 2020</span></div>', page)
 
     def test_the_contact_line_takes_the_looks_separator(self) -> None:
         look = render.personal_look("my-dot", "Mine", measures.validate({"contact_sep": "comma"}))

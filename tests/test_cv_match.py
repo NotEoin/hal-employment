@@ -77,6 +77,21 @@ class OtherLayouts(unittest.TestCase):
         m = match.measure(layout_pdf.one_line_cv(stacked=True)[0]).measures
         self.assertEqual((m.entry_form, m.dates), ("stacked", "right"))
 
+    def test_entries_with_and_without_a_list_are_measured_apart(self) -> None:
+        cases = {("", False): ("line", "stacked"),           # no listed entry shown: stacked, the safe default
+                 ("stacked", False): ("line", "stacked"),    # the mixed file: a degree stacked, jobs on one line
+                 ("line", False): ("line", "line"),
+                 ("", True): ("stacked", "stacked"),
+                 ("line", True): ("stacked", "line")}
+        for (listed, stacked), want in cases.items():
+            with self.subTest(listed=listed, stacked=stacked):
+                m = match.measure(layout_pdf.one_line_cv(listed=listed, stacked=stacked)[0]).measures
+                self.assertEqual((m.entry_form, m.bullet_form), want)
+
+    def test_a_stacked_listed_entry_with_dates_in_its_place_line_keeps_dates_inline(self) -> None:
+        m = match.measure(layout_pdf.one_line_cv(listed="stacked")[0]).measures
+        self.assertEqual(m.dates, "inline")
+
     def test_headings_without_a_rule_are_found_by_their_capitals(self) -> None:
         m = match.measure(layout_pdf.one_line_cv(rule="")[0]).measures
         self.assertEqual((m.heading_rule, m.heading_caps, m.heading_size), (False, True, 10.5))
@@ -142,7 +157,8 @@ class HalsOwnPages(unittest.TestCase):
         want = measures.Measures()
         self.assert_close(want, self.measured(want), (
             "page", "font", "heading_font", "size", "name_size", "contact_size", "contact_sep", "heading_size",
-            "heading_caps", "heading_rule", "entry_form", "dates", "text_colour", "muted_colour", "rule_colour"))
+            "heading_caps", "heading_rule", "entry_form", "bullet_form", "dates", "text_colour", "muted_colour",
+            "rule_colour"))
 
     def test_a_serif_one_line_look_prints_and_reads_back(self) -> None:
         # the serif body read as bold before 2026-11-19, so no entry read as one line
@@ -152,8 +168,14 @@ class HalsOwnPages(unittest.TestCase):
                                   "heading_colour": "#0f5a6b", "margin_left": 12, "margin_top": 11,
                                   "bullet_indent": 6})
         self.assert_close(want, self.measured(want), (
-            "font", "heading_font", "size", "entry_form", "dates", "contact_sep", "contact_first", "heading_rule",
-            "heading_colour"))
+            "font", "heading_font", "size", "entry_form", "bullet_form", "dates", "contact_sep", "contact_first",
+            "heading_rule", "heading_colour"))
+
+    def test_a_mixed_look_prints_and_reads_back(self) -> None:
+        # entries with a list stacked, the others on one line, as a CV made from Markdown writes them
+        want = measures.validate({"entry_form": "line", "bullet_form": "stacked", "dates": "inline",
+                                  "size": 9.2, "entry_size": 9.2, "heading_font": "sans"})
+        self.assert_close(want, self.measured(want), ("entry_form", "bullet_form", "dates"))
 
 
 if __name__ == "__main__":

@@ -117,9 +117,27 @@ def page_pdf(pages: list[list[Row]], margin: float) -> bytes:
     return _pdf(objects + annots)
 
 
-def one_line_cv(lay: Layout | None = None, *, stacked: bool = False, rule: str = "#444444") -> tuple[bytes, Layout]:
+def _listed_entry(lay: Layout, top: float, form: str) -> tuple[list[Row], float]:
+    """An entry with a list under it: stacked (heading alone, then "place | dates") or as one line."""
+    if form == "stacked":
+        rows = [Row(top, lay.body, [Run("Made-up Degree in Tide Studies", True)]),
+                Row(top + lay.pitch, lay.body, [Run("Made-up University | 2021 - 2024", colour="#333333")])]
+        top += 2 * lay.pitch
+    else:
+        rows = [Row(top, lay.body, [Run("Made-up Degree in Tide Studies", True),
+                                    Run(", Made-up University, 2021 - 2024: a made-up course.")])]
+        top += lay.pitch
+    for words in ("Wrote a made-up dissertation on harbour tides.", "Led a made-up study group of six."):
+        rows.append(Row(top, lay.body, [Run(words)], left=lay.indent, marker=True))
+        top += lay.pitch + 1.0
+    return rows, top + 2.0
+
+
+def one_line_cv(lay: Layout | None = None, *, stacked: bool = False, rule: str = "#444444",
+                listed: str = "") -> tuple[bytes, Layout]:
     """A one-page made-up CV: sans name, contact line and headings in capitals over a rule, serif body text,
-    entries written as one line (or stacked, with dates at the right), and a list."""
+    entries written as one line (or stacked, with dates at the right), and a list. With `listed` ("stacked"
+    or "line"), each section of entries starts with an entry that has a list under it, written that way."""
     lay = lay or Layout()
     top = lay.margin + lay.name
     rows = [Row(top, lay.name, [Run("Avery Quillon", True, "sans")])]
@@ -144,6 +162,9 @@ def one_line_cv(lay: Layout | None = None, *, stacked: bool = False, rule: str =
                 rows.append(Row(top, lay.body, [Run(words)], left=lay.indent, marker=True))
                 top += lay.pitch + 1.0
         else:
+            if listed:
+                more, top = _listed_entry(lay, top, listed)
+                rows += more
             for heading, place, dates in (("Shop Assistant", "Made-up Books", "2022 - 2023"),
                                           ("Archive Volunteer", "Made-up Archive", "2023 - Present"),
                                           ("Cafe Assistant", "Made-up Cafe", "2021 - 2022")):

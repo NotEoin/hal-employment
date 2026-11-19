@@ -43,6 +43,8 @@ CENTRED = 0.05                  # a row whose middle is this share of the text's
 INDENTED = 0.1                  # ... and it starts this share of the width in from the left margin
 WRAP_STEP = 1.6                 # a row this many type sizes or less below another of the same type continues it
 ALIGN_SLACK = 0.2               # two rows start in the same place when this close, in type sizes (as pdflines)
+CSS_PIXEL = 0.75                # points: Chrome puts baselines on whole CSS pixels of a page scaled by 0.75
+PITCH_NOISE = 0.05              # points: steps are rounded to a tenth, so a pixel apart may read 0.8
 MARKER_REACH = 2.5              # a list marker sits within this many type sizes left of its text (as pdflines)
 BULLETS = "\u2022\u25aa\u25cf\u2023\u2043\u25e6-*\u2013"
 DATE_HINT = re.compile(r"\d{4}|present|now|current", re.I)
@@ -129,10 +131,17 @@ class Row:
 
     @property
     def lead(self) -> bool:
-        """Its first part starts with two or more bold letters and goes on in plain type: a one-line entry."""
+        """Its first part starts with two or more bold letters and goes on in plain type: a one-line entry.
+
+        A bold label ending in a colon ("Tools: Excel, Git") is a labelled line, as skills are written, not an
+        entry: Classic's skills read as one-line entries and outvoted its stacked ones (2026-11-19).
+        """
         letters = self._first_part()
         first = next((i for i, c in enumerate(letters) if not c.bold), len(letters))
-        return first >= 2 and first < len(letters)
+        if not 2 <= first < len(letters):
+            return False
+        before = [c.char for c in self.chars if c.x < letters[first].x and not c.char.isspace()]
+        return not before or before[-1] != ":"
 
     @property
     def caps(self) -> bool:
@@ -237,11 +246,16 @@ def _spacing(rows: list[Row], drawing: pdfread.Drawing) -> float:
 def _pitch(rows: list[Row], size: float) -> float | None:
     """The baseline step between rows of one paragraph in type of `size`: the smallest step between two rows of
     that size starting at the same left edge. Two paragraphs or list items one under the other step further
-    (by their margins), so the smallest step is a wrapped line's, which is the line height itself."""
+    (by their margins), so the smallest step is a wrapped line's, which is the line height itself. Chrome puts
+    baselines on whole pixels, so one step may come out a pixel short: the step most rows take within a pixel
+    of the smallest is the pitch (a 12.7 pt pitch read as 12.0 from one row, 2026-11-19)."""
     steps = [round(a.y - b.y, 1) for a, b in itertools.pairwise(rows)
              if a.page == b.page and a.size == b.size == size and abs(a.left - b.left) <= ALIGN_SLACK * size
              and 0 < a.y - b.y <= WRAP_STEP * size]
-    return min(steps) if steps else None
+    if not steps:
+        return None
+    low = min(steps)
+    return _most(s for s in steps if s <= low + CSS_PIXEL + PITCH_NOISE)
 
 
 class _Reader:
@@ -392,23 +406,45 @@ class _Reader:
             self.got["bullet_gap"] = max(_mm(min(steps) - self.pitch), 0.0)
         return items
 
-    def entries(self, rest: list[Row], heads: list[Row]) -> None:
+    def _with_list(self, starts: set[int], stops: set[int], items: set[int]) -> set[int]:
+        """The entry rows (ids) that have a list item under them before the next entry or heading."""
+        out, current = set(), None
+        for r in self.rows:
+            if id(r) in starts:
+                current = id(r)
+            elif id(r) in stops:
+                current = None
+            elif id(r) in items and current is not None:
+                out.add(current)
+        return out
+
+    def entries(self, rest: list[Row], heads: list[Row], items: list[Row]) -> None:
         """Entries: a row whose first part is wholly bold is a stacked heading, one that starts bold and goes on
-        plain is a one-line entry; the form more rows take wins. Dates are at the right when an entry row has a
-        last part with a year or "present" that ends at the right edge."""
+        plain is a one-line entry. Entries with a list under them and entries without are counted apart, as a
+        file often writes a degree or project with bullets stacked and a short job on one line; in each the form
+        more rows take wins, and a kind the file does not show is stacked, which reads well whatever it holds.
+        Dates are at the right when an entry row has a last part with a year or "present" that ends at the
+        right edge."""
         stacked = [r for r in rest if r.heading]
         lines = [r for r in rest if r.lead]
         if not stacked and not lines:
             return
         got = self.got
-        got["entry_form"] = "line" if len(lines) > len(stacked) else "stacked"
-        shown = lines if got["entry_form"] == "line" else stacked
+        starts = {id(r) for r in stacked + lines}
+        listed = self._with_list(starts, {id(r) for r in heads}, {id(r) for r in items})
+
+        def form(with_list: bool) -> str:
+            line = sum(1 for r in lines if (id(r) in listed) == with_list)
+            stack = sum(1 for r in stacked if (id(r) in listed) == with_list)
+            return "line" if line > stack else "stacked"
+
+        got["entry_form"], got["bullet_form"] = form(False), form(True)
+        shown = lines if len(lines) > len(stacked) else stacked
         got["entry_size"] = statistics.median(r.size for r in shown)
         got["entry_bold"] = True
         dated_right = [r for r in stacked + lines if len(r.parts) >= 2 and DATE_HINT.search(r.parts[-1])
                        and self.right - r.right <= COLUMN_GAP * r.size]
         got["dates"] = "right" if dated_right else "inline"
-        starts = {id(r) for r in stacked + lines}
         head_ids = {id(r) for r in heads}
         gaps = [self.gap(self.rows[i - 1], r) for i, r in enumerate(self.rows)
                 if i and id(r) in starts and self.rows[i - 1].page == r.page and id(self.rows[i - 1]) not in head_ids]
@@ -450,6 +486,6 @@ def measure(data: bytes) -> Found:
     heads = reader.headings(rest)
     rest = [r for r in rest if id(r) not in {id(h) for h in heads}]
     items = reader.items(rest)
-    reader.entries([r for r in rest if id(r) not in {id(i) for i in items}], heads)
+    reader.entries([r for r in rest if id(r) not in {id(i) for i in items}], heads, items)
     reader.colours_and_fonts(plain, heads)
     return Found(measures.validate(measures.clamped(reader.got)), reader.notes, reader.pages)

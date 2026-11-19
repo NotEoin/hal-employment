@@ -52,7 +52,9 @@ FIELDS: dict[str, tuple] = {
     "heading_spacing": ("num", 0.0, 0.3), "heading_rule": ("bool",),                # spacing in em
     "heading_above": ("num", 0.0, 15.0), "heading_below": ("num", 0.0, 10.0),       # mm
     "entry_size": ("num", 8.0, 14.0), "entry_bold": ("bool",),
-    "entry_form": ("enum", ("stacked", "line")), "dates": ("enum", ("right", "inline")),
+    # how an entry without a list under it is written, and one with a list (bullets): a file may do both
+    "entry_form": ("enum", ("stacked", "line")), "bullet_form": ("enum", ("stacked", "line")),
+    "dates": ("enum", ("right", "inline")),
     "entry_gap": ("num", 0.0, 10.0),                                                # mm
     "bullet_indent": ("num", 0.0, 15.0), "bullet_gap": ("num", 0.0, 4.0),           # mm
     "text_colour": ("colour",), "muted_colour": ("colour",), "heading_colour": ("colour",),
@@ -98,6 +100,7 @@ class Measures:
     entry_size: float = 10.0
     entry_bold: bool = True
     entry_form: str = "stacked"
+    bullet_form: str = "stacked"
     dates: str = "right"
     entry_gap: float = 2.6
     bullet_indent: float = 4.2
@@ -217,8 +220,7 @@ def css(m: Measures) -> str:
         f".cv-top h3, .cv-line h3 {{ font-size: {_pt(m.entry_size)}; font-weight: {600 if m.entry_bold else 400}; }}",
         # the markup only a personal look writes (`render._one_line`, dates inline): kept here, not in
         # base.css, so the built-in looks' pages and their page counts stay as they were
-        ".cv-top.cv-run { display: block; }",
-        ".cv-run h3, .cv-line h3 { display: inline; }",
+        ".cv-line h3 { display: inline; }",
         ".cv-right { float: right; margin-left: 4mm; white-space: nowrap; }",
         f".cv-entry {{ margin-bottom: {_mm(m.entry_gap)}; }}",
         f".cv-dates, .cv-org, .cv-meta {{ color: {m.muted_colour}; font-size: {_pt(m.size)}; }}",
