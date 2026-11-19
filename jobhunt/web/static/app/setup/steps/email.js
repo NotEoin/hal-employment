@@ -4,7 +4,7 @@
    2-Step Verification page with a picture of what "on" looks like, instead of checking for the person.
    Test signs in to Gmail with the pasted app password and saves it only when Gmail accepts it
    (POST /email/test); the password never comes back to the page. */
-import { html, cx, useState, useEffect } from "../../core/html.js";
+import { html, cx, useState, useEffect, useRef } from "../../core/html.js";
 import { get, post } from "../../core/api.js";
 import { Icon } from "../../ui/icons.js";
 
@@ -18,10 +18,13 @@ export function Step() {
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [reply, setReply] = useState(null);
+  // the saved address arrives after the step draws; once the box has been in use it is the person's, and the
+  // saved one landing mid-typing ran the two together ("...@example.org...@example.com", CI, 2026-11-19)
+  const touched = useRef(false);
 
   useEffect(() => {
     get("/settings").then(s => {
-      setAddress(s.values["email.address"] || s.values["you.email"] || "");
+      if (!touched.current) setAddress(s.values["email.address"] || s.values["you.email"] || "");
       setSaved(s.secrets["email.app_password"] === "saved");
     }).catch(() => {});
   }, []);
@@ -42,7 +45,7 @@ export function Step() {
         <div class="ctl"><select class="input" style="width:auto" aria-label="Your email"><option>Gmail</option></select></div></div>
       <div class="setting"><label class="lab" for="email-address">Your Gmail address</label>
         <div class="ctl"><input id="email-address" class="input" type="email" style="width:280px;max-width:100%" value=${address}
-          onInput=${e => setAddress(e.target.value)} /></div></div>
+          onFocus=${() => { touched.current = true; }} onInput=${e => { touched.current = true; setAddress(e.target.value); }} /></div></div>
       <ol class="steps-list">
         <li>Google needs <b>2-Step Verification</b> on first. <a class="btn small" href=${TWO_STEP} target="_blank" rel="noopener">Open Google's 2-Step Verification page</a>
           <div class="small sub" style="margin-top:6px">If it is on, Google's page looks like this:</div>

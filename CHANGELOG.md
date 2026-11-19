@@ -46,6 +46,10 @@ What changed in each version, in plain words.
 - **Esc closes the setup guide at once.** On a busy computer, pressing Esc just after the setup guide
   opened could do nothing, and the guide stayed open. Now Esc saves your place and closes it straight away.
 
+- **Your Gmail address stays as you type it.** In the setup guide's Email step, an address typed before
+  the step had finished loading could be run together with the one Hal had saved, so **Test** said it was
+  not an email address. Now what you type is kept.
+
 ## 2.3.2 (2026-11-19)
 
 ### What's new

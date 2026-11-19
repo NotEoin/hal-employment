@@ -20,6 +20,7 @@ from support.make_cv_fixtures import FOLDER, NAMES
 from support.ui import AppPage, chromium, skip_unless_browser
 
 from jobhunt.ai.base import LLMUnavailable
+from jobhunt.core import settings
 from jobhunt.setup import email_test, phone
 
 GOOD_PASSWORD = "qrst uvwx yzab cdef"   # made up
@@ -205,6 +206,26 @@ class SetupGuide(unittest.TestCase):
         p.page.wait_for_selector(".setup", state="detached")
         for route in held:
             route.continue_()
+
+    def test_an_address_typed_before_the_saved_one_arrives_is_kept(self) -> None:
+        # The saved address landed while the person was typing and the two ran together, so Test said it was
+        # not an email address (timed out under load, 2026-11-19).
+        settings.set("you.email", "marnie.quillfeather@example.org")
+        p = self.tab("wide", "light")
+        held = []
+        p.page.route("**/api/v2/settings", lambda route: held.append(route))
+        with p.page.expect_request("**/api/v2/settings"):
+            p.page.goto(f"http://127.0.0.1:{self.hal.port}/#setup-email")
+        self.at(p, "email")
+        p.page.fill("#email-address", ADDRESS)
+        with p.page.expect_response("**/api/v2/settings"):
+            held[0].continue_()
+        p.page.unroute("**/api/v2/settings")
+        p.page.fill("input[aria-label='App password']", GOOD_PASSWORD)
+        p.page.click(".sinner button:has-text('Test')")
+        p.page.wait_for_selector("text=Connected. Hal can read your Gmail (read only).")
+        self.assertEqual(p.page.input_value("#email-address"), ADDRESS)
+        self.assertEqual(settings.get("email.address"), ADDRESS)
 
     def test_labels_keep_room_for_their_words_in_the_laptop_window(self) -> None:
         # in the 1033-pixel app window the rows of choices squeezed "Kinds of
