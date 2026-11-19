@@ -707,9 +707,11 @@ runs: tests use `tests/support/fake_claude/`.
   written and where its dates go, and the contact line. `measures.validate` checks each one (a number in its
   range, a named choice, a `#rrggbb` colour) and `measures.css` writes the style from them, so no text from a
   file reaches the page and its Content-Security-Policy stays as it is. `render.personal_look` makes a `Look`
-  of them; its `entry_form` ("line" writes `**Heading**, place, dates: text` in one `div.cv-line`), `dates`
-  and `sep` change the markup; the contact line keeps its short linked addresses between the look's
-  separators, and its links take the look's link colour and underline like the rest. Their extra rules live in the generated CSS, not `base.css`, so the built-in
+  of them; its `entry_form` ("line" writes `**Heading**, place, dates: grade. text` in one `div.cv-line`,
+  only the heading bold, each piece losing its own closing full stop, comma or colon so no mark doubles),
+  `dates` and `sep` change the markup; the contact line keeps its short linked addresses between the look's
+  separators, and its links take the look's link colour and underline like the rest. Their extra rules live
+  in the generated CSS, not `base.css`, so the built-in
   looks' pages, and the page counts keyed by their hash, are unchanged. `measures.tighter` is one "Make it
   fit" step (`TIGHTEN_STEPS` at most, never below `READABLE_PT`).
 - Personal looks are rows of `cv_looks` (migration 0036, `cvstudio/mylooks.py`): name, measures as JSON,

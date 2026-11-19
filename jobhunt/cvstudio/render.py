@@ -217,6 +217,8 @@ class ViewEntry:
     text: str
     items: str
     modules: str
+    title: str = ""                    # the heading without its grade, for the one-line form
+    grade: str = ""
 
 
 @dataclass
@@ -312,7 +314,8 @@ def view(doc: Any, type_: Any, profile: dict, *, layout: dict | None = None) -> 
             items = ", ".join(i for i in e.items if i)
             entries.append(ViewEntry(e.id, heading, _dates(e), org, e.meta or "", bullets,
                                      e.text if e.style == "paragraph" or not e.bullets else "", items,
-                                     _modules(e, part) if s.kind == "education" else ""))
+                                     _modules(e, part) if s.kind == "education" else "", e.heading or "",
+                                     e.grade or ""))
         if not (s.text or "").strip() and not entries and not s.also:
             continue
         out.append(ViewSection(s.id, s.kind, title, s.text or "", entries, s.also or ""))
@@ -359,19 +362,37 @@ def _stacked(e: ViewEntry, hl: set[str], dates: str) -> list[str]:
     return out
 
 
-def _one_line(e: ViewEntry, hl: set[str], dates: str) -> str:
-    """An entry's heading, place, details, dates and text as one line: "**Heading**, place, dates: text".
+LINE_ENDS = ".,;: "            # what a part of a one-line entry may end with, dropped before the next mark
 
-    Dates at the right are written first and floated there, so they sit on the line's first row.
+
+def _part(text: str) -> str:
+    """A piece of a one-line entry without the punctuation it ends with, so no mark is doubled."""
+    return (text or "").rstrip(LINE_ENDS)
+
+
+def _one_line(e: ViewEntry, hl: set[str], dates: str) -> str:
+    """An entry as one line: "**Heading**, place, details, dates: grade. text".
+
+    Only the heading (without its grade) is bold. The grade and the entry's text follow a colon in plain type.
+    Each piece loses the full stop, comma or colon it ends with before the next mark is added, so "Merit
+    in 15." never becomes "Merit in 15.,". Dates at the right are written first and floated there, so they sit
+    on the line's first row.
     """
     right = dates == "right" and e.dates
-    parts = [f"<h3>{_hl(e.heading, e.id, hl)}</h3>"] if e.heading else []
-    parts += [f'<span class="cv-org">{_e(x)}</span>' for x in (e.org, e.meta) if x]
+    title = e.title if e.title or e.grade else e.heading
+    parts = [f"<h3>{_hl(_part(title), e.id, hl)}</h3>"] if title else []
+    parts += [f'<span class="cv-org">{_e(_part(x))}</span>' for x in (e.org, e.meta) if _part(x)]
     if e.dates and not right:
-        parts.append(f'<span class="cv-dates">{_e(e.dates)}</span>')
+        parts.append(f'<span class="cv-dates">{_e(_part(e.dates))}</span>')
     line = ", ".join(parts)
+    rest = []
+    if _part(e.grade):
+        grade = e.grade.strip().rstrip(",;:")
+        rest.append(_e(grade if not e.text or grade.endswith((".", "!", "?")) else grade + "."))
     if e.text:
-        line += (": " if line else "") + f'<span class="cv-text">{_hl(e.text, e.id, hl, rich=True)}</span>'
+        rest.append(f'<span class="cv-text">{_hl(e.text.lstrip(LINE_ENDS), e.id, hl, rich=True)}</span>')
+    if rest:
+        line += (": " if line else "") + " ".join(rest)
     first = f'<span class="cv-dates cv-right">{_e(e.dates)}</span>' if right else ""
     return f'<div class="cv-line">{first}{line}</div>'
 

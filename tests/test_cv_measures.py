@@ -121,6 +121,24 @@ class Markup(unittest.TestCase):
                       page)
         self.assertNotIn('class="cv-top', page)
 
+    def test_a_one_line_entry_keeps_its_grade_plain_after_a_colon_with_no_doubled_marks(self) -> None:
+        # the grade was drawn bold with the heading and kept its full stop before a comma:
+        # "**Diploma: Computing, Distinction, Merit in 15.**, College, 2022 - 2023" (trial, 2026-11-19)
+        from jobhunt.cvstudio.model import CVDoc, Entry, Section
+
+        look = render.personal_look("my-one", "Mine", measures.validate({"entry_form": "line", "dates": "inline"}))
+        doc = CVDoc(sections=[Section("education", "education", "Education", entries=[
+            Entry("ed-1", heading="Access Diploma: Computing", grade="Distinction in 30 units, Merit in 15.",
+                  org="Made-up College.", start="2022", end="2023"),
+            Entry("ed-2", heading="Made-up Certificate:", grade="Pass", org="Made-up School", start="2019",
+                  text=": with a made-up project.", style="paragraph")])])
+        page = render.html_of(render.view(doc, None, {"name": "Avery Quillon"}), look)
+        self.assertIn('<div class="cv-line"><h3>Access Diploma: Computing</h3>, <span class="cv-org">Made-up '
+                      'College</span>, <span class="cv-dates">2022 - 2023</span>: Distinction in 30 units, Merit '
+                      "in 15.</div>", page)
+        self.assertIn('<h3>Made-up Certificate</h3>, <span class="cv-org">Made-up School</span>, <span '
+                      'class="cv-dates">2019</span>: Pass. <span class="cv-text">with a made-up project.</span>', page)
+
     def test_dates_at_the_right_of_a_one_line_entry_are_written_first(self) -> None:
         look = render.personal_look("my-one", "Mine", measures.validate({"entry_form": "line"}))
         page = render.html_of(humanities_view(), look)
