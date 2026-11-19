@@ -962,10 +962,12 @@ runs: tests use `tests/support/fake_claude/`.
   clause, "a team of" before it counting too, must stand in a clause of the writer's facts, the employer's
   words included, with a word of the same `COUNT_STEM` (4) letters at most `FACT_BEFORE` (2) words before
   or `FACT_AFTER` (3) after it; a number word no fact holds, "the past four years", fails too; years,
-  sums, marks ("2:1", "72%", "(86)"), numbers of words, ordinals, one, zero and rough numbers ("two or
-  three") are never read, and a number in digits no source holds is `writing.check`'s); an advert phrase told as the person's work (`checks.lifted_claims`);
-  the writing rules' high hits; the wording `plain.problems` finds (a stock tie to the job such as "aligns
-  with"); sentences restating the advert (`drafts.echoes`: the letter's first paragraph, the "why here"
+  sums, marks ("2:1", "72%", "(74)", "scored 74"), numbers of words, ordinals, one, zero, rough numbers
+  ("two or three", "from 40 minutes to 8") and counts up to `LISTED_MOST` (4) of anything but time ("two
+  operating systems" for "Linux and Windows") are never read, and a number in digits no source holds is
+  `writing.check`'s); an advert phrase told as the person's work (`checks.lifted_claims`); the writing
+  rules' high hits; the wording `plain.problems` finds (a stock tie to the job such as "aligns with");
+  sentences restating the advert (`drafts.echoes`: the letter's first paragraph, the "why here"
   answers); a later answer repeating an earlier one (`repeats.repeated`); and for the letter a length under
   `flow.LENGTH_FLOOR` of the setting or paragraphs opening alike (`flow.alike_openings`: the same first
   `flow.OPENING_WORDS` (2) words as an earlier paragraph, or a second paragraph opening "I") or a middle

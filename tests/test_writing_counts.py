@@ -6,6 +6,7 @@ import support  # noqa: F401 - sets a temporary home before jobhunt is imported
 from jobhunt.writing import counts
 
 COUNT_FACTS = ("Harbour bot: a scripted intruder was contained in all 9 break-in tests.\n- Logs: kept 30 days.\n"
+               "Modules: Coastal Mapping and Tide Studies 74. Tests run on Linux and Windows.\n"
                "CI: tests on three Lua versions. Cut one build from 40 minutes to 8 by splitting it across 12 jobs.\n"
                "Ferry planner: built in a team of five, 2023 to 2025.")
 
@@ -33,10 +34,14 @@ class Counts(unittest.TestCase):
                      "I worked there from 2023 to 2025.", "I built one tool.", "I wrote 70 tests."):
             self.assertEqual(counts.miscounted(said, COUNT_FACTS), [], said)
 
-    def test_marks_sums_shares_and_rough_numbers_are_never_counts(self):
+    def test_marks_sums_shares_ranges_and_short_lists_are_never_counts(self):
+        # the end of a range, a module's mark and a short list counted in words were listed in real packs
+        # (2026-11-19); the facts here are made up in the same shape
         for said in ("I graduated with a 2:1 degree.", "I scored 72% in Databases.", "I got 72/100 in the exam.",
                      "The role pays \u00a330,000 a year.", "I can bring two or three projects.",
-                     "It took two to three weeks.", "I aim for 250 words."):
+                     "It took two to three weeks.", "I aim for 250 words.",
+                     "I scored 74 in Coastal Mapping.", "I cut a build from 40 minutes to 8 with a cache.",
+                     "I ran tests on two operating systems."):
             self.assertEqual(counts.miscounted(said, COUNT_FACTS), [], said)
 
     def test_a_number_counts_only_what_its_own_fact_sentence_names(self):
