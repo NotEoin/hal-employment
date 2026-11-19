@@ -1,5 +1,5 @@
-"""CV pages as HTML: the type sets order, titles and limits, looks differ by CSS, the profile gives
-the name, and the preview route serves the very page the printer prints.
+"""CV pages as HTML: the type sets order and titles (its limits cut nothing), looks differ by CSS, the
+profile gives the name, and the preview route serves the very page the printer prints.
 
 The three CVs here belong to the made-up people of `support/people.py`; `made_up_cv` is shared with the
 printer, export and look tests.
@@ -140,12 +140,27 @@ class CvPages(unittest.TestCase):
     def page(self, look: str = "classic", **kw) -> str:
         return render.render_cv_html(self.doc, self.type, look, self.profile, **kw)
 
-    def test_the_type_sets_the_order_titles_and_limits(self):
+    def test_the_type_sets_the_order_and_titles_and_cuts_no_entry(self):
+        # 2.3.1 cut experience to the type's 4 entries, so the preview and the PDF dropped the fifth
         page = self.page()
         titles = re.findall(r"<h2>([^<]+)</h2>", page)
         self.assertEqual(titles, ["Profile", "Education", "Work experience", "Skills", "Interests"])
-        self.assertEqual(page.count('class="cv-entry"'), 1 + 4)     # experience is cut to the type's 4
-        self.assertNotIn("Paper round", page)
+        self.assertEqual(page.count('class="cv-entry"'), 1 + 5)
+        self.assertIn("Paper round", page)
+
+    def test_every_line_of_an_entry_is_drawn_past_the_types_limit(self):
+        # 2.3.1 cut an entry to the type's max_bullets: a project with 8 lines showed 3
+        self.doc.sections[1].entries[0].bullets = _bullets("ex-1", [f"Did thing {i}." for i in range(1, 9)])
+        v = render.view(self.doc, self.type, self.profile)
+        shown = next(s for s in v.sections if s.id == "experience").entries[0].bullets
+        self.assertEqual([text for _, text in shown], [f"Did thing {i}." for i in range(1, 9)])
+
+    def test_the_persons_own_section_limit_still_leaves_entries_out(self):
+        self.doc.sections[1].max_entries = 2
+        self.assertEqual(self.page().count('class="cv-entry"'), 1 + 2)
+        layout = {"sections": [{"id": "experience", "max": 3}]}
+        self.doc.sections[1].max_entries = None
+        self.assertEqual(self.page(layout=layout).count('class="cv-entry"'), 1 + 3)
 
     def test_two_types_order_the_same_version_differently_without_changing_it(self):
         before = repr(self.doc)

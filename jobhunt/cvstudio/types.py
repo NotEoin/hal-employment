@@ -5,7 +5,10 @@
   line it is on, whether the mistake is bad TOML or a value the schema refuses.
 - A built-in is never changed: editing one (the Writing card) first makes a copy named "<type> (yours)".
 - A type changes a CV only when it is shown: `arrange` returns a copy of the document with the type's
-  order, titles and limits. That is why comparing two types needs no AI.
+  order and titles. That is why comparing two types needs no AI.
+- A type's `max_entries` and `max_bullets` are advice, never a cut (`advice`, shown on the Checks tab): a
+  CV shows every line and entry the person has not hidden. Only the person's own limit for a section
+  (`Section.max_entries`, set in Sections) leaves entries out (2026-11-19: a project with 8 lines showed 3).
 - `suggest` picks a type by rules from the goal's career stage, the subject studied and the roles wanted,
   scored by each type's own `[suggest]` table, so a copied type can be suggested by the same rules.
 """
@@ -463,9 +466,6 @@ def _mark(m: Any) -> float | None:
 
 def _entry_for(entry: Any, rules: dict) -> Any:
     changes: dict[str, Any] = {}
-    most = rules.get("max_bullets")
-    if most and len(entry.bullets) > most:
-        changes["bullets"] = list(entry.bullets[:most])
     show = rules.get("show_modules")
     if show == "none" and entry.modules:
         changes["modules"] = []
@@ -475,17 +475,67 @@ def _entry_for(entry: Any, rules: dict) -> Any:
     return dataclasses.replace(entry, **changes) if changes else entry
 
 
+def drawn_entries(section: Any) -> list:
+    """The section's entries a CV shows: those not hidden, up to the person's own limit for the section."""
+    entries = [e for e in section.entries if not e.hidden]
+    return entries[:section.max_entries] if section.max_entries else entries
+
+
+def drawn_lines(entry: Any) -> int:
+    """How many lines an entry shows: its bullets with words, none when it is written as a paragraph."""
+    return 0 if entry.style == "paragraph" else sum(1 for b in entry.bullets if (b.text or "").strip())
+
+
+def entries_over(section: Any, t: CVType) -> int | None:
+    """The type's suggested most entries when `section` shows more; None when it does not, or when the
+    person set a limit of their own for it, which is the one that counts."""
+    most = (t.sections.get(section.kind) or {}).get("max_entries")
+    if not most or section.max_entries or not section.visible:
+        return None
+    return most if len(drawn_entries(section)) > most else None
+
+
+def lines_over(section: Any, entry: Any, t: CVType) -> int | None:
+    """The type's suggested most lines for an entry of `section` when it shows more; else None."""
+    most = (t.sections.get(section.kind) or {}).get("max_bullets")
+    return most if most and drawn_lines(entry) > most else None
+
+
+def advice(doc: Any, t: CVType) -> list[dict]:
+    """The type's entry and line limits the CV goes past, as advice: `[{id, text, target}]`.
+
+    Nothing is cut for them (see the module notes). The id of an entry limit is the trigger id of the
+    suggestion that offers to hide an entry (`suggest._limits`), so the Checks tab can link to it.
+    """
+    out = []
+    for s in doc.sections:
+        if not s.visible:
+            continue
+        title = s.title if s.locked or s.kind == "custom" else t.title_of(s.kind)
+        most = entries_over(s, t)
+        if most:
+            n = len(drawn_entries(s))
+            out.append({"id": f"max_entries:{s.id}", "target": f"s:{s.id}",
+                        "text": f"{title} has {n} entries. This CV type suggests at most {most}."})
+        for e in drawn_entries(s):
+            most = lines_over(s, e, t)
+            if most:
+                name = e.heading or e.org or title
+                out.append({"id": f"max_bullets:{s.id}/{e.id}", "target": f"s:{s.id}/e:{e.id}",
+                            "text": f"Hal has {drawn_lines(e)} lines for {name}. This CV type suggests at most "
+                                    f"{most}."})
+    return out
+
+
 def arrange(doc: Any, t: CVType) -> Any:
-    """The document as `t` shows it: sections in the type's order with its titles and limits. Pure."""
+    """The document as `t` shows it: sections in the type's order with its titles, hidden entries left out
+    and the person's own section limits applied; the type's limits cut nothing (`advice`). Pure."""
     rank = {k: i for i, k in enumerate(t.section_order)}
     later = len(rank)
     sections = []
     for pos, s in enumerate(doc.sections):
         rules = t.sections.get(s.kind) or {}
-        entries = [_entry_for(e, rules) for e in s.entries if not e.hidden]
-        most = s.max_entries or rules.get("max_entries")
-        if most:
-            entries = entries[:most]
+        entries = [_entry_for(e, rules) for e in drawn_entries(s)]
         title = s.title if s.locked else t.title_of(s.kind) if s.kind != "custom" else s.title
         sections.append((rank.get(s.kind, later), pos, dataclasses.replace(s, title=title, entries=entries)))
     return dataclasses.replace(doc, sections=[s for _, _, s in sorted(sections, key=lambda x: (x[0], x[1]))])

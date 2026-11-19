@@ -332,6 +332,13 @@ When the CV runs longer than its limit, Hal tells you, for example "This CV is n
 2." It shows that after each save in **Edit your CV** and on the **Length** card. Hal never cuts your lines
 and never stops a save: what to shorten is your choice. The length check on **Checks** uses the same count.
 
+A CV type also suggests how many entries a section has and how many lines an entry has, such as two
+qualifications under **Education** or three lines for each job. These are only advice. Your CV, its preview,
+the PDF and the Word file show every line and entry you have not hidden. When your CV has more, **Checks**
+says so under **Advice from your CV type**, for example "Hal has 8 lines for Shelf Finder. This CV type
+suggests at most 3." For a section with too many entries, **Suggestions** offers to hide the last one. A
+limit you set yourself for a section in **Sections** still leaves out the entries after it.
+
 To count the pages Hal prints the CV with a browser, which takes a second or so, once for each version. On a
 computer where no browser can print, Hal says it cannot count the pages, rather than guess. When a print
 fails, for example because the browser was slow to start, Hal says so and tries again a few minutes later.

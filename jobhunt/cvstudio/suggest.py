@@ -2,8 +2,9 @@
 
 Reviewers run one section at a time in the CV type's order, then the whole CV. Each first runs checks that
 need no AI (spelling against `cvdocs.spelling`, symbols job-site scanners drop, date formats, banned and
-never-use phrases, entries over the type's limit, empty sections, section order), then asks the `cv_suggest`
-prompt for at most one more suggestion for that section. So suggestions appear with no AI set up at all.
+never-use phrases, entries past the type's suggested most, empty sections, section order), then asks the
+`cv_suggest` prompt for at most one more suggestion for that section. So suggestions appear with no AI set
+up at all. The suggested most is advice (`types.advice`): the CV shows every entry until one is hidden.
 
 Every suggestion passes the same guards before it is stored: the target exists and is not locked or kept
 in the person's wording, `before` is the text there now, numbers, years and qualifications Hal cannot find
@@ -361,21 +362,21 @@ def _limits(doc, sid: str, type_) -> list[Draft]:
     sec = _section(doc, sid)
     if sec is None or not sec.visible:
         return []
-    rules = type_.sections.get(sid) or type_.sections.get(sec.kind) or {}
     shown = [e for e in sec.entries if not e.hidden]
     if not sec.text and not shown:
         return [Draft(f"s:{sid}", "hide", "Cut", f"Leave out the empty {sec.title} section",
                       "An empty heading makes a reader look for something that is not there.",
                       {"type": "check", "id": "empty_section", "label": "Section check: no empty sections"},
                       sec.title, [""], sid)]
-    most = sec.max_entries or rules.get("max_entries")
-    if most and len(shown) > most:
-        last = shown[-1]
+    most = _types().entries_over(sec, type_)
+    if most:
+        last = _types().drawn_entries(sec)[-1]
         name = last.heading or last.org
         return [Draft(f"s:{sid}/e:{last.id}", "hide", "Cut", f"Keep {sec.title} to {most} entries",
-                      f"Your CV type shows at most {most} entries here. {name} is the last one.",
+                      f"Your CV type suggests at most {most} entries here, and your CV shows them all. "
+                      f"{name} is the last one.",
                       {"type": "type_rule", "id": f"max_entries:{sid}",
-                       "label": f"Your CV type: at most {most} in {sec.title}"}, name, [""], sid)]
+                       "label": f"Your CV type suggests at most {most} in {sec.title}"}, name, [""], sid)]
     return []
 
 

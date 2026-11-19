@@ -117,6 +117,18 @@ class TypeChecks(unittest.TestCase):
             short = checks.for_type(cv, t)
         self.assertEqual(short, [{"id": i["id"], "name": i["name"], "ok": i["ok"]} for i in full])
 
+    def test_the_types_limits_are_advice_and_every_line_is_checked(self):
+        # 2.3.1 checked the CV after the type's cut, so lines 4 to 8 of a job were never read
+        cv, t = humanities_cv(), cvtypes.load("humanities_grad")
+        cv.sections[3].entries[0].bullets = [B(f"r{i}", f"Responsible for shelf {i}") for i in range(8)]
+        found = checks.type_checks(cv, t, profile_of(HUMANITIES))
+        items = {i["id"]: i for i in found["items"]}
+        self.assertIn("8 lines list duties", items["entry_says_what"]["note"])
+        self.assertEqual(found["total"], len([w for w in t.checks.values() if w]))
+        self.assertEqual(found["advice"], [
+            {"id": "max_bullets:experience/ex-1", "target": "s:experience/e:ex-1", "suggestion_id": None,
+             "text": "Hal has 8 lines for Bookseller. This CV type suggests at most 3."}])
+
     def test_a_student_type_asks_when_you_are_free(self):
         cv = humanities_cv()
         items = {i["id"]: i for i in checks.type_checks(cv, cvtypes.load("student"), profile_of(HUMANITIES))["items"]}
@@ -176,6 +188,22 @@ class ChecksRoutes(unittest.TestCase):
             con.close()
         self.assertEqual(json.loads(row["scanner"])["score"], 100)
         self.assertEqual(score, 100)
+
+    def test_advice_on_entries_links_to_the_suggestion_that_offers_to_hide_one(self):
+        from jobhunt import db
+        from jobhunt.cvstudio import suggest
+
+        cv = humanities_cv()
+        cv.sections[1].entries += [model.Entry(f"ed-{i}", heading=f"A level {i}") for i in (2, 3)]
+        store.new_version(cv, origin="edited", what="Two more qualifications", by="you")
+        con = db.connect()
+        try:
+            suggest.look_again(con, use_ai=False)
+        finally:
+            con.close()
+        advice = self.client.get("/api/v2/cv/checks").json()["type"]["advice"]
+        self.assertEqual([a["text"] for a in advice], ["Education has 3 entries. This CV type suggests at most 2."])
+        self.assertIsNotNone(advice[0]["suggestion_id"])
 
     def test_fix_it_makes_a_new_version(self):
         cv = humanities_cv()

@@ -16,7 +16,7 @@ from support.ui import AppPage, chromium, skip_unless_browser
 from test_cv_types import humanities_cv
 
 from jobhunt import db
-from jobhunt.cvstudio import store
+from jobhunt.cvstudio import model, store
 
 STAR = chr(0x2605)
 FAILED_LOAD = "Failed to load resource"
@@ -78,6 +78,21 @@ class CvChecksParts(unittest.TestCase):
                               "Humanities and social science graduate.", "Dissertation and strong modules shown",
                               "A recruiter's read", "It is not part of any score."):
                     self.assertIn(words, body)
+                self.assertEqual(self.errors(p), [])
+                self.assertEqual(p.sideways(), 0)
+                self.assertEqual(p.serious_axe(), [])
+
+    def test_the_types_limits_show_as_advice_beside_its_checks(self) -> None:
+        cv = humanities_cv()
+        cv.sections[3].entries[0].bullets = [model.Bullet(f"r{i}", f"Ran shelf {i} for a term") for i in range(8)]
+        store.new_version(cv, origin="edited", what="More lines", by="you")
+        for size, scheme in (("wide", "light"), ("narrow", "dark")):
+            with self.subTest(size=size):
+                p = self.part("checks-tab", "ChecksTab", size, scheme)
+                p.page.wait_for_selector("#part-under-test >> text=Advice from your CV type")
+                body = p.page.inner_text("#part-under-test")
+                self.assertIn("Hal has 8 lines for Bookseller. This CV type suggests at most 3.", body)
+                self.assertIn("Your CV still shows every line and entry.", body)
                 self.assertEqual(self.errors(p), [])
                 self.assertEqual(p.sideways(), 0)
                 self.assertEqual(p.serious_axe(), [])

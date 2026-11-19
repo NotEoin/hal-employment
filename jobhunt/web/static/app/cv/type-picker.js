@@ -14,7 +14,7 @@ const SOURCE_ROWS = 18;
 function Outline({ o }) {
   return html`<div class="card soft" style="min-width:0"><b class="h3">${o.name}</b><p class="small sub" style="margin:4px 0 8px">${o.pages}</p>
     <ol class="small" style="margin:0;padding-left:18px">${o.sections.map(s => html`<li key=${s.kind + s.title}>${s.title}
-      <span class="sub">${s.entries === 1 ? "1 entry" : s.entries + " entries"}${s.limit ? ", at most " + s.limit : ""}</span></li>`)}</ol>
+      <span class="sub">${s.entries === 1 ? "1 entry" : s.entries + " entries"}${s.limit ? ", suggests at most " + s.limit : ""}</span></li>`)}</ol>
     ${o.missing.length > 0 && html`<p class="small sub" style="margin:8px 0 0">Not on your CV yet: ${o.missing.join(", ")}.</p>`}</div>`;
 }
 
@@ -26,7 +26,7 @@ function Compare({ types, a, onClose }) {
       <select class="input" style="width:auto" aria-label="Compare with" value=${b} onChange=${e => setB(e.target.value)}>
         ${others.map(t => html`<option value=${t.id}>${t.name}</option>`)}</select>
       <button class="btn quiet small" onClick=${onClose}>Close</button></div>
-    <p class="small sub">A type changes the order, the section names and the limits. Your words stay the same.</p>
+    <p class="small sub">A type changes the order and the section names, and suggests how many entries and lines to keep. Your words and lines stay the same.</p>
     ${error ? html`<p class="small">${error.message}</p>` : data ? html`<div class="grid2 even"><${Outline} o=${data.a} /><${Outline} o=${data.b} /></div>
       <div class="row" style="margin-top:8px"><a class="btn quiet small" href=${data.a_url} target="_blank" rel="noopener">Preview as ${data.a.name}</a>
       <a class="btn quiet small" href=${data.b_url} target="_blank" rel="noopener">Preview as ${data.b.name}</a></div>` : html`<p class="small sub">Laying out your CV...</p>`}</section>`;
@@ -43,7 +43,7 @@ function SourceEditor({ id, onDone }) {
     catch (err) { setProblem(err.message); }
   };
   return html`<section class="card" style="margin-top:12px"><h3 class="h3" style="margin-top:0">Change ${data.name}</h3>
-    <p class="small sub">Each line sets one thing: the order of sections, their names and limits, how Hal writes, and which checks count.</p>
+    <p class="small sub">Each line sets one thing: the order of sections, their names and suggested limits, how Hal writes, and which checks count.</p>
     <textarea class="input mono" rows=${SOURCE_ROWS} aria-label=${"Settings of " + data.name} spellcheck="false"
       value=${value} onInput=${e => setText(e.target.value)}></textarea>
     ${problem && html`<div class="note warn" role="alert" style="margin-top:8px"><${Icon} n="warn" /><div>${problem}</div></div>`}

@@ -1,5 +1,6 @@
 /* The Checks tab of My CV: how job-site scanners read the CV, with fixed published
-   weights; the checks of the CV type, each failing one linked to its suggestion; a recruiter's read, which
+   weights; the checks of the CV type, each failing one linked to its suggestion, and its limits as advice; a
+   recruiter's read, which
    is the AI's opinion and part of no score; and the CV against one job, where "Does not matter" leaves a
    word out of that job's match. */
 import { html, cx, useState } from "../core/html.js";
@@ -39,7 +40,19 @@ function TypeChecks({ t }) {
     ${t.items.map(i => html`<div class="li" key=${i.id} style="padding:9px 2px;align-items:center">
       <span class=${cx("flag", i.ok ? "ok" : "check")} role="img" aria-label=${i.ok ? "Passes" : i.ok === null ? "Not known yet" : "Needs a look"}><${Icon} n=${i.ok ? "check" : i.ok === null ? "info" : "warn"} c="s" /></span>
       <div class="grow small">${i.name}${!i.ok && i.note && html`<div class="sub">${i.note}</div>`}</div>
-      ${!i.ok && i.suggestion_id && html`<button class="btn quiet small" onClick=${() => go("cv-sugg")}>See suggestion</button>`}</div>`)}</section>`;
+      ${!i.ok && i.suggestion_id && html`<button class="btn quiet small" onClick=${() => go("cv-sugg")}>See suggestion</button>`}</div>`)}
+    <${Advice} items=${t.advice || []} /></section>`;
+}
+
+// The type's entry and line limits: advice only. Hal's copy shows every line, so nothing here is a cut.
+function Advice({ items }) {
+  if (!items.length) return null;
+  return html`<div style="margin-top:12px"><h3 class="h3" style="margin:0 0 4px">Advice from your CV type</h3>
+    <p class="small sub" style="margin:0">Your CV still shows every line and entry. To make it shorter, remove lines or turn off Show for an entry on Edit your CV.</p>
+    ${items.map(a => html`<div class="li" key=${a.id} style="padding:9px 2px;align-items:center">
+      <span class="flag check" role="img" aria-label="Advice"><${Icon} n="info" c="s" /></span>
+      <div class="grow small">${a.text}</div>
+      ${a.suggestion_id && html`<button class="btn quiet small" onClick=${() => go("cv-sugg")}>See suggestion</button>`}</div>`)}</div>`;
 }
 
 function Job({ jobs, job, value, onPick, onOff }) {

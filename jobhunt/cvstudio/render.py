@@ -3,8 +3,10 @@
 `render_cv_html` turns a schema 2 document, its CV type and a look into a page with plain semantic markup
 (`header`, `section`, `h2`, `ul`, a class per part). Looks differ only by their CSS (`looks/<id>/cv.css`),
 except that a look whose `look.toml` says `columns = 2` puts the side sections in an `aside`. The type
-decides order, titles and limits when the page is drawn, so one version can be shown under two types
-without changing it. The name and contact line come from the profile, never from the CV body.
+decides order and titles when the page is drawn, so one version can be shown under two types without
+changing it. Its entry and line limits are advice on the Checks tab (`types.advice`), never a cut: the page
+shows every line and entry the person has not hidden, up to the person's own limit for a section. The name
+and contact line come from the profile, never from the CV body.
 
 Fonts are linked by the relative address `fonts/<file>`: the printer copies `FONT_DIR` next to the page it
 prints, and the preview route serves the same files under the preview's own address, so the preview and
@@ -228,7 +230,8 @@ def _order(sections: list[Any], type_: Any, layout: dict | None) -> list[Any]:
 
 
 def view(doc: Any, type_: Any, profile: dict, *, layout: dict | None = None) -> View:
-    """What `doc` shows under `type_`: visible sections in order, titles and limits applied."""
+    """What `doc` shows under `type_`: visible sections in order, with their titles and the person's own
+    entry limits (Sections); the type's limits cut nothing (see the module notes)."""
     own = {s.get("id"): s for s in (layout or {}).get("sections") or [] if s.get("id")}
     out: list[ViewSection] = []
     for s in _order(list(doc.sections), type_, layout):
@@ -237,15 +240,12 @@ def view(doc: Any, type_: Any, profile: dict, *, layout: dict | None = None) -> 
             continue
         part = _type_part(type_, s.kind)
         title = mine.get("title") or part.get("title") or s.title
-        limit = _int(mine.get("max")) or s.max_entries or _int(part.get("max_entries"))
-        bullets_most = _int(part.get("max_bullets"))
+        limit = _int(mine.get("max")) or s.max_entries
         entries = []
         for e in [e for e in s.entries if not e.hidden][:limit or None]:
             heading = ", ".join(x for x in (e.heading, e.grade) if x)
             org = ", ".join(x for x in (e.org, e.location) if x)
             bullets = [(b.id, b.text) for b in e.bullets if (b.text or "").strip()]
-            if bullets_most:
-                bullets = bullets[:bullets_most]
             if e.style == "paragraph":
                 bullets = []
             items = ", ".join(i for i in e.items if i)

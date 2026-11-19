@@ -6,7 +6,10 @@ CV against one job.
   document's own text in the order a one-column print puts it.
 - Type checks are plain functions keyed by the ids a CV type's `[checks]` table names; a weight of 0
   switches a check off. They run on the CV as the type shows it (`types.arrange`), so a humanities CV is
-  judged by humanities limits and a technical CV by technical ones.
+  judged by humanities rules and a technical CV by technical ones.
+- The type's entry and line limits are advice beside the checks (`types.advice`), not checks: nothing is cut
+  for them and they count in no score. An entry limit's advice links to the suggestion that offers to hide
+  an entry, so the two say one thing.
 - The length check holds the printed page count (`pagelimit`) to the CV's own page limit, not its type's;
   with no count it says the length is not known, never a word estimate (2.3.0 guessed 500 words a page).
 - "Fix it" never touches a locked section, entry or line.
@@ -60,6 +63,9 @@ DATED_KINDS = ("education", "experience", "volunteering", "research", "teaching"
 DOING_KINDS = ("experience", "volunteering", "projects", "research", "portfolio", "achievements", "teaching")
 RECRUITER_TIMEOUT_S = 600
 RECRUITER_CTX = 16384
+# Part of the cache key, so a result cached in an older shape is worked out again. 2: advice added, and the
+# checks read every line, no longer the lines left after the type's cut (2026-11-19).
+RESULT_SHAPE = 2
 
 # Headings scanners map to a section; the type's own titles are among them.
 STANDARD_HEADINGS = cvscore.STANDARD_HEADINGS | {
@@ -413,11 +419,12 @@ def check_name(check_id: str, t: cvtypes.CVType, limit: int | None = None) -> st
 
 def type_checks(doc: Any, t: cvtypes.CVType, profile: dict, *, pages: int | None = None,
                 limit: int | None = None, spelling: str = "en-GB") -> dict:
-    """The type's checks on the CV as the type shows it: {type_id, name, items, passed, total}.
+    """The type's checks on the CV as the type shows it: {type_id, name, items, passed, total, advice}.
 
     `pages` is the printed page count (None when not known) and `limit` the CV's page limit
     (`pagelimit.limit_of`); a document that is no CV's yet has its type's rule. The length check is left out
-    with no limit; with no count its `ok` is None (not known), which is not counted as passed.
+    with no limit; with no count its `ok` is None (not known), which is not counted as passed. `advice` is
+    `types.advice`, each with a `suggestion_id` that `link_suggestions` fills in.
     """
     limit = t.pages if limit is None else limit
     shown = cvtypes.arrange(doc, t)
@@ -429,8 +436,9 @@ def type_checks(doc: Any, t: cvtypes.CVType, profile: dict, *, pages: int | None
         ok, note = CHECKS[cid](c)
         items.append({"id": cid, "name": check_name(cid, t, limit), "ok": ok, "weight": weight, "note": note,
                       "suggestion_id": None})
+    advice = [{**a, "suggestion_id": None} for a in cvtypes.advice(shown, t)]
     return {"type_id": t.id, "name": t.name, "items": items, "passed": sum(i["ok"] is True for i in items),
-            "total": len(items)}
+            "total": len(items), "advice": advice}
 
 
 def for_type(doc: Any, t: cvtypes.CVType) -> list[dict]:
@@ -497,7 +505,7 @@ def fix(fix_id: str, doc: Any, t: cvtypes.CVType) -> tuple[Any, str]:
 def cache_key(t: cvtypes.CVType, profile: dict, spelling: str, pdf_sha: str | None, pages: int | None = None,
               limit: int | None = None) -> str:
     """What the cached results depend on besides the version and look."""
-    body = json.dumps([t.id, t.source, profile, spelling, pdf_sha, pages, limit], sort_keys=True)
+    body = json.dumps([RESULT_SHAPE, t.id, t.source, profile, spelling, pdf_sha, pages, limit], sort_keys=True)
     return hashlib.sha1(body.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
 
 
@@ -533,11 +541,10 @@ def for_version(con: sqlite3.Connection, version_id: str, doc: Any, t: cvtypes.C
 
 
 def link_suggestions(con: sqlite3.Connection, checked: dict, doc_id: str | None = None) -> dict:
-    """Each failing check gets the id of the CV's pending suggestion it led to, when there is one ("See
-    suggestion"); every CV's when `doc_id` is None."""
-    for item in checked["items"]:
-        if item["ok"] is not False:
-            continue
+    """Each failing check and each piece of advice gets the id of the CV's pending suggestion it led to, when
+    there is one ("See suggestion"); every CV's when `doc_id` is None."""
+    failing = [i for i in checked["items"] if i["ok"] is False]
+    for item in [*failing, *checked.get("advice", [])]:
         row = con.execute("SELECT id FROM cv_suggestions WHERE status = 'pending' AND json_extract(trigger, '$.id') = ?"
                           " AND (? IS NULL OR doc_id = ?) ORDER BY created DESC LIMIT 1",
                           (item["id"], doc_id, doc_id)).fetchone()

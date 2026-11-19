@@ -138,15 +138,52 @@ class Comparing(unittest.TestCase):
         self.assertEqual([s["title"] for s in b["sections"]][:2], ["Profile", "Key skills"])
         self.assertEqual(b["pages"], "Up to 2 pages")
 
-    def test_a_type_sets_order_titles_and_limits_when_shown_and_keeps_the_cv(self):
+    def test_a_type_sets_order_and_titles_when_shown_and_keeps_every_line(self):
+        # 2.3.1 cut an entry to the type's max_bullets when shown, so a project with 8 lines showed 3
         cv = technical_cv()
         cv.sections[3].entries[0].bullets *= 5
         shown = cvtypes.arrange(cv, cvtypes.load("creative"))
         self.assertEqual([s.kind for s in shown.sections], ["summary", "experience", "education", "skills", "projects"])
-        self.assertEqual(len(shown.sections[1].entries[0].bullets), 3)
-        self.assertEqual(len(cv.sections[3].entries[0].bullets), 5)
+        self.assertEqual(len(shown.sections[1].entries[0].bullets), 5)
         cv.sections[3].locked, cv.sections[3].title = True, "Jobs I did"
         self.assertIn("Jobs I did", [s.title for s in cvtypes.arrange(cv, cvtypes.load("creative")).sections])
+
+
+class Advice(unittest.TestCase):
+    """A type's entry and line limits are advice, never a cut."""
+
+    def test_entries_past_the_types_limit_are_kept_and_named_as_advice(self):
+        cv = technical_cv()
+        cv.sections[1].entries += [model.Entry(f"ed-{i}", heading=f"A level {i}") for i in (2, 3)]
+        t = cvtypes.load("technical_grad")
+        self.assertEqual(len(cvtypes.arrange(cv, t).sections[1].entries), 3)
+        self.assertEqual(cvtypes.advice(cv, t), [
+            {"id": "max_entries:education", "target": "s:education",
+             "text": "Education has 3 entries. This CV type suggests at most 2."}])
+
+    def test_lines_past_the_types_limit_are_kept_and_named_as_advice(self):
+        cv = technical_cv()
+        cv.sections[2].entries[0].bullets = [model.Bullet(f"p{i}", f"Line {i} of the project") for i in range(8)]
+        t = cvtypes.load("technical_grad")
+        self.assertEqual(len(cvtypes.arrange(cv, t).sections[2].entries[0].bullets), 8)
+        self.assertEqual(cvtypes.advice(cv, t), [
+            {"id": "max_bullets:projects/pr-1", "target": "s:projects/e:pr-1",
+             "text": "Hal has 8 lines for Shelf Finder. This CV type suggests at most 3."}])
+
+    def test_hidden_entries_and_empty_lines_are_not_counted(self):
+        cv = technical_cv()
+        cv.sections[1].entries += [model.Entry("ed-2", heading="A levels"),
+                                   model.Entry("ed-3", heading="GCSEs", hidden=True)]
+        cv.sections[2].entries[0].bullets = [model.Bullet(f"p{i}", "" if i % 2 else "Did a thing") for i in range(6)]
+        self.assertEqual(cvtypes.advice(cv, cvtypes.load("technical_grad")), [])
+
+    def test_the_persons_own_section_limit_still_leaves_entries_out_and_gives_no_advice(self):
+        cv = technical_cv()
+        cv.sections[1].entries += [model.Entry(f"ed-{i}", heading=f"A level {i}") for i in (2, 3, 4)]
+        cv.sections[1].max_entries = 3
+        t = cvtypes.load("technical_grad")
+        self.assertEqual([e.id for e in cvtypes.arrange(cv, t).sections[1].entries], ["ed-1", "ed-2", "ed-3"])
+        self.assertEqual(cvtypes.advice(cv, t), [])
 
 
 class Copies(unittest.TestCase):

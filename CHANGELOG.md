@@ -13,6 +13,15 @@ What changed in each version, in plain words.
   Certificate or the International Baccalaureate, which it used to call part of your degree. A degree stays
   **Part of my degree**, and a choice you made yourself is kept.
 
+### Fixed
+
+- **Your CV shows every line again.** A CV type's limits, such as three lines for each project or two
+  entries under **Education**, used to cut your CV without a word: a project with 8 lines showed 3, and a
+  third qualification was left out of the preview, the PDF and the Word file. Now your CV shows every line
+  and entry you have not hidden. The type's limits are advice on **Checks**, for example "Education has 3
+  entries. This CV type suggests at most 2.", and you choose what to leave out. A limit you set yourself in
+  **Sections** still applies.
+
 ## 2.3.1 (2026-11-19)
 
 ### What's new

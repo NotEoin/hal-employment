@@ -427,7 +427,10 @@ MADE_UP_PAGES = {
                      {"id": "profile_evidence", "name": "Profile shows evidence, not qualities", "ok": True,
                       "weight": 1.0, "note": "", "suggestion_id": None},
                      {"id": "result_bullets", "name": "Bullets show a result where there is one", "ok": False,
-                      "weight": 2.0, "note": "One bullet has no result.", "suggestion_id": None}]},
+                      "weight": 2.0, "note": "One bullet has no result.", "suggestion_id": None}],
+                 "advice": [{"id": "max_bullets:experience/ex-1", "target": "s:experience/e:ex-1",
+                             "text": "Hal has 5 lines for Bookseller. This CV type suggests at most 3.",
+                             "suggestion_id": None}]},
         "recruiter": None, "job": None, "jobs": []},
     # My CV, the look gallery
     "/cv/looks": [{"id": "classic", "name": "Classic", "safe": True, "note": "One column, plain headings",

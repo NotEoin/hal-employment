@@ -588,6 +588,12 @@ runs: tests use `tests/support/fake_claude/`.
 - Built-in types are `cvstudio/types/*.toml`; copies are rows in `cv_types`, edited as TOML, and a mistake is
   reported with its line. `suggest(goal, doc)` picks a type by career stage, subject and roles, with one
   sentence why. `arrange` and `outline` show a CV under a type, so comparing two types needs no AI.
+- A type's `max_entries` and `max_bullets` cut nothing: the preview, the PDF, Word and the page count show
+  every line and entry that is not hidden. Only the person's own limit for a section (`Section.max_entries`,
+  the Sections editor's `max`) leaves entries out. `types.advice` names what goes past the type's limits;
+  `type_checks` returns it as `advice`, beside the checks and in no score, and `link_suggestions` links an
+  entry limit's advice to the suggestion that offers to hide an entry (trigger id `max_entries:<section>`).
+  Until 2.3.1 the type's limits were cut when the page was drawn.
 - `checks.scanner` gives the scanner score with fixed weights (30/20/15/15/10/10) and no AI, from the printed
   PDF when given one, else the document's own text, so the same CV always gets the same score.
   `type_checks` runs the type's checks by id (weight 0 switches one off). `recruiter_read` is the AI's
@@ -637,8 +643,8 @@ runs: tests use `tests/support/fake_claude/`.
 ## Looks and printing (`cvstudio/render.py`, `printer.py`, `export.py`)
 
 - A look is `cvstudio/looks/<id>/{look.toml, cv.css, letter.css}` over `looks/base.css`.
-  `render.render_cv_html` draws the page; the type sets order, titles and limits, and the person's Sections
-  layout wins. The page holds no script and carries its own Content-Security-Policy; the preview route sends
+  `render.render_cv_html` draws the page; the type sets order and titles, and the person's Sections layout
+  wins. The type's limits are advice, never a cut (see CV types and checks). The page holds no script and carries its own Content-Security-Policy; the preview route sends
   the exact bytes the printer prints. A line's marks become `strong`, `em` and `a` (`inline.html`), so the
   printed PDF has real links; other fields show their stars as typed.
 - `printer.to_pdf` prints with Microsoft Edge on Windows, Playwright's Chromium on Linux, and an ordinary
@@ -660,7 +666,8 @@ runs: tests use `tests/support/fake_claude/`.
 ## CV suggestions (`cvstudio/suggest.py`, `tailor.py`, `fresh.py`)
 
 - `suggest.py` reviews one section at a time in the type's order, then the whole CV. Spelling, symbols,
-  numeric dates, banned and never-use phrases, limits, empty sections and order need no AI; the `cv_suggest`
+  numeric dates, banned and never-use phrases, the type's entry limit (a suggestion to hide the last entry,
+  linked from the Checks tab's advice), empty sections and order need no AI; the `cv_suggest`
   prompt may add at most one suggestion per section after them.
 - Reviewers and the AI (`cv_suggest`, `cv_another`) see a line's plain words (`suggest.lines`). For a line,
   paragraph or profile (`suggest.is_line`) the guard compares plain words, stores the line as it is now as
@@ -670,7 +677,8 @@ runs: tests use `tests/support/fake_claude/`.
 - Guards run on every suggestion: the target exists and is unlocked, `before` matches the text there now,
   numbers, years and qualifications Hal cannot find become `[how many?]`, `[when?]` or `[which?]` (Accept
   refuses a gap, and a job's CV drops it), no I or we in the AI's wording when the type writes without them,
-  no new banned phrase, the fingerprint is not one the person left, and the type's limits hold.
+  no new banned phrase, the fingerprint is not one the person left, and the wording keeps to the type's word
+  limits (`max_words`, `bullet_words`).
 - Accept makes a new version; Undo and Accept all are versions too. Leaving a suggestion keeps the reason,
   and "Remember this" is a `cv_preferences` row.
 - `tailor.for_job` (No, A little, More) keeps each change for a job in `job_cvs` and rebuilds the job's CV

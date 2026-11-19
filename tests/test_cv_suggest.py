@@ -187,6 +187,29 @@ class Reviewers(CvCase):
         self.assertEqual(suggest.listing(self.con)["state"], "ready")
 
 
+class TypeLimits(CvCase):
+    """A type's entry limit is advice: one suggestion offers to hide an entry, and nothing is cut meanwhile."""
+
+    def more_education(self, n: int, own_limit: int | None = None) -> model.CVDoc:
+        doc = store.current()[1]
+        sec = next(s for s in doc.sections if s.id == "education")
+        sec.entries += [model.Entry(id=f"ed-{i}", heading=f"A level {i}") for i in range(n)]
+        sec.max_entries = own_limit
+        return doc
+
+    def test_entries_past_the_types_limit_get_one_suggestion_worded_as_advice(self):
+        doc = self.more_education(2)
+        drafts = [d for d in suggest.checks_for(doc, "education", suggest.cv_type()) if d.op == "hide"]
+        self.assertEqual([(d.target, d.trigger["id"]) for d in drafts],
+                         [("s:education/e:ed-1", "max_entries:education")])
+        self.assertIn("suggests at most 2", drafts[0].why)
+        self.assertIn("suggests at most 2", drafts[0].trigger["label"])
+
+    def test_a_limit_the_person_set_is_theirs_so_the_type_suggests_nothing(self):
+        doc = self.more_education(2, own_limit=3)
+        self.assertEqual([d for d in suggest.checks_for(doc, "education", suggest.cv_type()) if d.op == "hide"], [])
+
+
 class Studied(CvCase):
     """A skill whose every source in the record is lecture material is never listed as one you used."""
 
