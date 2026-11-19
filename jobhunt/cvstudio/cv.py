@@ -18,7 +18,6 @@ import contextvars
 import copy
 import json
 import re
-import threading
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -33,8 +32,6 @@ LINKS = (("linkedin", "you.links.linkedin"), ("site", "you.links.website"), ("gi
 NAMED_BY = {"education": "qualification", "projects": "name", "experience": "role"}
 PAIRS = ("skills", "additional")  # entries written as [name, value]; only the value is edited
 _BASED_ON: contextvars.ContextVar[str | None] = contextvars.ContextVar("hal_cv_based_on", default=None)
-_DRAWING = threading.Lock()       # one application PDF drawn at a time (`render`)
-DRAW_WAIT_S = 60                  # a CV draws in milliseconds; this only bounds a drawing that never ends
 
 
 @contextlib.contextmanager
@@ -264,20 +261,12 @@ def tailor(job_text: str) -> tuple[dict, str | None]:
 
 
 def render(variant: dict, out_dir: Path) -> Path:
-    """Writes the variant's JSON and its PDF, in Hal's layout for applications, into `out_dir`.
-
-    One at a time: the PDF writer keeps the file it writes to in a module global (`pdfdraw.OUT`), and a job's
-    CV is also drawn to count its pages (`pagelimit.drawn_pages`), so two at once could swap their files.
-    """
+    """Writes the variant's JSON and its PDF, in Hal's layout for applications, into `out_dir`. The PDF is
+    written under the PDF writer's own lock (`pdfdraw.write_to`), as every drawn PDF is."""
     from jobhunt.cvstudio import pdf as cvpdf
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "cv.json").write_text(json.dumps(printable(variant), indent=2) + "\n")
-    if not _DRAWING.acquire(timeout=DRAW_WAIT_S):
-        raise TimeoutError(f"another CV was still being drawn after {DRAW_WAIT_S} seconds")
-    try:
-        return cvpdf.render(variant, out_dir)
-    finally:
-        _DRAWING.release()
+    return cvpdf.render(variant, out_dir)
 
 
 def facts_text(doc_id: str | None = None) -> str:

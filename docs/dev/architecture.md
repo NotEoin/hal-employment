@@ -613,8 +613,7 @@ runs: tests use `tests/support/fake_claude/`.
   Length card (`cv/page-limit.js`) when it opens. `PUT /api/v2/cv/pages` sets the limit. In a test run no
   browser prints for a count unless `HAL_TEST_REAL_PRINT=1`; tests set `pagelimit.PRINT` to a stand-in.
 - A job's CV is counted on the PDF employers get, Hal's application layout drawn without a browser
-  (`pagelimit.drawn_pages` through `cv.render`, which now draws one at a time as `pdfdraw` keeps its output
-  file in a global), kept in `job_cvs.pages` keyed by the hash of `tailor.v1`; with the original file sent,
+  (`pagelimit.drawn_pages` through `cv.render`), kept in `job_cvs.pages` keyed by the hash of `tailor.v1`; with the original file sent,
   `cv_files.pages`. `pagelimit.job_state` is `pages` on `tailor.editor` and `docs.cv.pages` on the
   application, which the CV tab and the approve box show.
 - Hal's changes keep to the limit, by one rule: a change of Hal's is held back only when it adds a page AND
@@ -647,7 +646,9 @@ runs: tests use `tests/support/fake_claude/`.
   read Hal's temporary files. 60 s timeout, and the whole process tree is ended when it runs out. Every PDF
   is checked (opens, has pages, name, first section title). A CV is printed whole however long it is
   (`export.cv_pdf` passes no page bound; 2.3.0 refused a CV over its type's length by more than a page).
-  When no browser can print, `pdf.draw_view` draws a simple PDF itself and Activity says why. It draws a
+  When no browser can print, `pdf.draw_view` draws a simple PDF itself and Activity says why. Every drawn
+  PDF (that fallback, an application's CV, a letter, a page count) is written by `pdfdraw.write_to`, under
+  one lock, as `pdfdraw.OUT` is a module global. It draws a
   line's bold and italic in the Helvetica faces built into every PDF reader (bold, oblique and bold oblique),
   wraps by measuring each run in its own face (`pdfdraw.wrap`), and underlines a link with a link annotation
   over its words.

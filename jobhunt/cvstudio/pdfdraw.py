@@ -16,14 +16,19 @@ A line's bold, italic and links (`cvstudio/inline.py`) are drawn in Helvetica-Bo
 Helvetica-BoldOblique, each measured with its own widths so a wrapped line of mixed runs fits its column; a
 link is underlined and gets a link annotation over its words.
 
-Callers set `OUT` to the file to write before calling `write_pdf`.
+Callers write a file with `write_to(out, ...)`, which sets `OUT` and writes under one lock (`DRAWING`): `OUT`
+is a module global, and CVs, letters and the page counts of job CVs are drawn from several threads at once,
+so two writes could otherwise swap their files (review, 2026-11-19).
 """
+import threading
 import zlib
 from pathlib import Path
 
 from jobhunt.cvstudio import inline
 
 OUT = Path("CV.pdf")
+DRAWING = threading.Lock()      # held from setting `OUT` to the file written (`write_to`)
+DRAW_WAIT_S = 60                # a PDF is written in milliseconds; this only bounds a write that never ends
 IDENTITY = {"NAME": "you.name", "EMAIL": "you.email", "PHONE": "you.phone"}
 
 
@@ -430,6 +435,22 @@ def add_footers(pages):
             text_op(label, PW - MR - measure(label, F_REG, 7.6), 22.0,
                     F_REG, 7.6, 0.55)
         )
+
+
+def write_to(out, pages, links=(), title="CV") -> Path:
+    """Writes `pages` as a PDF to `out` and returns its path; one writer at a time (`DRAWING`).
+
+    TimeoutError when another write holds the lock past `DRAW_WAIT_S`.
+    """
+    global OUT
+    if not DRAWING.acquire(timeout=DRAW_WAIT_S):
+        raise TimeoutError(f"another PDF was still being written after {DRAW_WAIT_S} seconds")
+    try:
+        OUT = Path(out)
+        write_pdf(pages, links, title=title)
+        return OUT
+    finally:
+        DRAWING.release()
 
 
 def write_pdf(pages, links=(), title="CV"):

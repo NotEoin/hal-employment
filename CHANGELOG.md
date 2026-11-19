@@ -42,6 +42,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **A PDF always lands in its own file.** When Hal drew two PDFs at the same moment without a browser (an
+  application's CV and a cover letter, or a CV download), one could be written to the other's file and go
+  missing. Hal now writes one such PDF at a time.
+
 - **A long CV prints whole.** A CV more than a page longer than its CV type's length could not be printed
   or downloaded as a PDF. It now prints however long it is.
 

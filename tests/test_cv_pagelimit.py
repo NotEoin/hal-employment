@@ -9,6 +9,8 @@ from __future__ import annotations
 import contextlib
 import json
 import tempfile
+import threading
+import time
 import unittest
 from collections.abc import Iterator
 from pathlib import Path
@@ -26,9 +28,24 @@ from test_cv_suggest import PROFILE, STAR, TABLE, CvCase
 from test_cv_tailor import JOB, NEW_TABLE, JobCase, tailoring_ai
 
 from jobhunt.apply import queries
-from jobhunt.cvstudio import checks, export, fresh, model, pagelimit, printer, store, suggest, tailor
+from jobhunt.cvstudio import (
+    checks,
+    cv,
+    export,
+    fresh,
+    model,
+    pagelimit,
+    pdfdraw,
+    printer,
+    render,
+    store,
+    suggest,
+    tailor,
+)
+from jobhunt.cvstudio import pdf as cvpdf
 from jobhunt.cvstudio import types as cvtypes
 
+SETTLE_S = 0.3                 # how long the slowed PDF writer holds its file name
 FILLER = "Filler line about a made-up archive"
 FILLER_PER_PAGE = 10           # the stand-in printer's page: ten filler lines
 LONG_PAGES = 3                 # pages of `long_cv`
@@ -531,6 +548,33 @@ class CountsKeptWithTheVersion(CvCase):
         self.assertIsNone(pagelimit.keep(vid))
         self.assertEqual(pagelimit.known(vid), (None, False))
 
+
+
+class OneWriterAtATime(unittest.TestCase):
+    """The export's simple PDF and a job's CV drawn at once each land in their own file (review, 2026-11-19:
+    `pdf.draw_view` set `pdfdraw.OUT` without the lock the other drawings took)."""
+
+    def test_two_drawings_at_once_write_their_own_files(self):
+        real = pdfdraw.write_pdf
+        writing = threading.Event()
+
+        def slow(*args, **kw):          # holds the file name a moment, as a busy computer does
+            writing.set()
+            time.sleep(SETTLE_S)
+            return real(*args, **kw)
+
+        doc = made_up_cv(people.HUMANITIES.key)
+        tmp = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        view = render.view(doc, type_for(people.HUMANITIES.key), profile_of(people.HUMANITIES))
+        with mock.patch.object(pdfdraw, "write_pdf", slow):
+            first = threading.Thread(target=cvpdf.draw_view, args=(view, tmp / "simple.pdf"))
+            first.start()
+            self.assertTrue(writing.wait(SETTLE_S * 10))
+            made = cv.render(cv.v1_of(doc), tmp / "job")
+            first.join(SETTLE_S * 10)
+        self.assertTrue((tmp / "simple.pdf").exists(), "the simple PDF went to the job's file")
+        self.assertTrue(made.exists())
+        self.assertNotEqual((tmp / "simple.pdf").read_bytes(), made.read_bytes())
 
 if __name__ == "__main__":
     unittest.main()

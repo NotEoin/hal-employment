@@ -98,6 +98,5 @@ def draw(body: str, out: Path, recipient: list[str], subject: str, when: date | 
     if len(pages) > 1:
         raise ValueError(f"letter runs to {len(pages)} pages; shorten it to one")
     out.parent.mkdir(parents=True, exist_ok=True)
-    b.OUT = out
-    b.write_pdf(pages, doc.links, title="Cover letter")
+    b.write_to(out, pages, doc.links, title="Cover letter")
     return out

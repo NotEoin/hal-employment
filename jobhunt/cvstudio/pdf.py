@@ -148,8 +148,7 @@ def draw_view(view, out: Path) -> Path:
     b.add_footers(pages)
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    b.OUT = out
-    b.write_pdf(pages, doc.links)
+    b.write_to(out, pages, doc.links)
     return out
 
 
@@ -221,6 +220,5 @@ def render(variant: dict, out_dir: Path) -> Path:
 
     pages = doc.finish()
     b.add_footers(pages)
-    b.OUT = pdf
-    b.write_pdf(pages, doc.links)
+    b.write_to(pdf, pages, doc.links)
     return pdf
