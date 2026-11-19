@@ -568,7 +568,8 @@ runs: tests use `tests/support/fake_claude/`.
   stars and only http, https and mailto links). A style the whole line shares is structure and is left out.
   The rules and the AI read plain `text`; `parse.keep_marks` then puts each marked line back into the
   section text, entry text or bullet that holds its words, only when the plain words come out the same.
-  "Check what Hal read" rows show plain words, and `correct` keeps the marks whose words stay.
+  "Check what Hal read" rows show plain words, and `correct` keeps a typed correction as typed when it
+  holds marks, else keeps the marks whose words stay (`parse._corrected`).
 - In an entry section where the file marks headings (a bold line, a `###`, or a "**Heading**, details:
   text" line), `_marked_drafts` starts entries only there. The line under a heading is its details line
   when it is short, holds a date range or is split with `|` (each part becomes its own field); other lines

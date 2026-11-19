@@ -281,6 +281,15 @@ class BrowserPrinted(unittest.TestCase):
         fixed = parse.correct(doc, "s:experience/e:ex-1/b:b1", "Led 20 tours for families")
         self.assertEqual(fixed.sections[0].entries[0].bullets[0].text, "Led **20** tours for families")
 
+    def test_marks_typed_in_a_correction_are_kept_as_typed(self):
+        # regression: a typed "**x**" was stored as "\\*\\*x\\*\\*" and the editor showed the backslashes
+        doc = CVDoc(sections=[Section("experience", "experience", "Experience", entries=[
+            Entry("ex-1", heading="Guide", bullets=[Bullet("b1", "Led tours for *visiting* families")])])])
+        for typed in ("Led **20** tours for families", "Led tours, rated 5* by A* students"):
+            with self.subTest(typed=typed):
+                fixed = parse.correct(doc, "s:experience/e:ex-1/b:b1", typed)
+                self.assertEqual(fixed.sections[0].entries[0].bullets[0].text, typed)
+
     def test_markdown_markers_are_stripped_and_headings_mapped(self):
         lines = mdread.md_lines("---\ntitle: cv\n---\n# Ada Example\n\n## Work history\n\n### Tester\n\n"
                                "Made-up Ltd | 2024 - 2025\n\n* **Speed:** cut a run from *27* to `6` minutes,\n"

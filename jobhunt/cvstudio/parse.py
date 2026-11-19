@@ -29,7 +29,9 @@ field. Design decisions, each with its reason:
 - The rules and the AI read plain words. A file's bold, italic and links inside a line (`Line.marked`: Word
   runs and hyperlinks, a PDF's fonts, Markdown's marks) are put back afterwards (`keep_marks`) into the
   lines, paragraphs and profile whose words are that line's, so both readings keep them the same way and a
-  value Hal changed keeps its plain words. "Check what Hal read" shows plain words.
+  value Hal changed keeps its plain words. "Check what Hal read" shows plain words. A correction typed there
+  is kept as typed when it holds marks of its own (as on Edit your CV, the person wrote them); a correction
+  in plain words keeps the marks of the words it did not change (`_corrected`).
 """
 from __future__ import annotations
 
@@ -1158,6 +1160,12 @@ ENTRY_FIELDS = ("heading", "org", "location", "grade", "meta", "text", "dates", 
 GONE_WORDS = "That part of your CV is not there any more."
 
 
+def _corrected(old: str, value: str) -> str:
+    """The corrected text: as typed when it holds bold, italic or a link, else `value` with the marks of `old`
+    whose words are still there. Before 2026-11-18 a typed "**x**" was stored escaped and showed backslashes."""
+    return value if inline.has_marks(value) else inline.keep_marks(old, value)
+
+
 def correct(doc: CVDoc, path: str, value: str) -> CVDoc:
     """A new document with the one field `path` names set to `value`; LookupError when it is not there."""
     out = copy.deepcopy(doc)
@@ -1180,7 +1188,7 @@ def correct(doc: CVDoc, path: str, value: str) -> CVDoc:
     if m.group("eid") is None:
         if m.group("field") != "text":
             raise LookupError(GONE_WORDS)
-        sec.text = inline.keep_marks(sec.text, value)
+        sec.text = _corrected(sec.text, value)
         return out
     entry = next((e for e in sec.entries if e.id == m.group("eid")), None)
     if entry is None:
@@ -1192,7 +1200,7 @@ def correct(doc: CVDoc, path: str, value: str) -> CVDoc:
         words = inline.plain(bullet.text)
         if words.lower().startswith("dissertation") and not value.lower().startswith("dissertation"):
             value = f"{words.split(':', 1)[0]}: {value}"
-        bullet.text = inline.keep_marks(bullet.text, value)
+        bullet.text = _corrected(bullet.text, value)
         return out
     name = m.group("field")
     if name not in ENTRY_FIELDS:
@@ -1203,7 +1211,7 @@ def correct(doc: CVDoc, path: str, value: str) -> CVDoc:
     elif name == "items":
         entry.items = _items(value)
     elif name == "text":
-        entry.text = inline.keep_marks(entry.text, value)
+        entry.text = _corrected(entry.text, value)
     else:
         setattr(entry, name, value)
     return out
