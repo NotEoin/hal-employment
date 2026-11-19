@@ -87,7 +87,7 @@ def looks_list(req: Request) -> list[dict]:
     except Exception:
         log.exception("could not read the chosen look")
         chosen = render.DEFAULT_LOOK
-    return [{**look.public(), "chosen": look.id == chosen} for look in render.looks()]
+    return [{**look.public(), "chosen": look.id == chosen} for look in render.all_looks()]
 
 
 @route("PUT", "/api/v2/cv/look")

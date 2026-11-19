@@ -712,6 +712,14 @@ runs: tests use `tests/support/fake_claude/`.
   separators, and its links take the look's link colour and underline like the rest. Their extra rules live in the generated CSS, not `base.css`, so the built-in
   looks' pages, and the page counts keyed by their hash, are unchanged. `measures.tighter` is one "Make it
   fit" step (`TIGHTEN_STEPS` at most, never below `READABLE_PT`).
+- Personal looks are rows of `cv_looks` (migration 0036, `cvstudio/mylooks.py`): name, measures as JSON,
+  notes on what was approximated, the "Make it fit" steps taken, and the file they were measured from.
+  Nothing personal is written to `cvstudio/looks/`. `render.look` finds a built-in first, then a personal
+  look (ids `my-<name>`, never a built-in's), and `render.all_looks` lists the built-ins then the personal
+  ones for `GET /cv/looks` (each with `personal`). The style is written from the measures on every render,
+  so new measures change the page's hash and it prints again for its page count and Download PDF, while a
+  new name does not. A look that a CV uses, archived or not, cannot be deleted (`mylooks.InUse` names the
+  CVs): moving those CVs to another look unasked would change what employers get.
 - `printer.to_pdf` prints with Microsoft Edge on Windows, Playwright's Chromium on Linux, and an ordinary
   Chromium, Chrome or Edge only when Playwright is missing; never a snap or flatpak browser, which cannot
   read Hal's temporary files. 60 s timeout, and the whole process tree is ended when it runs out. Every PDF

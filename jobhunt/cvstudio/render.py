@@ -83,7 +83,7 @@ class Look:
 
     def public(self) -> dict:
         """What `GET /cv/looks` sends."""
-        return {"id": self.id, "name": self.name, "safe": self.safe, "note": self.note}
+        return {"id": self.id, "name": self.name, "safe": self.safe, "note": self.note, "personal": self.personal}
 
 
 def personal_look(look_id: str, name: str, m: measures.Measures, *, note: str = "") -> Look:
@@ -109,11 +109,23 @@ def looks() -> tuple[Look, ...]:
 
 
 def look(look_id: str | None) -> Look:
-    """The look with this id; `UnknownLook` names a missing one."""
+    """The look with this id, built in or the person's own (`mylooks`); `UnknownLook` names a missing one."""
     for found in looks():
         if found.id == (look_id or DEFAULT_LOOK):
             return found
+    from jobhunt.cvstudio import mylooks
+
+    saved = mylooks.get(look_id or "")
+    if saved is not None:
+        return saved.look()
     raise UnknownLook(f"There is no look called {look_id!r}.")
+
+
+def all_looks() -> list[Look]:
+    """Every look the person can choose: the built-ins in gallery order, then their own, oldest first."""
+    from jobhunt.cvstudio import mylooks
+
+    return [*looks(), *(s.look() for s in mylooks.all_saved())]
 
 
 @functools.cache

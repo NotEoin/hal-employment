@@ -436,12 +436,13 @@ MADE_UP_PAGES = {
         "recruiter": None, "job": None, "jobs": []},
     # My CV, the look gallery
     "/cv/looks": [{"id": "classic", "name": "Classic", "safe": True, "note": "One column, plain headings",
-                   "chosen": True},
+                   "personal": False, "chosen": True},
                   {"id": "modern", "name": "Modern", "safe": True, "note": "One column, coloured headings",
-                   "chosen": False},
-                  {"id": "compact", "name": "Compact", "safe": True, "note": "Fits more on each page", "chosen": False},
+                   "personal": False, "chosen": False},
+                  {"id": "compact", "name": "Compact", "safe": True, "note": "Fits more on each page",
+                   "personal": False, "chosen": False},
                   {"id": "two", "name": "Two columns", "safe": False, "note": "For printing and networking",
-                   "chosen": False}],
+                   "personal": False, "chosen": False}],
     # My CV, Suggestions and Adjust for each job
     "/cv/suggestions": {"state": "ready", "reviewed": 0, "total": 1, "kinds": ["Dates"], "done": [], "message": "",
                         "pending": [{"id": "s-demo", "kind": "Dates", "where": "Education, BA (Hons) History",

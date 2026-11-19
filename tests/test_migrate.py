@@ -351,11 +351,24 @@ class OldDatabases(Folder):
         con.execute("INSERT INTO job_cvs (job_id, base_version_id, level, changes) "
                     "VALUES ('made-up:1', 'v1-c', 'little', '[]')")
         con.commit()
-        self.assertEqual(self.run_migrate(con), [35])
+        self.assertEqual(self.run_migrate(con), [35, 36])
         self.assertEqual(con.execute("SELECT name, page_limit FROM cv_documents").fetchall(), [("Museum CV", None)])
         self.assertEqual(con.execute("SELECT pages, pages_key FROM cv_versions").fetchall(), [(None, None)])
         self.assertEqual(con.execute("SELECT level, pages, pages_key FROM job_cvs").fetchall(),
                          [("little", None, None)])
+
+    def test_a_cv_from_2_3_1_keeps_its_look_and_gains_an_empty_list_of_personal_looks(self):
+        con = self.open()
+        up_to_35 = migrate.discover()[:35]
+        with mock.patch.object(migrate, "LATEST", 35), mock.patch.object(migrate, "discover", return_value=up_to_35):
+            self.run_migrate(con)
+        con.execute("INSERT INTO cv_documents (id, route, send, type_id, look_id, created, updated, name, starred, "
+                    "position) VALUES ('main', 'improve', 'hal_copy', 'humanities_grad', 'modern', 'x', 'x', "
+                    "'Museum CV', 1, 0)")
+        con.commit()
+        self.assertEqual(self.run_migrate(con), [36])
+        self.assertEqual(con.execute("SELECT look_id FROM cv_documents").fetchall(), [("modern",)])
+        self.assertEqual(con.execute("SELECT COUNT(*) FROM cv_looks").fetchone()[0], 0)
 
     def test_settings_revision_starts_at_zero(self):
         con = self.open()
@@ -368,8 +381,8 @@ class Runner(Folder):
 
     def test_migrations_are_numbered_one_to_latest_with_no_gaps(self):
         numbers = [m.number for m in migrate.discover()]
-        self.assertEqual(numbers, list(range(1, 36)))
-        self.assertEqual(migrate.LATEST, 35)
+        self.assertEqual(numbers, list(range(1, 37)))
+        self.assertEqual(migrate.LATEST, 36)
         self.assertTrue(all(m.title and m.title[0].isupper() for m in migrate.discover()))
 
     def test_no_migration_holds_destructive_sql_but_the_one_allowed(self):
