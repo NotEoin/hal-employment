@@ -192,6 +192,20 @@ class SetupGuide(unittest.TestCase):
         self.at(p, "cv")
         self.check(p, "resumed")
 
+    def test_escape_closes_the_guide_while_it_is_still_loading(self) -> None:
+        # Focus stayed on the page under the guide until the step's heading took it after the next frame, so an
+        # Escape pressed before then was lost and the guide stayed open (timed out under load, 2026-11-19).
+        p = self.tab("wide", "light")
+        p.open("home")
+        held = []
+        p.page.route("**/api/v2/setup", lambda route: held.append(route))
+        p.page.evaluate("() => { location.hash = 'setup'; }")
+        p.page.wait_for_selector(".setup .loading")
+        p.page.keyboard.press("Escape")
+        p.page.wait_for_selector(".setup", state="detached")
+        for route in held:
+            route.continue_()
+
     def test_labels_keep_room_for_their_words_in_the_laptop_window(self) -> None:
         # in the 1033-pixel app window the rows of choices squeezed "Kinds of
         # role" and "Start from a career area" into a column one word wide

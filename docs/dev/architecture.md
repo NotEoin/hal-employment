@@ -2475,7 +2475,8 @@ check that raises into a "bad" row naming it, so one broken area never hides the
 place in the row `guide`. It never reads or writes a setting, so going through a step again cannot reset a
 value changed in Settings; the steps save their own fields through the settings store. The frame loads each
 step from `static/app/setup/steps/<id>.js` (default export `Step`), so an area adds or changes its step
-without touching the frame. Only Email, Phone alerts and Updates can be skipped.
+without touching the frame. Only Email, Phone alerts and Updates can be skipped. The frame takes focus as
+it is drawn, so Esc ("Save and finish later") and Tab work before the step's heading takes focus.
 
 ## Install and updates (`cli/install.py`, `jobhunt/updates/`, `scripts/updater.py`)
 

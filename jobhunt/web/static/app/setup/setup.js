@@ -8,8 +8,12 @@
    Every change is saved as it happens: the steps save their own fields, and the frame tells the server
    which step is open, so closing the window halfway and opening the guide again carries on at the same
    step. Opening the guide at its first step resumes where the person left it, unless the guide was
-   already finished (then "Open the setup guide" starts at Welcome). */
-import { html, cx, useState, useEffect, useRef } from "../core/html.js";
+   already finished (then "Open the setup guide" starts at Welcome).
+
+   The frame takes focus as soon as it is drawn (a layout effect, which runs with the drawing), so Esc and Tab
+   reach it at once; the step's heading takes it over after the next frame. Before, focus stayed on the page
+   underneath until then, and an Esc pressed on a busy computer was lost (2026-11-19). */
+import { html, cx, useState, useEffect, useLayoutEffect, useRef } from "../core/html.js";
 import { get, post, put } from "../core/api.js";
 import { store, useStore, closeSetup, toast, invalidate } from "../core/store.js";
 import { go } from "../core/router.js";
@@ -57,6 +61,10 @@ export function Setup() {
   const [at, setAt] = useState(null);
   const [problem, setProblem] = useState("");
 
+  useLayoutEffect(() => {
+    const root = ref.current;
+    if (root && !root.contains(document.activeElement)) root.focus({ preventScroll: true });
+  }, []);
   useEffect(() => {
     get("/setup").then(d => {
       setData(d);
@@ -95,7 +103,7 @@ export function Setup() {
   };
   const onKey = e => { if (e.key === "Escape") later(); else trapTab(e, ref.current); };
 
-  const frame = inside => html`<div class="setup" role="dialog" aria-modal="true" aria-label="Setup guide" ref=${ref}
+  const frame = inside => html`<div class="setup" role="dialog" aria-modal="true" aria-label="Setup guide" tabindex="-1" ref=${ref}
     onKeyDown=${onKey}>${inside}</div>`;
   if (problem) {
     return frame(html`<aside></aside><div class="sbody"><div class="sinner"><h1 class="h1">Setup guide</h1>

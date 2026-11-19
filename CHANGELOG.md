@@ -43,6 +43,9 @@ What changed in each version, in plain words.
   straight after the other could mark both of them, and Hal said nothing. Now the first one is marked, and
   Hal tells you the second cannot be until you say the first is not your dissertation.
 
+- **Esc closes the setup guide at once.** On a busy computer, pressing Esc just after the setup guide
+  opened could do nothing, and the guide stayed open. Now Esc saves your place and closes it straight away.
+
 ## 2.3.2 (2026-11-19)
 
 ### What's new
