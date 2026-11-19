@@ -2,7 +2,9 @@
 
 `render_cv_html` turns a schema 2 document, its CV type and a look into a page with plain semantic markup
 (`header`, `section`, `h2`, `ul`, a class per part). Looks differ only by their CSS (`looks/<id>/cv.css`),
-except that a look whose `look.toml` says `columns = 2` puts the side sections in an `aside`. The type
+except that a look whose `look.toml` says `columns = 2` puts the side sections in an `aside`, and that a
+personal look (`personal_look`, made from checked measures by `measures.py`) also sets how an entry is
+written (stacked, or one line), where its dates go and the contact line's separator. The type
 decides order and titles when the page is drawn, so one version can be shown under two types without
 changing it. Its entry and line limits are advice on the Checks tab (`types.advice`), never a cut: the page
 shows every line and entry the person has not hidden, up to the person's own limit for a section. The name
@@ -29,7 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from jobhunt.cvstudio import inline
+from jobhunt.cvstudio import inline, measures
 
 LOOKS_DIR = Path(__file__).with_name("looks")
 FONT_DIR = Path(__file__).resolve().parents[1] / "web" / "static" / "app" / "fonts" / "cv"
@@ -50,6 +52,7 @@ LINK_ORDER = ("linkedin", "website", "github")
 WEB_SCHEME = "https://"        # what a link typed as "github.com/name" in your details opens
 HAS_SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", re.I)          # RFC 3986 section 3.1
 LONG_START = re.compile(r"^(?:https?://)?(?:www\.)?", re.I)     # what a CV leaves off a shown address
+PERSONAL_ORDER = 1000           # personal looks come after every built-in in the gallery
 
 
 class UnknownLook(LookupError):
@@ -58,7 +61,11 @@ class UnknownLook(LookupError):
 
 @dataclass(frozen=True)
 class Look:
-    """One look from `looks/<id>/look.toml`."""
+    """One look: a built-in from `looks/<id>/look.toml`, or a personal one made from measures (`personal_look`).
+
+    A built-in's style is its folder's CSS; a personal look carries its own (`css`, `letter_css`), written by
+    `measures.css`. `entry_form`, `dates` and `sep` are the measures that change the markup, not only the style.
+    """
 
     id: str
     name: str
@@ -67,10 +74,25 @@ class Look:
     fonts: tuple[str, ...]
     columns: int
     order: int
+    personal: bool = False
+    css: str = ""
+    letter_css: str = ""
+    entry_form: str = "stacked"     # "stacked": heading, place, text on lines of their own; "line": one line
+    dates: str = "right"            # "right": at the right of the heading; "inline": in the line, after a comma
+    sep: str = " | "                # between the contact line's parts
 
     def public(self) -> dict:
         """What `GET /cv/looks` sends."""
         return {"id": self.id, "name": self.name, "safe": self.safe, "note": self.note}
+
+
+def personal_look(look_id: str, name: str, m: measures.Measures, *, note: str = "") -> Look:
+    """A look made from a person's measures; its style is written by code from them, never taken from a file."""
+    m = measures.validate(m.to_dict())
+    family = {"sans": "Source Sans 3", "serif": "Source Serif 4"}
+    return Look(look_id, name, True, note or "Your own layout", tuple(dict.fromkeys((family[m.font],
+                family[m.heading_font]))), 1, PERSONAL_ORDER, personal=True, css=measures.css(m),
+                letter_css=measures.letter_css(m), entry_form=m.entry_form, dates=m.dates, sep=measures.separator(m))
 
 
 @functools.cache
@@ -304,18 +326,49 @@ def _hl(text: str, part_id: str, hl: set[str], *, rich: bool = False) -> str:
     return f'<mark class="hl">{shown}</mark>' if part_id in hl else shown
 
 
-def _entry_html(e: ViewEntry, hl: set[str]) -> str:
-    out = [f'<div class="cv-entry" data-id="{_e(e.id)}">']
-    head = _hl(e.heading, e.id, hl)
+def _stacked(e: ViewEntry, hl: set[str], dates: str) -> list[str]:
+    """An entry's heading (dates at its right, or after it with `dates` "inline"), then its place, details and
+    text on lines of their own."""
+    out = []
     if e.heading or e.dates:
-        out.append(f'<div class="cv-top"><h3>{head}</h3>'
-                   + (f'<span class="cv-dates">{_e(e.dates)}</span>' if e.dates else "") + "</div>")
+        run = dates == "inline"
+        shown = (f'<span class="cv-dates">{", " if run and e.heading else ""}{_e(e.dates)}</span>'
+                 if e.dates else "")
+        out.append(f'<div class="cv-top{" cv-run" if run else ""}"><h3>{_hl(e.heading, e.id, hl)}</h3>{shown}</div>')
     if e.org:
         out.append(f'<p class="cv-org">{_e(e.org)}</p>')
     if e.meta:
         out.append(f'<p class="cv-meta">{_e(e.meta)}</p>')
     if e.text:
         out.append(f'<p class="cv-text">{_hl(e.text, e.id, hl, rich=True)}</p>')
+    return out
+
+
+def _one_line(e: ViewEntry, hl: set[str], dates: str) -> str:
+    """An entry's heading, place, details, dates and text as one line: "**Heading**, place, dates: text".
+
+    Dates at the right are written first and floated there, so they sit on the line's first row.
+    """
+    right = dates == "right" and e.dates
+    parts = [f"<h3>{_hl(e.heading, e.id, hl)}</h3>"] if e.heading else []
+    parts += [f'<span class="cv-org">{_e(x)}</span>' for x in (e.org, e.meta) if x]
+    if e.dates and not right:
+        parts.append(f'<span class="cv-dates">{_e(e.dates)}</span>')
+    line = ", ".join(parts)
+    if e.text:
+        line += (": " if line else "") + f'<span class="cv-text">{_hl(e.text, e.id, hl, rich=True)}</span>'
+    first = f'<span class="cv-dates cv-right">{_e(e.dates)}</span>' if right else ""
+    return f'<div class="cv-line">{first}{line}</div>'
+
+
+def _entry_html(e: ViewEntry, hl: set[str], look_: Look | None = None) -> str:
+    form, dates = (look_.entry_form, look_.dates) if look_ else ("stacked", "right")
+    out = [f'<div class="cv-entry{" cv-one" if form == "line" else ""}" data-id="{_e(e.id)}">']
+    if form == "line":
+        if e.heading or e.dates or e.org or e.meta or e.text:
+            out.append(_one_line(e, hl, dates))
+    else:
+        out += _stacked(e, hl, dates)
     if e.bullets:
         out.append("<ul>" + "".join(f'<li data-id="{_e(bid)}">{_hl(text, bid, hl, rich=True)}</li>'
                                     for bid, text in e.bullets) + "</ul>")
@@ -336,30 +389,33 @@ def _skills_html(s: ViewSection, hl: set[str]) -> str:
     return "".join(rows)
 
 
-def _section_html(s: ViewSection, hl: set[str]) -> str:
+def _section_html(s: ViewSection, hl: set[str], look_: Look | None = None) -> str:
     body = []
     if s.text:
         body.append(f"<p>{_hl(s.text, s.id, hl, rich=True)}</p>")
     if s.kind in ("skills", "languages") and all(e.items and not e.bullets for e in s.entries):
         body.append(_skills_html(s, hl))
     else:
-        body += [_entry_html(e, hl) for e in s.entries]
+        body += [_entry_html(e, hl, look_) for e in s.entries]
     if s.also:
         body.append(f'<p class="cv-also"><b>Also:</b> {_e(s.also)}</p>')
     return (f'<section class="cv-sec cv-kind-{_e(s.kind)}" data-id="{_e(s.id)}"><h2>{_e(s.title)}</h2>'
             + "".join(body) + "</section>")
 
 
-def _head_html(v: View) -> str:
-    contact = '<span class="sep"> | </span>'.join(f"<span>{inline.html(x)}</span>" for x in v.contact)
+def _head_html(v: View, sep: str = " | ") -> str:
+    contact = f'<span class="sep">{_e(sep)}</span>'.join(f"<span>{inline.html(x)}</span>" for x in v.contact)
     return (f'<header class="cv-head"><h1 class="cv-name">{_e(v.name)}</h1>'
             + (f'<p class="cv-headline">{_e(v.headline)}</p>' if v.headline else "")
             + (f'<p class="cv-contact">{contact}</p>' if contact else "") + "</header>")
 
 
 def _page(title: str, look_: Look, body: str, *, letter: bool = False) -> str:
-    style = "\n".join([font_css(), _css("base.css"), _css(f"{look_.id}/cv.css")]
-                      + ([_css(f"{look_.id}/letter.css")] if letter else []))
+    if look_.personal:
+        own = [look_.css] + ([look_.letter_css] if letter else [])
+    else:
+        own = [_css(f"{look_.id}/cv.css")] + ([_css(f"{look_.id}/letter.css")] if letter else [])
+    style = "\n".join([font_css(), _css("base.css"), *own])
     return ("<!doctype html>\n"
             f'<html lang="en-GB"><head><meta charset="utf-8">'
             f'<meta http-equiv="Content-Security-Policy" content="{POLICY}">'
@@ -368,18 +424,22 @@ def _page(title: str, look_: Look, body: str, *, letter: bool = False) -> str:
             f'<body class="look-{_e(look_.id)}"><main class="page">{body}</main></body></html>\n')
 
 
-def html_of(v: View, look_id: str, *, highlight: Iterable[str] = ()) -> str:
-    """The page for a view in one look."""
-    look_ = look(look_id)
+def html_of(v: View, look_id: str | Look, *, highlight: Iterable[str] = ()) -> str:
+    """The page for a view in one look, given by id or as a `Look`."""
+    look_ = look_id if isinstance(look_id, Look) else look(look_id)
     hl = _wanted(highlight)
+
+    def drawn(sections: list[ViewSection]) -> str:
+        return "".join(_section_html(s, hl, look_) for s in sections)
+
     if look_.columns == 2:
         side = [s for s in v.sections if s.kind in SIDE_KINDS]
         main = [s for s in v.sections if s.kind not in SIDE_KINDS]
-        sections = ('<div class="cv-cols"><aside class="cv-side">' + "".join(_section_html(s, hl) for s in side)
-                    + '</aside><div class="cv-main">' + "".join(_section_html(s, hl) for s in main) + "</div></div>")
+        sections = (f'<div class="cv-cols"><aside class="cv-side">{drawn(side)}</aside>'
+                    f'<div class="cv-main">{drawn(main)}</div></div>')
     else:
-        sections = "".join(_section_html(s, hl) for s in v.sections)
-    return _page(f"{v.name} CV".strip(), look_, _head_html(v) + sections)
+        sections = drawn(v.sections)
+    return _page(f"{v.name} CV".strip(), look_, _head_html(v, look_.sep) + sections)
 
 
 def render_cv_html(doc: Any, type_: Any, look_id: str, profile: dict, *, highlight: Iterable[str] = (),
@@ -388,13 +448,14 @@ def render_cv_html(doc: Any, type_: Any, look_id: str, profile: dict, *, highlig
     return html_of(view(doc, type_, profile, layout=layout), look_id, highlight=() if for_print else highlight)
 
 
-def render_letter_html(text: str, profile: dict, recipient: list[str], look_id: str, *, when: str = "",
+def render_letter_html(text: str, profile: dict, recipient: list[str], look_id: str | Look, *, when: str = "",
                        subject: str = "", headline: str = "") -> str:
     """The cover letter page, with the same header as the CV in that look."""
     v = View(_p(profile, "name"), headline, contact_parts(profile), [])
     paragraphs = [p.strip() for p in (text or "").strip().split("\n\n") if p.strip()]
     body = "".join("<p>" + "<br>".join(_e(line) for line in p.split("\n")) + "</p>" for p in paragraphs)
-    parts = [_head_html(v)]
+    look_ = look_id if isinstance(look_id, Look) else look(look_id)
+    parts = [_head_html(v, look_.sep)]
     if when:
         parts.append(f'<p class="letter-date">{_e(when)}</p>')
     if recipient:
@@ -402,4 +463,4 @@ def render_letter_html(text: str, profile: dict, recipient: list[str], look_id: 
     if subject:
         parts.append(f'<p class="letter-subject">{_e(subject)}</p>')
     parts.append(f'<div class="letter-body">{body}</div>')
-    return _page(f"{v.name} Cover letter".strip(), look(look_id), "".join(parts), letter=True)
+    return _page(f"{v.name} Cover letter".strip(), look_, "".join(parts), letter=True)

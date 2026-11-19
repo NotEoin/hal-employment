@@ -702,6 +702,16 @@ runs: tests use `tests/support/fake_claude/`.
   closing slash (`github.com/name`) and links to the full address (one typed without a scheme links to
   `https://`), so the preview, the printed PDF and the Word file (`export._line_para`) keep a working link.
   Hal's simple PDF, used when no browser can print, shows the short words with no link.
+- A personal look is a set of measures (`measures.Measures`), never free CSS: page size and margins, body
+  font, size and line height, the name, section and entry headings, colours, links, bullets, how an entry is
+  written and where its dates go, and the contact line. `measures.validate` checks each one (a number in its
+  range, a named choice, a `#rrggbb` colour) and `measures.css` writes the style from them, so no text from a
+  file reaches the page and its Content-Security-Policy stays as it is. `render.personal_look` makes a `Look`
+  of them; its `entry_form` ("line" writes `**Heading**, place, dates: text` in one `div.cv-line`), `dates`
+  and `sep` change the markup; the contact line keeps its short linked addresses between the look's
+  separators, and its links take the look's link colour and underline like the rest. Their extra rules live in the generated CSS, not `base.css`, so the built-in
+  looks' pages, and the page counts keyed by their hash, are unchanged. `measures.tighter` is one "Make it
+  fit" step (`TIGHTEN_STEPS` at most, never below `READABLE_PT`).
 - `printer.to_pdf` prints with Microsoft Edge on Windows, Playwright's Chromium on Linux, and an ordinary
   Chromium, Chrome or Edge only when Playwright is missing; never a snap or flatpak browser, which cannot
   read Hal's temporary files. 60 s timeout, and the whole process tree is ended when it runs out. Every PDF
