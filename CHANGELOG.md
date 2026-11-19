@@ -12,6 +12,12 @@ What changed in each version, in plain words.
   counts, and **Make it fit** tightens Hal's copy a little when it runs longer. The look is kept with your
   data: rename it, use it for any CV, or delete it once no CV uses it.
 
+### Fixed
+
+- **One dissertation per course.** Pressing **This is my dissertation** on two pieces of coursework one
+  straight after the other could mark both of them, and Hal said nothing. Now the first one is marked, and
+  Hal tells you the second cannot be until you say the first is not your dissertation.
+
 ## 2.3.2 (2026-11-19)
 
 ### What's new

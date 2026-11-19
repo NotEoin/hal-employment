@@ -3,14 +3,19 @@ shows as done in coursework, each with its quote, and the showcase: a starred pi
 and one piece per course is the dissertation. The software and history graduates' work is made up
 (`support.graduates`).
 """
+import contextlib
 import json
+import threading
 import unittest
+from contextlib import closing
+from unittest import mock
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support import graduates
 from support.fake_ai import fake_ai
 from test_ingest import home
 
+from jobhunt import db
 from jobhunt.profile import contexts
 from jobhunt.profile import store as profile_store
 from jobhunt.sections import coursework, pipeline, store
@@ -23,6 +28,8 @@ REPORT_READ = {"summary": "Models how rainfall delays the Fen ferries with a reg
 ESSAY_READ = {"summary": "Reads parish registers against tithe maps.",
               "methods": [{"name": "close reading", "quote": "Close reading of the baptism registers"},
                           {"name": "archival research", "quote": "archival research at the county record office"}]}
+OTHER_REQUEST_WAIT_S = 1   # how long a checked change waits for the other; the lock makes it wait it out
+JOIN_TIMEOUT_S = 60        # well past SQLite's busy timeout (`db.BUSY_TIMEOUT_S`), so a stuck lock fails the test
 
 
 def add(con, target: int, name: str, text: str, kind: str = "essay") -> int:
@@ -201,6 +208,41 @@ class Dissertation(unittest.TestCase):
             self.assertTrue(store.change(con, essay, {"dissertation": True})["dissertation"])
             with self.assertRaises(ValueError):
                 store.change(con, thesis, {"doc_kind": "dissertation"})
+
+    def test_two_pieces_marked_at_once_give_one_dissertation_and_one_refusal(self):
+        # Regression: two requests marking two pieces at once both passed the check and both became the
+        # dissertation (a flaky browser test on CI, 2026-11-19). Each check waits for the other request
+        # before writing; with the check and the write under one lock, the second request waits for the first.
+        refused: list[str] = []
+        checked = store.check_dissertation
+
+        def check_then_wait(*args, **kw) -> None:
+            checked(*args, **kw)
+            with contextlib.suppress(threading.BrokenBarrierError):   # the other request is held by the lock
+                both_checked.wait()
+
+        def mark(source_id: int) -> None:
+            with closing(db.connect()) as own:
+                try:
+                    store.change(own, source_id, {"dissertation": True})
+                except ValueError as e:
+                    refused.append(str(e))
+
+        with home() as (con, _, _):
+            ba = graduates.education(con, "ba")
+            pieces = [add(con, ba, "bread.md", graduates.HISTORY_DISSERTATION),
+                      add(con, ba, "registers.md", graduates.ESSAY)]
+            both_checked = threading.Barrier(len(pieces), timeout=OTHER_REQUEST_WAIT_S)
+            threads = [threading.Thread(target=mark, args=(i,)) for i in pieces]
+            with mock.patch.object(store, "check_dissertation", check_then_wait):
+                for t in threads:
+                    t.start()
+                for t in threads:
+                    t.join(timeout=JOIN_TIMEOUT_S)
+            marked = [s["id"] for s in store.listing(con, "coursework") if s["dissertation"]]
+        self.assertEqual(len(marked), 1)
+        self.assertEqual(len(refused), 1)
+        self.assertIn("already this course's dissertation", refused[0])
 
     def test_a_showcase_dissertation_is_named_by_its_title_and_framed_as_the_dissertation(self):
         with home() as (con, _, _):

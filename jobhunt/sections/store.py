@@ -22,12 +22,16 @@ Design decisions, each with its reason:
   module"; Hal's suggestion is the reader's (`details["module"]`), so a read again never changes the choice.
 - An education card has at most one dissertation: one coursework source of kind `dissertation`
   (`check_dissertation`). "This is my dissertation" sets that kind (`change(..., {"dissertation": True})`);
-  taking it off gives `NOT_DISSERTATION`, as the kind the piece had before is not kept.
+  taking it off gives `NOT_DISSERTATION`, as the kind the piece had before is not kept. `change` checks and
+  writes in one transaction that holds SQLite's write lock (`_locked`): two pieces marked at once in two
+  requests both passed the check and both became the dissertation (2026-11-19).
 """
 from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from jobhunt import db
@@ -348,9 +352,9 @@ def change(con: sqlite3.Connection, source_id, changes: dict) -> dict:
         sets["module"] = None
     if moved:
         sets.update({"section": section.id, "suggestion": "", "starred": 0, "current": 0})
-    check_dissertation(con, section.id, sets.get("doc_kind", r["doc_kind"]), sets.get("target_id", r["target_id"]),
-                       but=r["id"])
-    with con:
+    with _locked(con):
+        check_dissertation(con, section.id, sets.get("doc_kind", r["doc_kind"]),
+                           sets.get("target_id", r["target_id"]), but=r["id"])
         if sets:
             con.execute(f"UPDATE record_sources SET {', '.join(f'{k} = ?' for k in sets)} WHERE id = ?",
                         (*sets.values(), r["id"]))
@@ -358,6 +362,23 @@ def change(con: sqlite3.Connection, source_id, changes: dict) -> dict:
         cvs.settle(con)                       # the CV that left may have led: the others' cards follow the new lead
         profile_store.refold_sources(con, [r["id"]])
     return get(con, r["id"])
+
+
+@contextmanager
+def _locked(con: sqlite3.Connection) -> Iterator[None]:
+    """One transaction that takes SQLite's write lock as it begins (`BEGIN IMMEDIATE`), so what the block reads
+    still holds when it writes; committed at the end, rolled back on any error.
+
+    Work the caller left open is committed first, as the `with con:` this replaced did.
+    """
+    con.commit()
+    con.execute("BEGIN IMMEDIATE")
+    try:
+        yield
+        con.commit()
+    except BaseException:
+        con.rollback()
+        raise
 
 
 def _module(con: sqlite3.Connection, section: registry.Section, target_id: int | None, module) -> str | None:

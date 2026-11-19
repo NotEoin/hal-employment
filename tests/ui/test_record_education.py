@@ -125,7 +125,9 @@ class RecordEducation(unittest.TestCase):
         thesis = work.locator("li.rec-source", has_text="Bread, rivers and riot")
         p.shows(thesis.get_by_text("Read", exact=True), "the dissertation read")
         thesis.get_by_role("button", name="This is my dissertation: Bread, rivers and riot", exact=False).click()
-        p.shows(thesis.get_by_role("button", name="My dissertation"), "the dissertation mark")
+        # The pressed state, not the name: "My dissertation" is also in "This is my dissertation: ...", so that
+        # wait passed before the server answered and both changes raced (CI, 2026-11-19).
+        p.shows(thesis.get_by_role("button", name="This is my dissertation", pressed=True), "the dissertation mark")
         essay.get_by_role("button", name="This is my dissertation: The parish registers", exact=False).click()
         p.shows(p.page.get_by_text("is already this course's dissertation", exact=False), "the one-per-course note")
         title = "The parish registers of Harrowgate Vale"
