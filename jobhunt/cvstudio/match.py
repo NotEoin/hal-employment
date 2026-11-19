@@ -1,4 +1,4 @@
-"""Measures the layout of a person's own CV PDF, for "Match my file's layout": the measures of a personal look.
+"""Measures the layout of a person's own CV PDF, for "Match my file's look": the measures of a personal look.
 
 `measure` reads the PDF's characters (`pdfread.chars`: place, printed size, bold) and what is drawn around them
 (`pdfread.drawing`: page size, font names, colours, thin rules, pictures) and works out each measure of

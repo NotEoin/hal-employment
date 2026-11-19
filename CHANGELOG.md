@@ -2,6 +2,16 @@
 
 What changed in each version, in plain words.
 
+## Unreleased
+
+### What's new
+
+- **Match my file's look.** On **My CV**, **Type and look**, Hal can now measure the PDF you uploaded
+  (margins, type, headings, how each job is written, lists and colours) and make a look of it, so Hal's
+  copy looks like your own file. Your file's page is shown beside Hal's copy with both page
+  counts, and **Make it fit** tightens Hal's copy a little when it runs longer. The look is kept with your
+  data: rename it, use it for any CV, or delete it once no CV uses it.
+
 ## 2.3.2 (2026-11-19)
 
 ### What's new

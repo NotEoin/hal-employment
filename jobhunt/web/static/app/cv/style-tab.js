@@ -1,9 +1,10 @@
-/* The Type and look tab: the frame that puts its six parts in a fixed order. Each
-   part is its owner's file: the CV type, the look, the CV's length (its page limit), the Sections card
-   (here), the Writing card and adjusting for each job. */
+/* The Type and look tab: the frame that puts its seven parts in a fixed order. Each
+   part is its owner's file: the CV type, the look, matching your own file's layout, the CV's length (its page
+   limit), the Sections card (here), the Writing card and adjusting for each job. */
 import { html } from "../core/html.js";
 import { TypePicker } from "./type-picker.js";
 import { LookPicker } from "./look-picker.js";
+import { LookMatch } from "./look-match.js";
 import { PageLimit } from "./page-limit.js";
 import { SectionsEditor } from "./sections-editor.js";
 import { WritingSettings } from "./writing-settings.js";
@@ -14,6 +15,7 @@ export function StyleTab() {
   return html`<div class="stack">
     <${TypePicker} />
     <${LookPicker} />
+    <${LookMatch} />
     <${PageLimit} />
     <div class="grid2 even"><${SectionsEditor} /><${WritingSettings} /></div>
     <${TailorSetting} />

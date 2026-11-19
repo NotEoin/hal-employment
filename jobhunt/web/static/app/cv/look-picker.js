@@ -1,11 +1,13 @@
 /* The Look gallery on My CV's Type and look tab: each look drawn as a real preview of
    the person's CV, its name, whether job sites read it safely, and a note. Choosing one saves it at once
-   (PUT /cv/look); a look changes only the CSS, never the words. */
+   (PUT /cv/look); a look changes only the CSS, never the words. The person's own looks, made by "Match my
+   file's look" (`look-match.js`), come after the built-in ones, each with Delete. */
 import { html, cx } from "../core/html.js";
 import { useApi, toast } from "../core/store.js";
 import { put } from "../core/api.js";
 import { DocPreview } from "../ui/doc-preview.js";
 import { cvUrl } from "./chosen.js";
+import { LookActions } from "./look-match.js";
 
 /** The gallery of looks for Hal's copy of the CV. */
 export function LookPicker({ versionId = "current" }) {
@@ -24,7 +26,8 @@ export function LookPicker({ versionId = "current" }) {
       <${DocPreview} versionId=${versionId} look=${l.id} thumb label=${"Your CV in the " + l.name + " look"} />
       <span class="row tight"><button type="button" class="btn quiet small" aria-pressed=${l.chosen ? "true" : "false"}
         onClick=${e => { e.stopPropagation(); choose(l); }}><b>${l.name}</b></button>
-        <span class=${cx("chip", l.safe ? "good" : "warn")}>${l.safe ? "Safe for job sites" : "May confuse job sites"}</span></span>
+        <span class=${cx("chip", l.safe ? "good" : "warn")}>${l.safe ? "Safe for job sites" : "May confuse job sites"}</span>
+        <${LookActions} look=${l} onDone=${looks.reload} /></span>
       <span class="small sub">${l.note}</span>
     </div>`)}</div>`;
 }

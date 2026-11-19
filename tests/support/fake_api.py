@@ -443,6 +443,8 @@ MADE_UP_PAGES = {
                    "personal": False, "chosen": False},
                   {"id": "two", "name": "Two columns", "safe": False, "note": "For printing and networking",
                    "personal": False, "chosen": False}],
+    "/cv/look/match": {"can": False, "why": "This CV has no file of its own to match. Upload your CV as a PDF to "
+                                            "match its look.", "file": None, "look": None},
     # My CV, Suggestions and Adjust for each job
     "/cv/suggestions": {"state": "ready", "reviewed": 0, "total": 1, "kinds": ["Dates"], "done": [], "message": "",
                         "pending": [{"id": "s-demo", "kind": "Dates", "where": "Education, BA (Hons) History",

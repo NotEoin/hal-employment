@@ -150,6 +150,21 @@ def set_measures(look_id: str, m: measures.Measures, steps: int, con: sqlite3.Co
         return _must(look_id, c)
 
 
+def remeasure(look_id: str, m: measures.Measures, notes: list[str] | tuple[str, ...],
+              con: sqlite3.Connection | None = None) -> Saved:
+    """Saves a new measuring of the file a look came from: new measures and notes, no "Make it fit" steps."""
+    from jobhunt import db
+    from jobhunt.cvstudio import store
+
+    m = measures.validate(m.to_dict())
+    with _conn(con) as c:
+        _must(look_id, c)
+        with store.writing(c):
+            c.execute("UPDATE cv_looks SET measures = ?, notes = ?, steps = 0, updated = ? WHERE id = ?",
+                      (json.dumps(m.to_dict()), json.dumps(list(notes)), db.now(), look_id))
+        return _must(look_id, c)
+
+
 def users(look_id: str, con: sqlite3.Connection | None = None) -> list[str]:
     """The names of the CVs printed in this look, archived ones too."""
     with _conn(con) as c:

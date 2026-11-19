@@ -343,6 +343,27 @@ of your own file. Hal cannot show a Word file or pasted text as pages, so for th
 your file, with a line saying that employers get the file as you uploaded it. An application's CV tab and
 **Preview** on a CV of Your record show the same.
 
+## Match your file's look
+
+If you uploaded your CV as a PDF, Hal's copy can keep its look. Open **My CV**, **Type and look**, and
+press **Match my file's look**. Hal measures your file's page: the margins, the type and its size, the
+line spacing, the name and contact line, the section headings, how each job or qualification is written
+(on one line, or a heading with the place and text below), where the dates go, the lists and the colours.
+It makes a look of them called "Like" and your file's name, and uses it for this CV.
+
+Hal then shows your file's own page beside Hal's copy in the new look, with both page counts, for example
+"Your file is 1 page. Hal's copy in this look is 1 page." If Hal's copy is longer, **Make it fit** makes the
+line spacing and type a little smaller. You can press it twice at most, and Hal never makes the type
+smaller than 8.5 points. It also tells you what it could only approximate: a file with two columns becomes
+one column with the same type and colours, and pictures or icons are left out.
+
+The look is yours, kept with your data. It is listed after Hal's own looks, so you can pick it for any of
+your CVs, and you can rename it on the card. **Delete** on its card removes it; while a CV uses the look,
+Hal says which CV and asks you to choose another look for it first. Cover letters printed in the look use
+its font, type size and margins.
+
+Hal can only measure a PDF. For a Word file, save it as a PDF and upload that as a new version first.
+
 ## How long your CV is
 
 Each CV has its own length. Open **My CV**, **Type and look**, and choose **Keep this CV to**: **No limit**,

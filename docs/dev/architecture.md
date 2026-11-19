@@ -731,6 +731,13 @@ runs: tests use `tests/support/fake_claude/`.
   `Found.notes` says in plain words what was approximated (side-by-side text read as one column, pictures
   left out, a one-page file's bottom margin). Checked by printing Hal's own page in known measures and
   measuring it back (`tests/test_cv_match.py`): within 0.6 mm and 0.04 of line height.
+- `match_routes.py`: `GET /cv/look/match` says whether the CV's own file (`baseline_file_id`) is a PDF Hal
+  can measure, and while the CV uses a personal look compares it: the file's page pictures
+  (`original.PAGE_URL`), Hal's printed page count (`pagelimit.state`, so it may print once) and both in
+  words. `POST /cv/look/match` measures the file into a look named "Like <file name>" (the same file again
+  updates its look, `mylooks.remeasure`) and chooses it for the CV. `POST /cv/looks/{id}/fit` is one
+  "Make it fit" step, offered only while Hal's copy is longer than the file. `PUT` and `DELETE
+  /cv/looks/{id}` rename and delete. The card is `web/static/app/cv/look-match.js`.
 - `printer.to_pdf` prints with Microsoft Edge on Windows, Playwright's Chromium on Linux, and an ordinary
   Chromium, Chrome or Edge only when Playwright is missing; never a snap or flatpak browser, which cannot
   read Hal's temporary files. 60 s timeout, and the whole process tree is ended when it runs out. Every PDF
