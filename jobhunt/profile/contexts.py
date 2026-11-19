@@ -12,7 +12,8 @@ Design decisions, each with its reason:
 - Each card states its context, and the prompts and `writing.drafts.wrong_context` keep drafts to it: real
   letters called a personal project part of a degree, a university team project a personal project and
   coursework "personal work" (2026-11-07).
-- A job is work and a course is degree work unless the person says otherwise. A project, achievement or
+- A job is work and a course is degree work unless the person says otherwise, or the course is plainly a
+  school qualification such as GCSEs, which is school (`context_rules.is_school`). A project, achievement or
   certificate takes its context from its own words and evidence (`writing.stage.project_kind`), and none
   when nothing shows it: a guess would be repeated in every letter.
 - A context the person chose is never changed by Hal, as with tiers (`profile.tiers`).
@@ -25,7 +26,7 @@ import sqlite3
 
 from jobhunt import db
 from jobhunt.profile import store
-from jobhunt.profile.context_rules import BY_HAL, BY_KIND, BY_PERSON, CONTEXT_KINDS
+from jobhunt.profile.context_rules import BY_HAL, BY_KIND, BY_PERSON, CONTEXT_KINDS, default
 from jobhunt.writing import stage
 
 
@@ -33,7 +34,7 @@ def found(item: dict, worked_for: list[str]) -> str:
     """Hal's context for a shaped `item` from its kind, fields and evidence; "" when nothing shows it."""
     kind = item["kind"]
     if kind in BY_KIND:
-        return BY_KIND[kind]
+        return default(item)
     if kind not in CONTEXT_KINDS:
         return ""
     evidence = item.get("evidence") or []

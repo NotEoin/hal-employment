@@ -9,6 +9,9 @@ What changed in each version, in plain words.
 - **At school.** On **Check your record**, **Where was this done?** now has **At school** as well as
   **Part of my degree**, **University team project**, **At work** and **In my own time**. Pick it for
   something you did at school, and Hal calls it school work, never degree work, university work or a job.
+  Hal now picks it for you on school qualifications, such as GCSEs, A levels, Scottish Highers, the Leaving
+  Certificate or the International Baccalaureate, which it used to call part of your degree. A degree stays
+  **Part of my degree**, and a choice you made yourself is kept.
 
 ## 2.3.1 (2026-11-19)
 

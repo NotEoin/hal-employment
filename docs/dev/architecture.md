@@ -2248,16 +2248,18 @@ of kind `move`).
   cards the person hid (not merged, not `apart`) whose evidence is all repository or project files
   (`duplicates.PROJECT_FILES`) the shown card also rests on, as `hidden_twins` of the check payload, shown as
   "Hidden cards from the same files" with a "Same as" button; nothing merges them without the person.
-- Contexts (`contexts.py`, migration 0026): each card of the tiered kinds has a `context` (`degree`,
-  `team`, `work`, `personal`, `school`, or '' when nothing shows it) and `context_by` (`hal` or `person`). A job is
-  work and a course degree work by their kind; a project, achievement or certificate is read from its fields
-  and evidence with `writing.stage.project_kind`. The sort pass stores Hal's reading (`contexts.refresh`),
-  and writing reads it afresh (`contexts.current`) unless the person chose one with
-  `PUT /api/v2/profile/items/{id}/context`, which Hal never changes. Shaped items carry `context`,
-  `context_by` and `context_words`, the page's words ("Part of my degree", "University team project",
-  "At work", "In my own time", "At school"), and `record/best.js` shows them as one choice on each best
-  card. Hal never reads `school` from a project's words; the column has no fixed list, so `school` needed no
-  migration.
+- Contexts (`contexts.py`, migration 0026): each card of the tiered kinds has a `context` (`degree`, `team`,
+  `work`, `personal`, `school`, or '' when nothing shows it) and `context_by` (`hal` or `person`). A job is
+  work and a course degree work by their kind, except a course that is plainly a school qualification
+  (`context_rules.is_school`: GCSEs, A levels, Scottish Nationals and Highers, the Leaving Certificate, the
+  International Baccalaureate, a high school diploma, or a school named as the institution), which is school;
+  a stored `hal` reading of degree work is read again when shown, so older cards need no migration; a project,
+  achievement or certificate is read from its fields and evidence with `writing.stage.project_kind`. The sort
+  pass stores Hal's reading (`contexts.refresh`), and writing reads it afresh (`contexts.current`) unless the
+  person chose one with `PUT /api/v2/profile/items/{id}/context`, which Hal never changes. Shaped items carry
+  `context`, `context_by` and `context_words`, the page's words ("Part of my degree", "University team
+  project", "At work", "In my own time", "At school"), and `record/best.js` shows them as one choice on each
+  best card. Hal never reads `school` from a project's words, and the column has no fixed list.
 - `profile.write_notes(folder)` writes the `Profile/` notes in the record folder (`Profile.md`,
   `Work history.md`, `Education.md`, `Skills.md`, `Projects.md`, `Inconsistencies.md`), each
   `type: dashboard` so search leaves them out. A note whose text has not changed is not written again.

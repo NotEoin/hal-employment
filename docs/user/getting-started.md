@@ -474,8 +474,9 @@ reads your files, putting what you would lead with first, then what is useful wh
 shows about 25, so you can check them in one sitting.
 
 Each one also says where it was done: **Part of my degree**, **University team project**, **At work**,
-**In my own time** or **At school**. Hal fills this in from your files; if it is wrong, pick the right one.
-Hal writes about the experience that way and never changes your choice.
+**In my own time** or **At school**. Hal fills this in from your files: a job is **At work**, school
+qualifications such as GCSEs and A levels are **At school**, and other courses are **Part of my degree**. If
+it is wrong, pick the right one. Hal writes about the experience that way and never changes your choice.
 
 Each has three buttons:
 

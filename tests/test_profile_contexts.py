@@ -119,6 +119,66 @@ class Contexts(unittest.TestCase):
         contexts.set_context(self.con, job, "degree")
         self.assertIn("- Job (degree work): Placement analyst at Brackwater Mills", writing.context_block(self.con))
 
+    def course(self, qualification: str, institution: str, subject: str = "Imaginary Studies") -> int:
+        """A checked education card from a made-up CV."""
+        item = store.add_found(self.con, "education", {"qualification": qualification, "subject": subject,
+                                                       "institution": institution, "end": "2020-06"},
+                               ev("Sources/CVs and letters/CV.md", "cv"))
+        store.confirm(self.con, item)
+        return item
+
+    def test_a_gcse_and_an_a_level_card_default_to_school(self):
+        # GCSEs were called "degree work" before school had a context (2026-11-19)
+        gcse = self.course("GCSEs", "Brackwater Academy", "9 subjects including Maths")
+        a_level = self.course("A Levels", "Brackwater Academy", "Maths, Physics")
+        for item in (gcse, a_level):
+            shown = store.item(self.con, item)
+            self.assertEqual((shown["context"], shown["context_by"], shown["context_words"]),
+                             ("school", "hal", "At school"))
+            self.assertEqual(contexts.found(shown, []), "school")
+        self.assertIn("- Education (school work): GCSEs 9 subjects including Maths at Brackwater Academy",
+                      writing.context_block(self.con))
+
+    def test_school_qualifications_by_their_words_or_school_are_school_and_degrees_stay_degree(self):
+        school = [{"qualification": "IGCSE"}, {"qualification": "AS Level"}, {"qualification": "Higher"},
+                  {"qualification": "Advanced Highers"}, {"qualification": "National 5"},
+                  {"qualification": "Leaving Certificate"}, {"qualification": "Junior Cert"},
+                  {"qualification": "International Baccalaureate Diploma"},
+                  {"qualification": "High School Diploma"}, {"qualification": "BTEC Level 2 First Diploma"},
+                  {"qualification": "Diploma", "institution": "Kelpford Secondary School"}]
+        degree = [{"qualification": "BSc (Hons)", "institution": "Kelpford School of Computing"},
+                  {"qualification": "MSc"}, {"qualification": "PhD"}, {"qualification": "Higher National Diploma"},
+                  {"qualification": "BTEC Level 3 Extended Diploma", "institution": "Kelpford College"},
+                  {"qualification": "Foundation Degree"}, {"qualification": ""}]
+        for fields in school:
+            self.assertTrue(context_rules.is_school(fields), fields)
+        for fields in degree:
+            self.assertFalse(context_rules.is_school(fields), fields)
+
+    def test_a_bsc_card_stays_degree(self):
+        bsc = store.item(self.con, self.course("BSc", "Wexley University"))
+        self.assertEqual((bsc["context"], bsc["context_by"]), ("degree", "hal"))
+        self.assertEqual(contexts.found(bsc, []), "degree")
+        self.assertIn("- Education: BSc Imaginary Studies at Wexley University", writing.context_block(self.con))
+
+    def test_a_school_card_hal_stored_as_degree_shows_school_until_the_sort_stores_it(self):
+        gcse = self.course("GCSEs", "Brackwater Academy")
+        with self.con:
+            self.con.execute("UPDATE profile_items SET context = 'degree', context_by = 'hal' WHERE id = ?", (gcse,))
+        self.assertEqual(store.item(self.con, gcse)["context"], "school")
+        self.assertEqual(contexts.refresh(self.con), 1)
+        row = self.con.execute("SELECT context, context_by FROM profile_items WHERE id = ?", (gcse,)).fetchone()
+        self.assertEqual(tuple(row), ("school", "hal"))
+
+    def test_the_persons_choice_wins_over_the_school_default(self):
+        gcse = self.course("GCSEs", "Brackwater Academy")
+        chosen = contexts.set_context(self.con, gcse, "degree")
+        self.assertEqual((chosen["context"], chosen["context_by"]), ("degree", "person"))
+        contexts.refresh(self.con)
+        self.assertEqual(store.item(self.con, gcse)["context"], "degree")
+        bsc = self.course("BSc", "Wexley University")
+        self.assertEqual(contexts.set_context(self.con, bsc, "school")["context"], "school")
+
     def test_a_passage_from_a_project_cards_file_says_the_cards_context(self):
         own = self.project("Tide gauge", "Sources/Code/Tide gauge.md", "repository")
         contexts.set_context(self.con, own, "team")

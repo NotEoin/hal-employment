@@ -115,8 +115,8 @@ PLACE_OF_STUDY = re.compile(r"\b(university|college)\b", re.I)
 TEAM_WORD = re.compile(r"\b(team|group|teammates|squad|developers)\b", re.I)
 EMPLOYER_MIN = 3          # an employer's name shorter than this matches ordinary words
 # Where an experience was done, as a profile card keeps it (`profile.contexts`), and as a prompt says it.
-# School is never read from a project's words (`context_of`); the person chooses it, as there was no word for
-# GCSEs but "degree work" (2026-11-19).
+# School is never read from a project's words (`context_of`), only from an education card's qualification
+# (`profile.context_rules.is_school`) or the person's choice: GCSEs were called "degree work" (2026-11-19).
 DEGREE, TEAM, WORK, PERSONAL, SCHOOL = "degree", "team", "work", "personal", "school"
 CONTEXTS = (DEGREE, TEAM, WORK, PERSONAL, SCHOOL)
 CONTEXT_WORDS = {DEGREE: "degree work", TEAM: "university team project", WORK: "at work",
