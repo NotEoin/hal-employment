@@ -720,6 +720,17 @@ runs: tests use `tests/support/fake_claude/`.
   so new measures change the page's hash and it prints again for its page count and Download PDF, while a
   new name does not. A look that a CV uses, archived or not, cannot be deleted (`mylooks.InUse` names the
   CVs): moving those CVs to another look unasked would change what employers get.
+- `match.measure` works out the measures from a CV's own PDF: characters from `pdfread.chars`, and page
+  sizes, font names, colours, advances, thin rules and pictures from `pdfread.drawing`. Rows are grouped by
+  baseline; the name is the first row when larger than the body text, the contact line the first of the next
+  three rows with an address or number, section headings the short rows over a rule (else in capitals, else
+  the largest bold ones), list items the rows with a marker or bullet, and entries the rows whose first part
+  starts in bold (wholly bold: stacked; bold then plain: one line). Line height is the smallest step between
+  two rows of body text at the same left edge, letter spacing the pen's step less each letter's advance. A
+  measure the file does not show keeps Classic's value, every number is clamped into its range, and
+  `Found.notes` says in plain words what was approximated (side-by-side text read as one column, pictures
+  left out, a one-page file's bottom margin). Checked by printing Hal's own page in known measures and
+  measuring it back (`tests/test_cv_match.py`): within 0.6 mm and 0.04 of line height.
 - `printer.to_pdf` prints with Microsoft Edge on Windows, Playwright's Chromium on Linux, and an ordinary
   Chromium, Chrome or Edge only when Playwright is missing; never a snap or flatpak browser, which cannot
   read Hal's temporary files. 60 s timeout, and the whole process tree is ended when it runs out. Every PDF

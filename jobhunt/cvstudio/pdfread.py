@@ -10,6 +10,8 @@ the record's scans work wherever Hal installs. Poppler stays a developer referen
 - PDFium is not safe to call from two threads at once (pypdfium2's own advice), so every call holds `_LOCK`.
 - A file PDFium cannot open reads as empty (no text, 0 pages), as poppler's failure did, so a broken PDF is
   marked down instead of stopping the checks.
+- `drawing` gives what measuring a page's layout needs besides the letters' places (`match.py`): page sizes,
+  each character's font name, serif flag, colour and advance, thin rules and the number of pictures.
 - `page_png` encodes the picture with a few lines of `zlib`, so no imaging library is needed.
 - Each character says whether its font is bold or italic, from the font's name first (a browser's subset fonts
   are named like `AAAAAA+Arimo-Bold` and report no useful weight: Chrome's Arimo-Bold reads as weight 380,
@@ -31,7 +33,7 @@ import statistics
 import struct
 import threading
 import zlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pypdfium2 as pdfium
@@ -48,7 +50,10 @@ WORD_GAP = 0.25         # a gap wider than this share of the type size parts two
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 FONT_NAME_BYTES = 256   # longer than any PostScript font name (the PDF spec caps names at 127 bytes)
 BOLD_WEIGHT = 600       # CSS "semibold" and heavier count as bold
+FLAG_SERIF = 1 << 1     # the font descriptor's Serif flag (PDF 32000-1:2008, table 123, bit 2)
 FLAG_ITALIC = 1 << 6    # the font descriptor's Italic flag (PDF 32000-1:2008, table 123, bit 7)
+RULE_MAX = 2.0          # points: a rule under a heading or an underline is a hairline; a taller shape is a box
+RULE_RATIO = 4.0        # a rule is at least four times as wide as it is tall
 FLAG_FORCE_BOLD = 1 << 18   # the font descriptor's ForceBold flag (same table, bit 19)
 # PDFium reports a hyphen drawn at the end of a line as character 2, guessing it may be a soft hyphen; Chrome
 # draws the real hyphen of "end-to-end" there when it wraps after it (checked 2026-11-18)
@@ -317,6 +322,117 @@ def markers(pdf: Path | bytes) -> list[Shape]:
             return out
         except pdfium.PdfiumError:
             return []
+        finally:
+            doc.close()
+
+
+@dataclass(frozen=True)
+class Ink:
+    """How one character is drawn: its font's name (without a subset's tag), whether the font says it is a
+    serif face, and its fill colour as `#rrggbb`."""
+
+    font: str
+    serif: bool
+    colour: str
+
+
+@dataclass(frozen=True)
+class Rule:
+    """A thin horizontal shape (a rule under a heading, an underline), with its colour as `#rrggbb`."""
+
+    page: int
+    left: float
+    bottom: float
+    right: float
+    top: float
+    colour: str
+
+
+@dataclass(frozen=True)
+class Drawing:
+    """What a page shows besides its letters' places: page sizes, each character's ink and advance (by page
+    and `Char.index`), thin rules, and how many pictures there are.
+
+    A character's advance is the width of PDFium's "loose" box, which spans the glyph's advance in its font
+    rather than its ink, so the pen's step to the next letter less the advance is the letter spacing (within
+    a hundredth of an em on Chrome's prints, checked 2026-11-19).
+    """
+
+    sizes: list[tuple[float, float]]
+    inks: dict[tuple[int, int], Ink]
+    rules: list[Rule]
+    pictures: int
+    advances: dict[tuple[int, int], float] = field(default_factory=dict)
+
+
+def _hex(r: int, g: int, b: int) -> str:
+    return f"#{r & 0xFF:02x}{g & 0xFF:02x}{b & 0xFF:02x}"
+
+
+def _object_colour(obj: pdfium.PdfObject) -> str:
+    """A shape's fill colour, else its stroke colour; black when PDFium cannot say."""
+    rgba = [ctypes.c_uint() for _ in range(4)]
+    refs = [ctypes.byref(x) for x in rgba]
+    if pdfium_c.FPDFPageObj_GetFillColor(obj.raw, *refs) and rgba[3].value:
+        return _hex(*(x.value for x in rgba[:3]))
+    if pdfium_c.FPDFPageObj_GetStrokeColor(obj.raw, *refs):
+        return _hex(*(x.value for x in rgba[:3]))
+    return "#000000"
+
+
+def _page_inks(page: pdfium.PdfPage, number: int, advances: dict[tuple[int, int], float]
+               ) -> dict[tuple[int, int], Ink]:
+    """Each character's ink on one page; fills `advances` with each one's advance width."""
+    textpage = page.get_textpage()
+    found: dict[tuple[str, int, tuple[int, int, int]], Ink] = {}
+    out = {}
+    try:
+        name = ctypes.create_string_buffer(FONT_NAME_BYTES)
+        flags = ctypes.c_int()
+        rgba = [ctypes.c_uint() for _ in range(4)]
+        for i in range(textpage.count_chars()):
+            pdfium_c.FPDFText_GetFontInfo(textpage.raw, i, name, FONT_NAME_BYTES, ctypes.byref(flags))
+            pdfium_c.FPDFText_GetFillColor(textpage.raw, i, *(ctypes.byref(x) for x in rgba))
+            colour = tuple(x.value for x in rgba[:3])
+            key = (name.value.decode("latin-1"), flags.value, colour)
+            if key not in found:
+                found[key] = Ink(key[0].rsplit("+", 1)[-1], bool(flags.value & FLAG_SERIF), _hex(*colour))
+            out[(number, i)] = found[key]
+            left, _, right, _ = textpage.get_charbox(i, loose=True)
+            advances[(number, i)] = right - left
+        return out
+    finally:
+        textpage.close()
+
+
+def drawing(pdf: Path | bytes) -> Drawing:
+    """The page sizes, inks, thin rules and picture count of a PDF; an empty `Drawing` when it cannot be read.
+
+    A rule is a path no more than `RULE_MAX` points tall and at least `RULE_RATIO` times as wide: Chrome draws
+    a CSS border under a heading as a filled box 0.6 to 0.8 pt tall (checked 2026-11-19).
+    """
+    with _LOCK:
+        try:
+            doc = _open(pdf)
+        except Unreadable:
+            return Drawing([], {}, [], 0)
+        try:
+            sizes, inks, rules, pictures, advances = [], {}, [], 0, {}
+            for n in range(len(doc)):
+                page = doc[n]
+                sizes.append((float(page.get_width()), float(page.get_height())))
+                inks.update(_page_inks(page, n + 1, advances))
+                for obj in page.get_objects(max_depth=MARKER_DEPTH):
+                    if obj.type == pdfium_c.FPDF_PAGEOBJ_IMAGE:
+                        pictures += 1
+                    if obj.type != pdfium_c.FPDF_PAGEOBJ_PATH:
+                        continue
+                    left, bottom, right, top = obj.get_bounds()
+                    if top - bottom <= RULE_MAX and right - left >= RULE_RATIO * max(top - bottom, MARKER_MIN):
+                        rules.append(Rule(n + 1, left, bottom, right, top, _object_colour(obj)))
+            return Drawing(sizes, inks, rules, pictures, advances)
+        except pdfium.PdfiumError:
+            return Drawing([], {}, [], 0)
         finally:
             doc.close()
 
